@@ -8,17 +8,25 @@ import Header from "@/components/Header";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 const ADMIN_EMAILS = ["reaz1006@gmail.com"];
-const ORDER_STATUSES = [
+
+type OrderStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Processing"
+  | "Shipped"
+  | "Delivered"
+  | "Cancelled";
+
+const ORDER_STATUSES: OrderStatus[] = [
   "Pending",
   "Confirmed",
   "Processing",
   "Shipped",
   "Delivered",
   "Cancelled",
-] as const;
+];
 const PAYMENT_STATUSES = ["Pending", "Received", "Failed", "Refunded"] as const;
 
-type OrderStatus = (typeof ORDER_STATUSES)[number];
 type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 type OrderSummary = {
@@ -74,6 +82,14 @@ type GroupedOrderItem = {
   totalQuantity: number;
   subtotal: number;
 };
+
+function safeStatus(value: unknown): OrderStatus {
+  if (ORDER_STATUSES.includes(value as OrderStatus)) {
+    return value as OrderStatus;
+  }
+
+  return "Pending";
+}
 
 function formatBDT(amount: number) {
   return `৳${amount.toLocaleString()}`;
@@ -225,8 +241,13 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
         return;
       }
 
-      setOrder(fetchedOrder as OrderRow);
-      setAdminNote(((fetchedOrder as OrderRow).admin_note ?? ""));
+      const normalizedOrder = {
+        ...(fetchedOrder as Omit<OrderRow, "status"> & { status: unknown }),
+        status: safeStatus((fetchedOrder as { status?: unknown }).status),
+      } satisfies OrderRow;
+
+      setOrder(normalizedOrder);
+      setAdminNote(normalizedOrder.admin_note ?? "");
       setOrderItems(itemsError || !fetchedItems ? [] : (fetchedItems as OrderItemRow[]));
       setLoading(false);
     };
@@ -453,10 +474,13 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
           </div>
 
           <div className="flex flex-col items-start gap-3 sm:items-end">
-            <StatusBadge status={order.status} />
+            <StatusBadge status={safeStatus(order.status)} />
             <select
-              value={order.status}
-              onChange={(event) => handleStatusChange(event.target.value as OrderStatus)}
+              value={safeStatus(order.status)}
+              onChange={(event) => {
+                const newStatus = event.target.value as OrderStatus;
+                handleStatusChange(newStatus);
+              }}
               disabled={isUpdatingStatus}
               className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF] disabled:cursor-not-allowed disabled:bg-slate-50"
               aria-label={`Update status for ${order.order_number}`}
