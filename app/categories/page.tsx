@@ -17,7 +17,7 @@ export default function CategoriesPage() {
           </h1>
           <p className="max-w-3xl text-sm leading-7 text-slate-500 sm:text-base">
             Explore product groups built for Bangladesh import buyers sourcing from China. Browse
-            by category first, then request quotes and confirm shipping after order review.
+            by category first, then add products to cart and confirm shipping after order review.
           </p>
         </div>
 

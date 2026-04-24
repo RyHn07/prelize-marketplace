@@ -135,17 +135,17 @@ function QuantityControl({
         className="inline-flex h-full aspect-square items-center justify-center text-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white"
         aria-label="Decrease quantity"
       >
-        <span className="-mt-0.5">−</span>
+        <span className="-mt-0.5">-</span>
       </button>
-        <input
-          type="number"
-          min="0"
-          max={MAX_QUANTITY}
-          value={quantity}
-          onChange={(event) => onInputChange(Number(event.target.value) || 0)}
-          className="h-full min-w-12 border-x border-slate-300 px-2 text-center text-sm font-semibold text-slate-800 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-          aria-label="Quantity input"
-        />
+      <input
+        type="number"
+        min="0"
+        max={MAX_QUANTITY}
+        value={quantity}
+        onChange={(event) => onInputChange(Number(event.target.value) || 0)}
+        className="h-full min-w-12 border-x border-slate-300 px-2 text-center text-sm font-semibold text-slate-800 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        aria-label="Quantity input"
+      />
       <button
         type="button"
         onClick={onIncrease}
@@ -203,7 +203,7 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
     }));
   };
 
-  const handleAddToQuote = () => {
+  const handleAddToCart = () => {
     const selectedVariations = variationRows.filter((row) => (quantities[row.size] ?? 0) > 0);
 
     if (selectedVariations.length === 0) {
@@ -223,7 +223,7 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
     });
 
     setQuantities(initialQuantities);
-    window.alert("Added to quote");
+    window.alert("Added to cart");
   };
 
   const visibleVariationRows = showAllVariants ? variationRows : variationRows.slice(0, 4);
@@ -333,9 +333,7 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
         <div className="rounded-lg border border-dashed border-[#615FFF]/50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
-              <p className="text-base font-semibold text-slate-900">
-                Pay on Delivery
-              </p>
+              <p className="text-base font-semibold text-slate-900">Pay on Delivery</p>
             </div>
 
             <div className="text-right">
@@ -368,10 +366,10 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
           </button>
           <button
             type="button"
-            onClick={handleAddToQuote}
+            onClick={handleAddToCart}
             className="inline-flex items-center justify-center rounded-full bg-[#615FFF] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
           >
-            Add to Quote
+            Add to Cart
           </button>
           <button
             type="button"

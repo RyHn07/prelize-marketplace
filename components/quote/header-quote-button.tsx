@@ -55,7 +55,7 @@ export default function HeaderQuoteButton() {
     <Link
       href="/cart"
       className="relative flex h-11 w-11 items-center justify-center rounded-full bg-slate-950 text-white transition-colors hover:bg-[#615FFF]"
-      aria-label="Quote"
+      aria-label="Cart"
     >
       {quoteCount > 0 ? (
         <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#615FFF] px-1 text-[10px] font-bold leading-none text-white">
