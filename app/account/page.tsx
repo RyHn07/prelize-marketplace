@@ -8,13 +8,14 @@ import Header from "@/components/Header";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function AccountPage() {
-  const supabase = getSupabaseClient();
   const router = useRouter();
 
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const supabase = getSupabaseClient();
+
     const getUser = async () => {
       const { data } = await supabase.auth.getUser();
       setUser(data.user);
@@ -22,9 +23,10 @@ export default function AccountPage() {
     };
 
     getUser();
-  }, [supabase]);
+  }, []);
 
   const handleLogout = async () => {
+    const supabase = getSupabaseClient();
     await supabase.auth.signOut();
     router.push("/");
   };

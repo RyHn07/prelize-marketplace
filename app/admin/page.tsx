@@ -80,7 +80,6 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 export default function AdminPage() {
-  const supabase = getSupabaseClient();
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
@@ -92,6 +91,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     let isMounted = true;
+    const supabase = getSupabaseClient();
 
     const loadAdminOrders = async () => {
       const { data: authData } = await supabase.auth.getUser();
@@ -145,9 +145,11 @@ export default function AdminPage() {
     return () => {
       isMounted = false;
     };
-  }, [supabase]);
+  }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    const supabase = getSupabaseClient();
+
     setUpdatingOrderId(orderId);
     setErrorMessage("");
 

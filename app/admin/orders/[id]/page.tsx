@@ -172,7 +172,6 @@ function StatusBadge({ status }: { status: OrderStatus }) {
 }
 
 export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const supabase = getSupabaseClient();
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
@@ -187,6 +186,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     let isMounted = true;
+    const supabase = getSupabaseClient();
 
     const loadOrder = async () => {
       const resolvedParams = await params;
@@ -257,7 +257,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     return () => {
       isMounted = false;
     };
-  }, [params, supabase]);
+  }, [params]);
 
   const groupedItems = useMemo(() => {
     const groups = new Map<string, GroupedOrderItem>();
@@ -292,6 +292,8 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
       return;
     }
 
+    const supabase = getSupabaseClient();
+
     setIsUpdatingStatus(true);
     setErrorMessage("");
 
@@ -317,6 +319,8 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     if (!order) {
       return;
     }
+
+    const supabase = getSupabaseClient();
 
     setIsSavingNote(true);
     setErrorMessage("");
@@ -349,6 +353,8 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     if (!order) {
       return;
     }
+
+    const supabase = getSupabaseClient();
 
     setIsUpdatingPaymentStatus(true);
     setErrorMessage("");
