@@ -297,7 +297,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
     const { error } = await supabase
       .from("orders")
-      .update({ status: newStatus } as any)
+      .update({ status: newStatus } as never)
       .eq("id", order.id);
 
     if (error) {
@@ -324,7 +324,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
     const { error } = await supabase
       .from("orders")
-      .update({ admin_note: adminNote.trim() || null })
+      .update({ admin_note: adminNote.trim() || null } as never)
       .eq("id", order.id);
 
     if (error) {
@@ -355,7 +355,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
     const { error } = await supabase
       .from("orders")
-      .update({ payment_status: newPaymentStatus } as any)
+      .update({ payment_status: newPaymentStatus } as never)
       .eq("id", order.id);
 
     if (error) {

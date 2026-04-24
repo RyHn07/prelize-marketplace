@@ -441,11 +441,13 @@ export default function CheckoutPage() {
           buyer,
           summary,
           shipping_methods: shippingMethods,
-        })
+        } as never)
         .select("id, order_number")
         .single();
 
-      if (orderInsertError || !insertedOrder) {
+      const createdOrder = insertedOrder as { id: string; order_number: string } | null;
+
+      if (orderInsertError || !createdOrder) {
         const insertMessage = orderInsertError?.message ?? "Unable to save your order.";
 
         if (
@@ -461,7 +463,7 @@ export default function CheckoutPage() {
       }
 
       const orderItemsPayload = selectedCartItems.map((item) => ({
-        order_id: insertedOrder.id,
+        order_id: createdOrder.id,
         product_id: item.productId,
         product_name: item.name,
         product_image: item.image,
@@ -471,7 +473,9 @@ export default function CheckoutPage() {
         weight: item.weight ?? null,
       }));
 
-      const { error: orderItemsError } = await supabase.from("order_items").insert(orderItemsPayload);
+      const { error: orderItemsError } = await supabase
+        .from("order_items")
+        .insert(orderItemsPayload as never);
 
       if (orderItemsError) {
         throw new Error(orderItemsError.message);
@@ -482,7 +486,7 @@ export default function CheckoutPage() {
       });
 
       window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
-      router.push(`/orders/${insertedOrder.id}`);
+      router.push(`/orders/${createdOrder.id}`);
     } catch (error) {
       setOrderError(
         error instanceof Error ? error.message : "Unable to place order right now. Please try again.",

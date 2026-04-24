@@ -153,7 +153,7 @@ export default function AdminPage() {
 
     const { error } = await supabase
       .from("orders")
-      .update({ status: newStatus })
+      .update({ status: newStatus } as never)
       .eq("id", orderId);
 
     if (error) {
