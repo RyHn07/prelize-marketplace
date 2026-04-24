@@ -2,7 +2,7 @@ import Header from "@/components/Header";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-white text-slate-900">
       
       <Header />
 
@@ -11,7 +11,7 @@ export default function Home() {
           Wholesale Products from China
         </h2>
 
-        <p className="mt-4 text-gray-400">
+        <p className="mt-4 text-slate-500">
           Import products easily with bulk pricing and fast delivery to Bangladesh.
         </p>
       </section>

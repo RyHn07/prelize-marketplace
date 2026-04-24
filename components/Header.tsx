@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import HeaderQuoteButton from "@/components/quote/header-quote-button";
 import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
 
 const topBarLinks = [
@@ -135,23 +136,6 @@ function SearchIcon({ className = "h-5 w-5 text-slate-400" }: { className?: stri
     >
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function CartIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-    >
-      <circle cx="9" cy="20" r="1" />
-      <circle cx="17" cy="20" r="1" />
-      <path d="M3 4h2l2.4 10.5a1 1 0 0 0 1 .8h8.8a1 1 0 0 0 1-.8L20 7H7" />
     </svg>
   );
 }
@@ -341,16 +325,7 @@ export default function Header() {
 
               <HeaderWishlistButton />
 
-              <Link
-                href="/cart"
-                className="relative flex h-11 w-11 items-center justify-center rounded-full bg-slate-950 text-white transition-colors hover:bg-[#615FFF]"
-                aria-label="Cart"
-              >
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#615FFF] px-1 text-[10px] font-bold leading-none text-white">
-                  2
-                </span>
-                <CartIcon />
-              </Link>
+              <HeaderQuoteButton />
 
               <Link
                 href="/login"

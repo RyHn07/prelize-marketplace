@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { addToQuote } from "@/components/quote/quote-utils";
 import type { Product } from "@/types/product";
 import {
   isProductInWishlist,
@@ -27,6 +28,7 @@ const variationRows = [
 
 const shouldShowSeeAll = variationRows.length > 4;
 const MAX_QUANTITY = 9999;
+const initialQuantities = Object.fromEntries(variationRows.map((row) => [row.size, 0]));
 
 function formatCurrency(value: number) {
   return `৳${value.toLocaleString()}`;
@@ -160,9 +162,7 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
   const [activeColor, setActiveColor] = useState(colorSwatches[0]?.name ?? "");
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
-  const [quantities, setQuantities] = useState<Record<string, number>>(
-    Object.fromEntries(variationRows.map((row) => [row.size, 0])),
-  );
+  const [quantities, setQuantities] = useState<Record<string, number>>(initialQuantities);
 
   useEffect(() => {
     const updateWishlistState = () => {
@@ -201,6 +201,29 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
       ...current,
       [size]: Math.min(MAX_QUANTITY, Math.max(0, nextQuantity)),
     }));
+  };
+
+  const handleAddToQuote = () => {
+    const selectedVariations = variationRows.filter((row) => (quantities[row.size] ?? 0) > 0);
+
+    if (selectedVariations.length === 0) {
+      window.alert("Please select quantity");
+      return;
+    }
+
+    selectedVariations.forEach((row) => {
+      addToQuote({
+        productId: product.id,
+        name: product.name,
+        image: product.image,
+        variation: row.size,
+        price: row.price,
+        quantity: quantities[row.size] ?? 0,
+      });
+    });
+
+    setQuantities(initialQuantities);
+    window.alert("Added to quote");
   };
 
   const visibleVariationRows = showAllVariants ? variationRows : variationRows.slice(0, 4);
@@ -345,9 +368,10 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
           </button>
           <button
             type="button"
+            onClick={handleAddToQuote}
             className="inline-flex items-center justify-center rounded-full bg-[#615FFF] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
           >
-            Add to Cart
+            Add to Quote
           </button>
           <button
             type="button"
