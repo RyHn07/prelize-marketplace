@@ -60,6 +60,7 @@ type StoredOrder = {
     shippingProfileName: string;
   }[];
   summary: {
+    quantity: number;
     totalQuantity: number;
     productPrice: number;
     cddCharge: number;
@@ -465,6 +466,7 @@ export default function CartPage() {
       items: selectedItems,
       shippingMethods,
       summary: {
+        quantity: totals.totalQuantity,
         totalQuantity: totals.totalQuantity,
         productPrice: totals.productPrice,
         cddCharge: totals.cddCharge,
