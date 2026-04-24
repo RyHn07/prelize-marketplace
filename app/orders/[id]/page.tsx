@@ -3,39 +3,52 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
+import { getSupabaseClient } from "@/lib/supabase-client";
 
-const ORDERS_STORAGE_KEY = "prelize_orders";
 const ORDER_STEPS = ["Pending", "Confirmed", "Processing", "Shipped", "Delivered"] as const;
 
-type OrderItem = {
+type OrderSummary = {
+  quantity?: number;
+  totalQuantity?: number;
+  productPrice: number;
+  cddCharge: number;
+  payNow: number;
+  payOnDelivery: number | string | null;
+};
+
+type ShippingMethod = {
   productId: string;
-  name: string;
-  image: string;
+  productName: string;
+  shippingProfileId: string;
+  shippingProfileName: string;
+};
+
+type OrderRow = {
+  id: string;
+  order_number: string;
+  user_id: string;
+  user_email: string;
+  status: "Pending";
+  payment_method: string | null;
+  payment_status: string | null;
+  created_at: string;
+  summary: OrderSummary;
+  shipping_methods: ShippingMethod[] | null;
+};
+
+type OrderItemRow = {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_name: string;
+  product_image: string;
   variation: string;
   price: number;
   quantity: number;
-};
-
-type StoredOrder = {
-  id: string;
-  status: "Pending";
-  createdAt: string;
-  items: OrderItem[];
-  shippingMethods?: {
-    productId: string;
-    productName: string;
-    shippingProfileId: string;
-    shippingProfileName: string;
-  }[];
-  summary: {
-    quantity: number;
-    productPrice: number;
-    cddCharge: number;
-    payNow: number;
-    payOnDelivery: number | string;
-  };
+  weight: number | null;
 };
 
 type GroupedOrderItem = {
@@ -43,14 +56,14 @@ type GroupedOrderItem = {
   name: string;
   image?: string;
   sellerLabel: string;
-  items: OrderItem[];
+  items: OrderItemRow[];
   variantCount: number;
   totalQuantity: number;
   subtotal: number;
 };
 
 function formatBDT(amount: number) {
-  return `৳${amount.toLocaleString()}`;
+  return `\u09F3${amount.toLocaleString()}`;
 }
 
 function formatOrderDate(value: string) {
@@ -67,7 +80,7 @@ function formatOrderDate(value: string) {
   });
 }
 
-function StatusBadge({ status }: { status: StoredOrder["status"] }) {
+function StatusBadge({ status }: { status: OrderRow["status"] }) {
   return (
     <span className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
       {status}
@@ -138,9 +151,9 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
       </div>
 
       <div className="mt-4 space-y-2">
-        {group.items.map((item, index) => (
+        {group.items.map((item) => (
           <div
-            key={`${group.productId}-${item.variation}-${index}`}
+            key={item.id}
             className="rounded-lg border border-slate-200 px-4 py-3"
           >
             <div className="space-y-2">
@@ -161,12 +174,16 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
 }
 
 export default function OrderDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter();
   const [orderId, setOrderId] = useState("");
-  const [order, setOrder] = useState<StoredOrder | null>(null);
+  const [order, setOrder] = useState<OrderRow | null>(null);
+  const [items, setItems] = useState<OrderItemRow[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
+    const supabase = getSupabaseClient();
 
     const loadOrder = async () => {
       const resolvedParams = await params;
@@ -178,29 +195,58 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
 
       setOrderId(currentOrderId);
 
-      try {
-        const storedOrders = window.localStorage.getItem(ORDERS_STORAGE_KEY);
-        const parsedOrders = storedOrders ? JSON.parse(storedOrders) : [];
-        const matchedOrder = Array.isArray(parsedOrders)
-          ? parsedOrders.find(
-              (storedOrder): storedOrder is StoredOrder =>
-                storedOrder &&
-                typeof storedOrder === "object" &&
-                "id" in storedOrder &&
-                storedOrder.id === currentOrderId,
-            ) ?? null
-          : null;
+      const { data: authData } = await supabase.auth.getUser();
+      const currentUserId = authData.user?.id ?? null;
 
+      if (!currentUserId) {
         if (isMounted) {
-          setOrder(matchedOrder);
+          setIsAuthorized(false);
           setHasLoaded(true);
         }
-      } catch {
-        if (isMounted) {
-          setOrder(null);
-          setHasLoaded(true);
-        }
+        return;
       }
+
+      const { data: fetchedOrder, error: orderError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("id", currentOrderId)
+        .single();
+
+      if (!isMounted) {
+        return;
+      }
+
+      if (orderError || !fetchedOrder) {
+        setIsAuthorized(true);
+        setOrder(null);
+        setItems([]);
+        setHasLoaded(true);
+        return;
+      }
+
+      const orderRow = fetchedOrder as OrderRow;
+
+      if (orderRow.user_id !== currentUserId) {
+        setIsAuthorized(true);
+        setOrder(null);
+        setItems([]);
+        setHasLoaded(true);
+        return;
+      }
+
+      const { data: fetchedItems, error: itemsError } = await supabase
+        .from("order_items")
+        .select("*")
+        .eq("order_id", currentOrderId);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setIsAuthorized(true);
+      setOrder(orderRow);
+      setItems(itemsError || !fetchedItems ? [] : (fetchedItems as OrderItemRow[]));
+      setHasLoaded(true);
     };
 
     loadOrder();
@@ -210,6 +256,12 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
     };
   }, [params]);
 
+  useEffect(() => {
+    if (hasLoaded && !isAuthorized) {
+      router.push("/login");
+    }
+  }, [hasLoaded, isAuthorized, router]);
+
   const groupedItems = useMemo(() => {
     if (!order) {
       return [] as GroupedOrderItem[];
@@ -217,8 +269,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
 
     const groups = new Map<string, GroupedOrderItem>();
 
-    order.items.forEach((item) => {
-      const existingGroup = groups.get(item.productId);
+    items.forEach((item) => {
+      const existingGroup = groups.get(item.product_id);
 
       if (existingGroup) {
         existingGroup.items.push(item);
@@ -228,10 +280,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         return;
       }
 
-      groups.set(item.productId, {
-        productId: item.productId,
-        name: item.name,
-        image: item.image,
+      groups.set(item.product_id, {
+        productId: item.product_id,
+        name: item.product_name,
+        image: item.product_image,
         sellerLabel: "Prelize Select",
         items: [item],
         variantCount: 1,
@@ -241,9 +293,26 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
     });
 
     return Array.from(groups.values());
-  }, [order]);
+  }, [items, order]);
 
-  if (hasLoaded && !order) {
+  if (!hasLoaded || !isAuthorized) {
+    return (
+      <main className="min-h-screen bg-white">
+        <Header />
+
+        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
+            <h1 className="text-2xl font-semibold text-slate-900">Loading...</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              Checking your account before opening this order.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (hasLoaded && isAuthorized && !order) {
     return (
       <main className="min-h-screen bg-white">
         <Header />
@@ -280,10 +349,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
               Back to Orders
             </Link>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-              {order?.id ?? orderId}
+              {order?.order_number ?? orderId}
             </h1>
             <p className="text-sm text-slate-500">
-              Order Date: {order ? formatOrderDate(order.createdAt) : "Loading..."}
+              Order Date: {order ? formatOrderDate(order.created_at) : "Loading..."}
             </p>
           </div>
 
@@ -329,8 +398,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
               <h2 className="text-lg font-semibold text-slate-900">Shipping Methods</h2>
 
               <div className="mt-4 space-y-3">
-                {order?.shippingMethods && order.shippingMethods.length > 0 ? (
-                  order.shippingMethods.map((shippingMethod) => (
+                {order?.shipping_methods && order.shipping_methods.length > 0 ? (
+                  order.shipping_methods.map((shippingMethod) => (
                     <div
                       key={`${shippingMethod.productId}-${shippingMethod.shippingProfileId}`}
                       className="rounded-lg border border-slate-200 px-4 py-3"
@@ -350,11 +419,15 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                 )}
               </div>
             </section>
+
           </div>
 
           <aside className="space-y-5 lg:sticky lg:top-6">
             <div className="space-y-0 rounded-xl border border-slate-200 bg-white px-5">
-              <SummaryRow label="Quantity" value={String(order?.summary.quantity ?? 0)} />
+              <SummaryRow
+                label="Quantity"
+                value={String(order?.summary.quantity ?? order?.summary.totalQuantity ?? 0)}
+              />
               <SummaryRow
                 label="Product Price"
                 value={formatBDT(order?.summary.productPrice ?? 0)}
@@ -387,6 +460,17 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                   </p>
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-sm font-semibold text-slate-900">Payment Method</p>
+              <p className="mt-2 text-base font-semibold text-[#615FFF]">
+                {order?.payment_method ?? "Bank Transfer"}
+              </p>
+              <p className="mt-4 text-sm font-semibold text-slate-900">Payment Status</p>
+              <p className="mt-2 text-sm font-medium text-slate-700">
+                {order?.payment_status ?? "Pending"}
+              </p>
             </div>
 
             <p className="text-sm leading-6 text-slate-500">

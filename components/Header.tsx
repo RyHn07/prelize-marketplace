@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import HeaderAuthButton from "@/components/auth/header-auth-button";
 import HeaderQuoteButton from "@/components/quote/header-quote-button";
 import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
 
@@ -158,26 +159,6 @@ function GridIcon() {
   );
 }
 
-function UserIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-    >
-      <circle cx="12" cy="8" r="3.25" />
-      <path
-        d="M5.5 19.5a6.5 6.5 0 0 1 13 0"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function FacebookIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="currentColor">
@@ -327,13 +308,7 @@ export default function Header() {
 
               <HeaderQuoteButton />
 
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2.5 rounded-full px-1 text-sm font-medium text-slate-700 transition-colors hover:text-[#615FFF]"
-              >
-                <UserIcon />
-                <span className="whitespace-nowrap leading-none">Login / Sign Up</span>
-              </Link>
+              <HeaderAuthButton />
             </div>
           </div>
         </div>

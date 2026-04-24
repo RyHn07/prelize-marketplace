@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
 import {
@@ -15,9 +16,11 @@ import {
 } from "@/components/quote/quote-utils";
 import { mockProducts } from "@/data/mock-products";
 import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
+import { getSupabaseClient } from "@/lib/supabase-client";
 
 const MAX_QUANTITY = 9999;
-const ORDERS_STORAGE_KEY = "prelize_orders";
+const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
+const PAYMENT_METHOD = "Bank Transfer";
 
 const shippingProfiles = [
   {
@@ -48,31 +51,18 @@ type ProductGroup = {
   items: QuoteItem[];
 };
 
-type StoredOrder = {
+type AuthUser = {
   id: string;
-  status: "Pending";
-  createdAt: string;
-  items: QuoteItem[];
-  shippingMethods: {
-    productId: string;
-    productName: string;
-    shippingProfileId: string;
-    shippingProfileName: string;
-  }[];
-  summary: {
-    quantity: number;
-    totalQuantity: number;
-    productPrice: number;
-    cddCharge: number;
-    shippingCost: number | null;
-    hasUnknownShipping: boolean;
-    payNow: number;
-    payOnDelivery: number | string | null;
-  };
+  email: string;
+};
+
+type CheckoutDraft = {
+  selectedKeys: string[];
+  selectedShippingProfiles: Record<string, string>;
 };
 
 function formatBDT(amount: number) {
-  return `৳${amount.toLocaleString()}`;
+  return `\u09F3${amount.toLocaleString()}`;
 }
 
 function getVariantKey(productId: string, variation: string) {
@@ -212,10 +202,13 @@ function LinkIcon() {
 }
 
 export default function CartPage() {
+  const router = useRouter();
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
-  const [orderSuccess, setOrderSuccess] = useState<StoredOrder | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
   const hasInitializedSelection = useRef(false);
   const previousItemKeys = useRef<string[]>([]);
 
@@ -240,6 +233,58 @@ export default function CartPage() {
       window.removeEventListener(QUOTE_UPDATED_EVENT, syncQuoteItems);
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = getSupabaseClient();
+
+    supabase.auth.getUser().then(({ data }) => {
+      if (!isMounted) {
+        return;
+      }
+
+      const user = data.user;
+      setCurrentUser(
+        user?.id && user.email
+          ? {
+              id: user.id,
+              email: user.email,
+            }
+          : null,
+      );
+      setHasCheckedAuth(true);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) {
+        return;
+      }
+
+      const user = session?.user;
+      setCurrentUser(
+        user?.id && user.email
+          ? {
+              id: user.id,
+              email: user.email,
+            }
+          : null,
+      );
+      setHasCheckedAuth(true);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (hasCheckedAuth && !currentUser) {
+      router.push("/login");
+    }
+  }, [currentUser, hasCheckedAuth, router]);
 
   useEffect(() => {
     const currentKeys = items.map((item) => getVariantKey(item.productId, item.variation));
@@ -290,19 +335,13 @@ export default function CartPage() {
     return Array.from(groupedItems.values());
   }, [items]);
 
-  useEffect(() => {
-    setSelectedShippingProfiles((current) => {
-      const nextProfiles: Record<string, string> = {};
-
-      productGroups.forEach((group) => {
-        nextProfiles[group.productId] = current[group.productId] ?? shippingProfiles[0].id;
-      });
-
-      return nextProfiles;
-    });
-  }, [productGroups]);
-
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  const effectiveSelectedShippingProfiles = useMemo(() => {
+    return productGroups.reduce<Record<string, string>>((result, group) => {
+      result[group.productId] = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
+      return result;
+    }, {});
+  }, [productGroups, selectedShippingProfiles]);
 
   const selectedGroupedItems = useMemo<Record<string, CartItem[]>>(() => {
     return productGroups.reduce<Record<string, CartItem[]>>((result, group) => {
@@ -315,7 +354,8 @@ export default function CartPage() {
       }
 
       const productMatch = mockProducts.find((product) => product.id === group.productId);
-      const selectedShippingProfileId = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
+      const selectedShippingProfileId =
+        effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
       const selectedShippingProfile =
         shippingProfiles.find((profile) => profile.id === selectedShippingProfileId) ?? shippingProfiles[0];
 
@@ -337,24 +377,11 @@ export default function CartPage() {
 
       return result;
     }, {});
-  }, [productGroups, selectedKeySet, selectedShippingProfiles]);
+  }, [effectiveSelectedShippingProfiles, productGroups, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
 
-  const selectedItems = useMemo(
-    () =>
-      Object.values(selectedGroupedItems)
-        .flat()
-        .map((item) => ({
-          productId: item.productId,
-          name: item.name,
-          image: item.image,
-          variation: item.variation,
-          price: item.price,
-          quantity: item.quantity,
-        })),
-    [selectedGroupedItems],
-  );
+  const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
 
   const allItemKeys = useMemo(
     () => items.map((item) => getVariantKey(item.productId, item.variation)),
@@ -376,7 +403,7 @@ export default function CartPage() {
       .filter((group) =>
         group.items.some((item) => selectedKeySet.has(getVariantKey(item.productId, item.variation))),
       )
-      .map((group) => selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id);
+      .map((group) => effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id);
 
     const uniqueProfileIds = Array.from(new Set(selectedProfileIds));
 
@@ -390,7 +417,7 @@ export default function CartPage() {
     }
 
     return "Multiple shipping methods selected";
-  }, [productGroups, selectedKeySet, selectedShippingProfiles]);
+  }, [effectiveSelectedShippingProfiles, productGroups, selectedKeySet]);
 
   const toggleSelectAll = () => {
     setSelectedKeys((current) => (current.length === items.length ? [] : allItemKeys));
@@ -437,71 +464,38 @@ export default function CartPage() {
     setItems(getQuoteItems());
   };
 
-  const handlePlaceOrder = () => {
-    if (selectedItems.length === 0) {
+  const handleContinueToCheckout = () => {
+    if (selectedCartItems.length === 0) {
+      setActionMessage("Select items to continue to checkout.");
       return;
     }
 
-    const shippingMethods = productGroups
-      .filter((group) =>
-        group.items.some((item) => selectedKeySet.has(getVariantKey(item.productId, item.variation))),
-      )
-      .map((group) => {
-        const shippingProfileId = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
-        const shippingProfile =
-          shippingProfiles.find((profile) => profile.id === shippingProfileId) ?? shippingProfiles[0];
-
-        return {
-          productId: group.productId,
-          productName: group.name,
-          shippingProfileId: shippingProfile.id,
-          shippingProfileName: shippingProfile.name,
-        };
-      });
-
-    const order: StoredOrder = {
-      id: `PLZ-${Date.now()}`,
-      status: "Pending",
-      createdAt: new Date().toISOString(),
-      items: selectedItems,
-      shippingMethods,
-      summary: {
-        quantity: totals.totalQuantity,
-        totalQuantity: totals.totalQuantity,
-        productPrice: totals.productPrice,
-        cddCharge: totals.cddCharge,
-        shippingCost: totals.shippingCost,
-        hasUnknownShipping: totals.hasUnknownShipping,
-        payNow: totals.payNow,
-        payOnDelivery: totals.hasUnknownShipping
-          ? "Confirmed after review"
-          : totals.payOnDelivery,
-      },
+    const checkoutDraft: CheckoutDraft = {
+      selectedKeys,
+      selectedShippingProfiles: effectiveSelectedShippingProfiles,
     };
 
-    try {
-      const storedOrders = window.localStorage.getItem(ORDERS_STORAGE_KEY);
-      const parsedOrders = storedOrders ? JSON.parse(storedOrders) : [];
-      const nextOrders = Array.isArray(parsedOrders) ? [order, ...parsedOrders] : [order];
-
-      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(nextOrders));
-    } catch {
-      window.localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify([order]));
-    }
-
-    selectedItems.forEach((item) => {
-      removeQuoteItem(item.productId, item.variation);
-    });
-
-    setOrderSuccess(order);
-    setSelectedKeys((current) =>
-      current.filter(
-        (key) =>
-          !selectedItems.some((item) => getVariantKey(item.productId, item.variation) === key),
-      ),
-    );
-    setItems(getQuoteItems());
+    window.localStorage.setItem(CHECKOUT_DRAFT_STORAGE_KEY, JSON.stringify(checkoutDraft));
+    setActionMessage("");
+    router.push("/checkout");
   };
+
+  if (!hasCheckedAuth || !currentUser) {
+    return (
+      <main className="min-h-screen bg-white">
+        <Header />
+
+        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
+            <h2 className="text-2xl font-semibold text-slate-900">Loading...</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              Checking your account before opening your cart.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-white">
@@ -514,16 +508,12 @@ export default function CartPage() {
               Shopping Cart ({selectedProductCount || productGroups.length})
             </h1>
             <p className="text-sm text-slate-500">
-              Review your selected items before placing order
+              Review your selected items before continuing to checkout
             </p>
           </div>
 
           {items.length > 0 ? (
-            <Checkbox
-              checked={allItemsSelected}
-              onChange={toggleSelectAll}
-              label="Select All Items"
-            />
+            <Checkbox checked={allItemsSelected} onChange={toggleSelectAll} label="Select All Items" />
           ) : null}
         </div>
 
@@ -543,23 +533,11 @@ export default function CartPage() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
             <div className="space-y-4">
-              {orderSuccess ? (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-                  <p className="text-sm font-semibold text-emerald-700">
-                    Order placed successfully. Status: Pending
-                  </p>
-                  <div className="mt-2 space-y-1 text-sm text-emerald-900">
-                    <p>Order ID: {orderSuccess.id}</p>
-                    <p>Status: {orderSuccess.status}</p>
-                    <p>Pay Now: {formatBDT(orderSuccess.summary.payNow)}</p>
-                  </div>
-                </div>
-              ) : null}
-
               {productGroups.map((group) => {
                 const groupKeys = group.items.map((item) => getVariantKey(item.productId, item.variation));
                 const isGroupSelected = groupKeys.every((key) => selectedKeySet.has(key));
-                const selectedProfileId = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
+                const selectedProfileId =
+                  effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
                 const selectedProfile =
                   shippingProfiles.find((profile) => profile.id === selectedProfileId) ?? shippingProfiles[0];
                 const selectedGroupItems = selectedGroupedItems[group.productId] ?? [];
@@ -568,10 +546,7 @@ export default function CartPage() {
                 );
 
                 return (
-                  <article
-                    key={group.productId}
-                    className="rounded-xl border border-slate-200 bg-white"
-                  >
+                  <article key={group.productId} className="rounded-xl border border-slate-200 bg-white">
                     <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
                       <div className="flex gap-3">
                         <Checkbox
@@ -716,12 +691,6 @@ export default function CartPage() {
                         </div>
 
                         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
-                          <button
-                            type="button"
-                            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
-                          >
-                            Add Note
-                          </button>
                           <Link
                             href={group.slug ? `/products/${group.slug}` : "/products"}
                             className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
@@ -768,6 +737,16 @@ export default function CartPage() {
                 <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-white p-5">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold text-slate-900">Payment Method</h2>
+                  <p className="text-base font-semibold text-[#615FFF]">{PAYMENT_METHOD}</p>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  After placing your order, our team will contact you with bank transfer details.
+                </p>
+              </div>
+
               <div className="rounded-lg border border-dashed border-[#615FFF]/50 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
@@ -790,11 +769,11 @@ export default function CartPage() {
               <div className="space-y-3">
                 <button
                   type="button"
-                  disabled={selectedItems.length === 0}
-                  onClick={handlePlaceOrder}
+                  disabled={selectedCartItems.length === 0 || !currentUser || !hasCheckedAuth}
+                  onClick={handleContinueToCheckout}
                   className="inline-flex w-full items-center justify-center rounded-full bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                 >
-                  Place Order
+                  Continue to Checkout
                 </button>
                 <Link
                   href="/products"
@@ -805,8 +784,16 @@ export default function CartPage() {
               </div>
 
               <p className="text-center text-sm text-slate-500">
-                {selectedItems.length === 0 ? "Select items to place order" : ""}
+                {!currentUser && hasCheckedAuth
+                  ? "Please login to continue"
+                  : selectedCartItems.length === 0
+                    ? "Select items to continue to checkout"
+                    : ""}
               </p>
+
+              {actionMessage ? (
+                <p className="text-center text-sm font-medium text-rose-500">{actionMessage}</p>
+              ) : null}
 
               <p className="text-sm leading-6 text-slate-500">
                 Final shipping cost will be confirmed after order review.
