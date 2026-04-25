@@ -24,8 +24,8 @@ function getPopularityScore(product: Product) {
 }
 
 export default function ProductCatalog({ products }: ProductCatalogProps) {
-  const minPriceLimit = Math.min(...products.map((product) => product.priceFrom));
-  const maxPriceLimit = Math.max(...products.map((product) => product.priceFrom));
+  const minPriceLimit = products.length > 0 ? Math.min(...products.map((product) => product.priceFrom)) : 0;
+  const maxPriceLimit = products.length > 0 ? Math.max(...products.map((product) => product.priceFrom)) : 0;
 
   const [minPrice, setMinPrice] = useState(minPriceLimit);
   const [maxPrice, setMaxPrice] = useState(maxPriceLimit);

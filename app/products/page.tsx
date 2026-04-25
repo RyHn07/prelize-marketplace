@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
-import { mockProducts } from "@/data/mock-products";
+import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 
 type ProductsPageProps = {
   searchParams: Promise<{ category?: string }>;
@@ -17,10 +18,18 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const { category } = await searchParams;
   const activeCategory =
     typeof category === "string" && category.length > 0 ? category : undefined;
+  const [{ data: categoryOptions }, { data: publicProducts, error }] = await Promise.all([
+    getProductCategoryOptions(),
+    getPublicProducts(),
+  ]);
+
+  const storefrontProducts = publicProducts.map((product) =>
+    mapProductDbToStorefrontProduct(product, categoryOptions),
+  );
 
   const filteredProducts = activeCategory
-    ? mockProducts.filter((product) => product.category === activeCategory)
-    : mockProducts;
+    ? storefrontProducts.filter((product) => product.category === activeCategory)
+    : storefrontProducts;
 
   const breadcrumbCategory = activeCategory ? formatCategoryLabel(activeCategory) : "Bags";
 
@@ -40,6 +49,12 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             <span className="font-medium text-slate-700">Crossbody Bags</span>
           </nav>
         </div>
+
+        {error ? (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            We could not load some catalog data from Supabase. Showing currently available results only.
+          </div>
+        ) : null}
 
         <ProductCatalog products={filteredProducts} />
       </section>

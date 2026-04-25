@@ -8,6 +8,17 @@ interface ProductGridProps {
 }
 
 export default function ProductGrid({ products, viewMode }: ProductGridProps) {
+  if (products.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
+        <h3 className="text-lg font-semibold text-slate-900">No products found</h3>
+        <p className="mt-2 text-sm text-slate-500">
+          Try adjusting the category or price filters to see more results.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className={

@@ -197,6 +197,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
 
       const { data: authData } = await supabase.auth.getUser();
       const currentUserId = authData.user?.id ?? null;
+      const currentUserEmail = authData.user?.email ?? null;
 
       if (!currentUserId) {
         if (isMounted) {
@@ -226,7 +227,13 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
 
       const orderRow = fetchedOrder as OrderRow;
 
-      if (orderRow.user_id !== currentUserId) {
+      const matchesUserId = orderRow.user_id === currentUserId;
+      const matchesUserEmail =
+        currentUserEmail !== null &&
+        typeof orderRow.user_email === "string" &&
+        orderRow.user_email.toLowerCase() === currentUserEmail.toLowerCase();
+
+      if (!matchesUserId && !matchesUserEmail) {
         setIsAuthorized(true);
         setOrder(null);
         setItems([]);

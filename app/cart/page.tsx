@@ -14,9 +14,10 @@ import {
   type QuoteItem,
   updateQuoteItem,
 } from "@/components/quote/quote-utils";
-import { mockProducts } from "@/data/mock-products";
+import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import type { ProductDbRow } from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
@@ -207,6 +208,7 @@ export default function CartPage() {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const hasInitializedSelection = useRef(false);
@@ -281,6 +283,31 @@ export default function CartPage() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const loadProductRecords = async () => {
+      const result = await getProductsByIds(items.map((item) => item.productId));
+
+      if (!isMounted) {
+        return;
+      }
+
+      setProductRecords(result.data);
+    };
+
+    void loadProductRecords();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [items]);
+
+  const productRecordMap = useMemo(
+    () => new Map(productRecords.map((product) => [product.id, product])),
+    [productRecords],
+  );
+
+  useEffect(() => {
     if (hasCheckedAuth && !currentUser) {
       router.push("/login");
     }
@@ -315,7 +342,7 @@ export default function CartPage() {
     const groupedItems = new Map<string, ProductGroup>();
 
     items.forEach((item) => {
-      const productMatch = mockProducts.find((product) => product.id === item.productId);
+      const productMatch = productRecordMap.get(item.productId);
       const existingGroup = groupedItems.get(item.productId);
 
       if (existingGroup) {
@@ -326,14 +353,14 @@ export default function CartPage() {
       groupedItems.set(item.productId, {
         productId: item.productId,
         name: item.name,
-        image: item.image,
+        image: productMatch?.image_url ?? item.image,
         slug: productMatch?.slug,
         items: [item],
       });
     });
 
     return Array.from(groupedItems.values());
-  }, [items]);
+  }, [items, productRecordMap]);
 
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const effectiveSelectedShippingProfiles = useMemo(() => {
@@ -353,7 +380,7 @@ export default function CartPage() {
         return result;
       }
 
-      const productMatch = mockProducts.find((product) => product.id === group.productId);
+      const productMatch = productRecordMap.get(group.productId);
       const selectedShippingProfileId =
         effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
       const selectedShippingProfile =
@@ -366,7 +393,9 @@ export default function CartPage() {
         variation: item.variation,
         price: item.price,
         quantity: item.quantity,
-        weight: parseWeight(productMatch?.weight),
+        weight: parseWeight(
+        productMatch?.weight == null ? undefined : String(productMatch.weight)
+      ),
         shippingProfile: {
           id: selectedShippingProfile.id,
           name: selectedShippingProfile.name,
@@ -377,7 +406,7 @@ export default function CartPage() {
 
       return result;
     }, {});
-  }, [effectiveSelectedShippingProfiles, productGroups, selectedKeySet]);
+  }, [effectiveSelectedShippingProfiles, productGroups, productRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
 
@@ -584,8 +613,10 @@ export default function CartPage() {
                       {group.items.map((item) => {
                         const variantKey = getVariantKey(item.productId, item.variation);
                         const isSelected = selectedKeySet.has(variantKey);
-                        const productMatch = mockProducts.find((product) => product.id === item.productId);
-                        const parsedWeight = parseWeight(productMatch?.weight);
+                        const productMatch = productRecordMap.get(item.productId);
+                        const parsedWeight = parseWeight(
+                              productMatch?.weight == null ? undefined : String(productMatch.weight)
+                            );
 
                         return (
                           <div key={variantKey} className="px-4 py-4 sm:px-5">

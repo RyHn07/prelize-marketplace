@@ -13,9 +13,10 @@ import {
   removeQuoteItem,
   type QuoteItem,
 } from "@/components/quote/quote-utils";
-import { mockProducts } from "@/data/mock-products";
+import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import type { ProductDbRow } from "@/types/product-db";
 
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
@@ -155,6 +156,7 @@ export default function CheckoutPage() {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -213,6 +215,31 @@ export default function CheckoutPage() {
       window.removeEventListener(QUOTE_UPDATED_EVENT, syncQuoteItems);
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProductRecords = async () => {
+      const result = await getProductsByIds(items.map((item) => item.productId));
+
+      if (!isMounted) {
+        return;
+      }
+
+      setProductRecords(result.data);
+    };
+
+    void loadProductRecords();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [items]);
+
+  const productRecordMap = useMemo(
+    () => new Map(productRecords.map((product) => [product.id, product])),
+    [productRecords],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -289,7 +316,7 @@ export default function CheckoutPage() {
     });
 
     return Array.from(groupedItems.entries()).reduce<Record<string, CartItem[]>>((result, [productId, groupItems]) => {
-      const productMatch = mockProducts.find((product) => product.id === productId);
+      const productMatch = productRecordMap.get(productId);
       const selectedShippingProfileId = selectedShippingProfiles[productId] ?? shippingProfiles[0].id;
       const selectedShippingProfile =
         shippingProfiles.find((profile) => profile.id === selectedShippingProfileId) ?? shippingProfiles[0];
@@ -301,7 +328,9 @@ export default function CheckoutPage() {
         variation: item.variation,
         price: item.price,
         quantity: item.quantity,
-        weight: parseWeight(productMatch?.weight),
+        weight: parseWeight(
+            productMatch?.weight == null ? undefined : String(productMatch.weight)
+          ),
         shippingProfile: {
           id: selectedShippingProfile.id,
           name: selectedShippingProfile.name,
@@ -312,7 +341,7 @@ export default function CheckoutPage() {
 
       return result;
     }, {});
-  }, [items, selectedKeySet, selectedShippingProfiles]);
+  }, [items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);

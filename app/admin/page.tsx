@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import Header from "@/components/Header";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 const ADMIN_EMAILS = ["reaz1006@gmail.com"];
@@ -200,59 +199,38 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <Header />
-
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
-            Loading...
-          </div>
-        </section>
-      </main>
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+        Loading...
+      </div>
     );
   }
 
   if (!userEmail) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <Header />
-
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
-            <p className="mt-3 text-sm text-slate-500">Please login as admin</p>
-            <Link
-              href="/login"
-              className="mt-6 inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            >
-              Go to Login
-            </Link>
-          </div>
-        </section>
-      </main>
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
+        <p className="mt-3 text-sm text-slate-500">Please login as admin</p>
+        <Link
+          href="/login"
+          className="mt-6 inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+        >
+          Go to Login
+        </Link>
+      </div>
     );
   }
 
   if (!hasAdminAccess) {
     return (
-      <main className="min-h-screen bg-gray-50">
-        <Header />
-
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center">
-            <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
-            <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
-          </div>
-        </section>
-      </main>
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
+        <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <Header />
-
-      <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <section className="mx-auto max-w-7xl">
         <div className="mb-6 space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">
             Admin Dashboard
@@ -504,6 +482,5 @@ export default function AdminPage() {
           </div>
         )}
       </section>
-    </main>
   );
 }

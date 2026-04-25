@@ -160,14 +160,16 @@ export default function OrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     let isMounted = true;
     const supabase = getSupabaseClient();
 
-    const loadOrdersForUser = async (userId: string) => {
-      const { data: fetchedOrders, error: ordersError } = await supabase
+    const loadOrdersForUser = async (userId: string, userEmail: string | null) => {
+      const { data: userIdOrders, error: userIdOrdersError } = await supabase
         .from("orders")
         .select("*")
         .eq("user_id", userId)
@@ -177,8 +179,37 @@ export default function OrdersPage() {
         return;
       }
 
-      if (ordersError || !fetchedOrders) {
+      if (userIdOrdersError) {
         setOrders([]);
+        setErrorMessage(userIdOrdersError.message);
+        return;
+      }
+
+      let fetchedOrders = userIdOrders;
+
+      if ((!fetchedOrders || fetchedOrders.length === 0) && userEmail) {
+        const { data: emailOrders, error: emailOrdersError } = await supabase
+          .from("orders")
+          .select("*")
+          .eq("user_email", userEmail)
+          .order("created_at", { ascending: false });
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (emailOrdersError) {
+          setOrders([]);
+          setErrorMessage(emailOrdersError.message);
+          return;
+        }
+
+        fetchedOrders = emailOrders;
+      }
+
+      if (!fetchedOrders) {
+        setOrders([]);
+        setErrorMessage("Unable to load your orders right now.");
         return;
       }
 
@@ -186,6 +217,7 @@ export default function OrdersPage() {
 
       if (orderRows.length === 0) {
         setOrders([]);
+        setErrorMessage("");
         return;
       }
 
@@ -201,6 +233,7 @@ export default function OrdersPage() {
 
       if (itemsError || !fetchedItems) {
         setOrders(orderRows.map((order) => ({ ...order, items: [] })));
+        setErrorMessage(itemsError?.message ?? "");
         return;
       }
 
@@ -218,6 +251,7 @@ export default function OrdersPage() {
           items: itemsByOrderId.get(order.id) ?? [],
         })),
       );
+      setErrorMessage("");
     };
 
     supabase.auth.getUser().then(async ({ data }) => {
@@ -226,11 +260,13 @@ export default function OrdersPage() {
       }
 
       const userId = data.user?.id ?? null;
+      const userEmail = data.user?.email ?? null;
       setCurrentUserId(userId);
+      setCurrentUserEmail(userEmail);
       setHasCheckedAuth(true);
 
       if (userId) {
-        await loadOrdersForUser(userId);
+        await loadOrdersForUser(userId, userEmail);
       }
     });
 
@@ -242,15 +278,18 @@ export default function OrdersPage() {
       }
 
       const userId = session?.user?.id ?? null;
+      const userEmail = session?.user?.email ?? null;
       setCurrentUserId(userId);
+      setCurrentUserEmail(userEmail);
       setHasCheckedAuth(true);
 
       if (!userId) {
         setOrders([]);
+        setErrorMessage("");
         return;
       }
 
-      await loadOrdersForUser(userId);
+      await loadOrdersForUser(userId, userEmail);
     });
 
     return () => {
@@ -338,8 +377,13 @@ export default function OrdersPage() {
           <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
             <h2 className="text-2xl font-semibold text-slate-900">No orders yet</h2>
             <p className="mt-2 text-sm text-slate-500">
-              Place your first order to start tracking it here.
+              {errorMessage || "Place your first order to start tracking it here."}
             </p>
+            {(currentUserId || currentUserEmail) && !errorMessage ? (
+              <p className="mt-2 text-xs text-slate-400">
+                Signed in as {currentUserEmail ?? "unknown email"}.
+              </p>
+            ) : null}
             <Link
               href="/products"
               className="mt-6 inline-flex items-center justify-center rounded-full bg-[#615FFF] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
