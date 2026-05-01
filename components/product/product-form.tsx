@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -12,7 +12,7 @@ import {
   type ProductVariantUpsertPayload,
 } from "@/lib/products/actions";
 import { listProductMedia, uploadProductMedia } from "@/lib/media/storage";
-import { getProductCategoryOptions } from "@/lib/products/queries";
+import { getProductCategoryOptions, getProductVendorOptions } from "@/lib/products/queries";
 import type {
   ProductAttribute,
   ProductAttributeFormValue,
@@ -24,6 +24,7 @@ import type {
   ProductVariationFormValue,
   ProductVariantAttributeValues,
   ProductUpsertPayload,
+  ProductVendorOption,
 } from "@/types/product-db";
 
 const CDD_SHIPPING_PROFILES: Array<{
@@ -56,6 +57,8 @@ const CDD_SHIPPING_PROFILES: Array<{
 type ProductFormProps = {
   mode: "create" | "edit";
   record?: ProductEditorRecord | null;
+  allowedVendorIds?: string[];
+  canAssignPlatformProducts?: boolean;
 };
 
 function createId(prefix: string) {
@@ -138,14 +141,21 @@ function inferAttributesFromVariants(record?: ProductEditorRecord | null) {
   }));
 }
 
-function getInitialValues(record?: ProductEditorRecord | null): ProductFormValues {
+function getInitialValues(
+  record?: ProductEditorRecord | null,
+  allowedVendorIds: string[] = [],
+  canAssignPlatformProducts = true,
+): ProductFormValues {
   const product = record?.product;
   const isVariable = (product?.product_type ?? (record?.variants.length ? "variable" : "single")) === "variable";
   const initialStatus = product
     ? ((product.status ?? (product.is_active ? "active" : "disabled")) as ProductStatus)
     : "active";
+  const defaultVendorId =
+    product?.vendor_id ?? (!canAssignPlatformProducts && allowedVendorIds.length > 0 ? allowedVendorIds[0] : "");
 
   return {
+    vendor_id: defaultVendorId,
     category_id: product?.category_id ?? "",
     name: product?.name ?? "",
     slug: product?.slug ?? "",
@@ -188,6 +198,14 @@ function parseNumber(value: string) {
 }
 
 function normalizeCategoryId(value: string) {
+  return normalizeOptionalUuid(value);
+}
+
+function normalizeVendorId(value: string) {
+  return normalizeOptionalUuid(value);
+}
+
+function normalizeOptionalUuid(value: string) {
   const trimmed = value.trim();
 
   if (!trimmed) {
@@ -213,6 +231,7 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
       .replace(/-{2,}/g, "-");
 
   return {
+    vendor_id: normalizeVendorId(values.vendor_id),
     category_id: normalizeCategoryId(values.category_id),
     name: trimmedName,
     slug: fallbackSlug,
@@ -621,44 +640,64 @@ function MediaField({
   );
 }
 
-function ProductForm({ mode, record }: ProductFormProps) {
+function ProductForm({
+  mode,
+  record,
+  allowedVendorIds = [],
+  canAssignPlatformProducts = true,
+}: ProductFormProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const messageRef = useRef<HTMLDivElement | null>(null);
   const appliedMediaSelectionRef = useRef<string | null>(null);
-  const [values, setValues] = useState<ProductFormValues>(() => getInitialValues(record));
+  const [values, setValues] = useState<ProductFormValues>(() =>
+    getInitialValues(record, allowedVendorIds, canAssignPlatformProducts),
+  );
   const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
+  const [vendors, setVendors] = useState<ProductVendorOption[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [vendorsLoading, setVendorsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadCategories = async () => {
-      const result = await getProductCategoryOptions();
+    const loadEditorOptions = async () => {
+      const [categoryResult, vendorResult] = await Promise.all([
+        getProductCategoryOptions(),
+        getProductVendorOptions(),
+      ]);
 
       if (!isMounted) {
         return;
       }
 
-      setCategories(result.data);
+      const activeVendors = vendorResult.data.filter((vendor) => vendor.status !== "suspended");
+      const scopedVendors =
+        allowedVendorIds.length > 0
+          ? activeVendors.filter((vendor) => allowedVendorIds.includes(vendor.id))
+          : activeVendors;
+
+      setCategories(categoryResult.data);
+      setVendors(scopedVendors);
       setCategoriesLoading(false);
+      setVendorsLoading(false);
     };
 
-    void loadCategories();
+    void loadEditorOptions();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [allowedVendorIds]);
 
   useEffect(() => {
-    setValues(getInitialValues(record));
+    setValues(getInitialValues(record, allowedVendorIds, canAssignPlatformProducts));
     setErrorMessage("");
     setIsSubmitting(false);
-  }, [mode, record]);
+  }, [allowedVendorIds, canAssignPlatformProducts, mode, record]);
 
   const pageTitle = mode === "create" ? "Add Product" : "Update Product";
   const pageDescription =
@@ -668,7 +707,6 @@ function ProductForm({ mode, record }: ProductFormProps) {
 
   const totalVariationCount = values.variations.length;
 
-  const parsedAttributes = useMemo(() => parseAttributesForGeneration(values.attributes), [values.attributes]);
   const searchParamsString = searchParams.toString();
 
   const createMediaLibraryHref = (target: string) => {
@@ -969,6 +1007,33 @@ function ProductForm({ mode, record }: ProductFormProps) {
                   placeholder="Premium wholesale product name"
                   required
                 />
+              </div>
+
+              <div>
+                <label htmlFor="product-vendor" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Assign Vendor
+                </label>
+                <select
+                  id="product-vendor"
+                  value={values.vendor_id}
+                  onChange={(event) => updateField("vendor_id", event.target.value)}
+                  disabled={!canAssignPlatformProducts && vendors.length <= 1}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                >
+                  {canAssignPlatformProducts ? (
+                    <option value="">{vendorsLoading ? "Loading vendors..." : "Platform-managed product"}</option>
+                  ) : null}
+                  {vendors.map((vendor) => (
+                    <option key={vendor.id} value={vendor.id}>
+                      {vendor.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {canAssignPlatformProducts
+                    ? "Leave this empty for marketplace-managed products, or assign ownership to a vendor now."
+                    : "This product will stay scoped to your vendor access."}
+                </p>
               </div>
 
               <div>
@@ -1434,6 +1499,12 @@ function ProductForm({ mode, record }: ProductFormProps) {
                 <span>Product Type</span>
                 <span className="font-semibold text-slate-900">
                   {values.product_type === "single" ? "Single Product" : "Variable Product"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Vendor</span>
+                <span className="font-semibold text-slate-900">
+                  {vendors.find((vendor) => vendor.id === values.vendor_id)?.name ?? "Platform-managed"}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">

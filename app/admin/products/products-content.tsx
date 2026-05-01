@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-import { getProducts } from "@/lib/products/queries";
+import { getProductManagementAccessState } from "@/lib/marketplace-access";
+import { getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { ProductDbRow, ProductStatus, ProductType } from "@/types/product-db";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
+import type { ProductDbRow, ProductStatus, ProductType, ProductVendorOption } from "@/types/product-db";
 
 function formatPrice(amount: number) {
   return `\u09F3${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
@@ -55,8 +54,10 @@ export default function ProductsContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [hasProductManagementAccess, setHasProductManagementAccess] = useState(false);
+  const [canAssignPlatformProducts, setCanAssignPlatformProducts] = useState(true);
   const [products, setProducts] = useState<ProductDbRow[]>([]);
+  const [vendorOptions, setVendorOptions] = useState<ProductVendorOption[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
@@ -66,42 +67,44 @@ export default function ProductsContent() {
     const supabase = getSupabaseClient();
 
     const loadProducts = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email ?? null;
+      const access = await getProductManagementAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(email);
+      setUserEmail(access.userEmail);
+      setHasProductManagementAccess(access.hasProductManagementAccess);
+      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
 
-      if (!email) {
+      if (!access.userEmail) {
         setLoading(false);
         return;
       }
 
-      const isAdmin = ADMIN_EMAILS.includes(email);
-      setHasAdminAccess(isAdmin);
-
-      if (!isAdmin) {
+      if (!access.hasProductManagementAccess) {
         setLoading(false);
         return;
       }
 
-      const { data, error } = await getProducts();
+      const [productResult, vendorResult] = await Promise.all([
+        access.hasPlatformAdminAccess ? getProducts() : getProductsForVendors(access.manageableVendorIds),
+        getProductVendorOptions(),
+      ]);
 
       if (!isMounted) {
         return;
       }
 
-      if (error) {
-        setErrorMessage(error.message);
+      if (productResult.error) {
+        setErrorMessage(productResult.error.message);
         setProducts([]);
         setLoading(false);
         return;
       }
 
-      setProducts(data);
+      setProducts(productResult.data);
+      setVendorOptions(vendorResult.data);
       setLoading(false);
     };
 
@@ -156,6 +159,10 @@ export default function ProductsContent() {
     () => products.filter((product) => getProductStatus(product) === "disabled").length,
     [products],
   );
+  const vendorNameById = useMemo(
+    () => new Map(vendorOptions.map((vendor) => [vendor.id, vendor.name])),
+    [vendorOptions],
+  );
 
   if (loading) {
     return (
@@ -180,11 +187,11 @@ export default function ProductsContent() {
     );
   }
 
-  if (!hasAdminAccess) {
+  if (!hasProductManagementAccess) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Admin Products</h1>
-        <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
+        <p className="mt-3 text-sm text-slate-500">You do not have product management access</p>
       </div>
     );
   }
@@ -194,7 +201,9 @@ export default function ProductsContent() {
       <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Dashboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">All Products</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            {canAssignPlatformProducts ? "All Products" : "Your Vendor Products"}
+          </h1>
           <p className="text-sm text-slate-500">Search, filter, and manage product records from one place.</p>
         </div>
 
@@ -325,7 +334,7 @@ export default function ProductsContent() {
                         )}
                       </div>
 
-                      <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+                      <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
                         <div className="xl:col-span-2">
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Name</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{product.name}</p>
@@ -344,6 +353,13 @@ export default function ProductsContent() {
                         <div>
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">MOQ</p>
                           <p className="mt-1 text-sm font-medium text-slate-700">{product.moq}</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor</p>
+                          <p className="mt-1 text-sm font-medium text-slate-700">
+                            {product.vendor_id ? vendorNameById.get(product.vendor_id) ?? "Assigned Vendor" : "Platform"}
+                          </p>
                         </div>
 
                         <div>

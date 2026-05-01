@@ -22,9 +22,11 @@ The project already has:
 - customer orders pages
 - admin product flow
 - admin order flow
+- persisted admin settings page
 - Supabase-backed product management
+- Supabase-backed public product list and product detail pages
 
-The biggest current gap is that the storefront still depends on mock product data while admin product management already uses Supabase.
+The biggest current gap is now final product-schema decisions and access-model hardening, not the basic storefront page migration itself.
 
 Because of that, the platform is not ready for full multivendor implementation yet.
 
@@ -34,44 +36,49 @@ We should start multivendor planning now, but start multivendor implementation o
 
 ## What We Do Now
 
-### Priority 1: Make Supabase the single source of truth for products
+### Priority 1: Finish product data alignment around the Supabase catalog
 
 This is the current top priority.
 
 Tasks:
 
-- [ ] Audit field usage in `data/mock-products.ts`
+- [x] Public product list reads from Supabase
+- [x] Public product details page reads from Supabase
+- [x] Admin-created products can power the public catalog path
+- [x] Audit current product shapes and gaps in `PRODUCT_DATA_AUDIT.md`
 - [ ] Audit field usage in `types/product.ts`
 - [ ] Audit field usage in `types/product-db.ts`
 - [ ] Define one shared product shape for storefront, admin, cart, and orders
-- [ ] Confirm which fields come from `products`
-- [ ] Confirm which fields need separate tables such as variants, media, and specifications
-- [ ] Document missing fields still needed for storefront parity
+- [ ] Confirm which storefront fields come directly from `products`
+- [ ] Confirm which fields need separate tables such as variants, media, specifications, and reviews
+- [x] Refactor product detail purchase flow to use real variant and pricing data
+- [ ] Document missing fields still needed for full storefront parity
 
 Definition of done:
 
-- Public product list reads from Supabase
-- Public product details page reads from Supabase
-- Admin-created products appear on the public storefront
-- Product data no longer depends on `mock-products` for main catalog rendering
+- Product detail purchasing no longer relies on hardcoded variant rows
+- Storefront product fields are intentionally mapped from real data
+- Product data no longer depends on placeholder storefront assumptions for key buying actions
 
 ### Priority 2: Stabilize cart and checkout around real product data
 
-Once product pages are Supabase-backed, cart and checkout should stop depending on mock product records.
+The cart and checkout already enrich quote items with live product records, but they still rely on client-side snapshots for key purchase data.
 
 Tasks:
 
-- [ ] Remove mock-product lookups from cart and checkout
-- [ ] Load product weight, image, and shipping-related fields from real product records
-- [ ] Ensure order creation stores a stable snapshot of purchased product data
-- [ ] Verify inactive or deleted products do not break existing cart/order flows
-- [ ] Replace single-seller assumptions where possible with neutral wording
+- [x] Remove direct mock-product lookups from cart and checkout
+- [x] Load product weight and display metadata from real product records where available
+- [~] Decide which fields must be stored as stable quote snapshots vs revalidated from the database
+- [~] Ensure order creation stores a stable snapshot of purchased product data
+- [x] Verify inactive or deleted products do not break existing cart/order flows
+- [x] Replace single-seller assumptions with neutral wording in the customer flow
+- [x] Remove hardcoded seller labels from cart UI
 
 Definition of done:
 
 - Cart totals and shipping work from database-backed product data
 - Checkout creates orders using stable product snapshots
-- No critical cart or checkout logic depends on `mock-products`
+- No critical cart or checkout logic depends on placeholder storefront assumptions
 
 ### Priority 3: Finish the schema decisions that multivendor depends on
 
@@ -159,11 +166,11 @@ Definition of done:
 
 If we want the cleanest next sprint, it should be:
 
-1. Build a shared storefront product mapper between database rows and storefront UI types.
-2. Refactor `app/products/page.tsx` to read from Supabase.
-3. Refactor `app/products/[slug]/page.tsx` to read from Supabase.
-4. Remove `mock-products` dependency from cart and checkout where possible.
-5. Add a short architecture note for vendor ownership and order structure.
+1. Decide the richer storefront detail schema for specs, buyer notes, and reviews.
+2. Lock the shared buying-data shape used by quote items, order items, and storefront detail pages.
+3. Replace simple email-based admin access with a role-based direction note and implementation plan.
+4. Add a short architecture note for vendor ownership and order structure.
+5. Start the next admin completion slice after settings: categories or customers.
 
 ## Practical Rule
 

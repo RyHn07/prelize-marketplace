@@ -124,6 +124,24 @@ Current fields inferred from the code:
 | `quantity` | integer | Yes | Purchased quantity |
 | `weight` | numeric nullable | No | Snapshot of item weight |
 
+### 4. `platform_settings`
+
+This table now powers the admin settings page and stores one marketplace-wide singleton record.
+
+Current fields inferred from the code:
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `singleton_key` | text | Yes | Unique singleton identifier, currently `default` |
+| `marketplace_name` | text | Yes | Admin-managed marketplace label |
+| `support_email` | text nullable | No | Default support contact email |
+| `support_phone` | text nullable | No | Default support contact phone |
+| `order_support_message` | text nullable | No | Reusable order support copy |
+| `shipping_support_message` | text nullable | No | Reusable shipping support copy |
+| `created_at` | timestamptz | Yes | Creation timestamp |
+| `updated_at` | timestamptz | Yes | Last save timestamp |
+
 ## Recommended Near-Term Tables
 
 ### 4. `categories`
@@ -329,14 +347,15 @@ Recommended access rules:
 
 Important current assumptions in code:
 
-- Public storefront still relies heavily on `mock-products`
-- Cart and checkout still read product weight/CDD details from mock data
-- Seller labels in customer order pages are hardcoded
+- Public storefront list/detail pages already use Supabase product data
+- Cart and checkout now enrich and validate quote items against live product records
+- Missing or inactive products are now blocked in cart and checkout
+- Seller wording is now neutral in customer-facing flows, but vendor data is not implemented yet
 - The app already expects `payment_method`, `payment_status`, and `admin_note` to exist or be added to `orders`
 
 Because of that, the next implementation step should be:
 
 1. finalize the real product schema
-2. connect public catalog pages to Supabase
-3. refactor cart/checkout away from mock product lookups
+2. lock the snapshot-vs-validation boundary for cart, checkout, and orders
+3. replace email-based admin gating with role-backed authorization
 4. then add vendor ownership on top of the stable schema

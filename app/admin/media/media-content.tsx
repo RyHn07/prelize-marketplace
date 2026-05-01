@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { getAdminAccessState } from "@/lib/admin-access";
 import {
   listProductMedia,
   removeProductMedia,
@@ -11,8 +12,6 @@ import {
   type ProductMediaItem,
 } from "@/lib/media/storage";
 import { getSupabaseClient } from "@/lib/supabase-client";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -54,24 +53,21 @@ export default function MediaContent() {
     const supabase = getSupabaseClient();
 
     const loadPage = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email ?? null;
+      const access = await getAdminAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(email);
+      setUserEmail(access.userEmail);
+      setHasAdminAccess(access.hasAdminAccess);
 
-      if (!email) {
+      if (!access.userEmail) {
         setLoading(false);
         return;
       }
 
-      const isAdmin = ADMIN_EMAILS.includes(email);
-      setHasAdminAccess(isAdmin);
-
-      if (!isAdmin) {
+      if (!access.hasAdminAccess) {
         setLoading(false);
         return;
       }

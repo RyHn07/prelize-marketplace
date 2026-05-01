@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import {
   getQuoteItems,
+  getQuoteItemKey,
   QUOTE_STORAGE_KEY,
   QUOTE_UPDATED_EVENT,
   removeQuoteItem,
@@ -62,12 +63,17 @@ type CheckoutDraft = {
   selectedShippingProfiles: Record<string, string>;
 };
 
+type ItemAvailabilityIssue = {
+  message: string;
+  kind: "missing" | "inactive";
+};
+
 function formatBDT(amount: number) {
   return `\u09F3${amount.toLocaleString()}`;
 }
 
-function getVariantKey(productId: string, variation: string) {
-  return `${productId}-${variation}`;
+function getVariantKey(item: QuoteItem) {
+  return getQuoteItemKey(item.productId, item.variation, item.variantId);
 }
 
 function parseWeight(weight?: string) {
@@ -77,6 +83,26 @@ function parseWeight(weight?: string) {
 
   const parsedWeight = Number.parseFloat(weight);
   return Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined;
+}
+
+function getProductAvailabilityIssue(product: ProductDbRow | undefined): ItemAvailabilityIssue | null {
+  if (!product) {
+    return {
+      kind: "missing",
+      message: "This product is no longer available in the catalog.",
+    };
+  }
+
+  const status = product.status ?? (product.is_active ? "active" : "disabled");
+
+  if (!product.is_active || status !== "active") {
+    return {
+      kind: "inactive",
+      message: "This product is currently unavailable and cannot be checked out.",
+    };
+  }
+
+  return null;
 }
 
 function Checkbox({
@@ -314,7 +340,7 @@ export default function CartPage() {
   }, [currentUser, hasCheckedAuth, router]);
 
   useEffect(() => {
-    const currentKeys = items.map((item) => getVariantKey(item.productId, item.variation));
+    const currentKeys = items.map((item) => getVariantKey(item));
 
     setSelectedKeys((previousSelectedKeys) => {
       if (!hasInitializedSelection.current) {
@@ -362,6 +388,22 @@ export default function CartPage() {
     return Array.from(groupedItems.values());
   }, [items, productRecordMap]);
 
+  const itemAvailabilityIssues = useMemo(() => {
+    const issues = new Map<string, ItemAvailabilityIssue>();
+
+    items.forEach((item) => {
+      const issue = getProductAvailabilityIssue(productRecordMap.get(item.productId));
+
+      if (issue) {
+        issues.set(getVariantKey(item), issue);
+      }
+    });
+
+    return issues;
+  }, [items, productRecordMap]);
+
+  const hasUnavailableItems = itemAvailabilityIssues.size > 0;
+
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const effectiveSelectedShippingProfiles = useMemo(() => {
     return productGroups.reduce<Record<string, string>>((result, group) => {
@@ -373,7 +415,7 @@ export default function CartPage() {
   const selectedGroupedItems = useMemo<Record<string, CartItem[]>>(() => {
     return productGroups.reduce<Record<string, CartItem[]>>((result, group) => {
       const selectedItemsForGroup = group.items.filter((item) =>
-        selectedKeySet.has(getVariantKey(item.productId, item.variation)),
+        selectedKeySet.has(getVariantKey(item)) && !itemAvailabilityIssues.has(getVariantKey(item)),
       );
 
       if (selectedItemsForGroup.length === 0) {
@@ -388,9 +430,10 @@ export default function CartPage() {
 
       result[group.productId] = selectedItemsForGroup.map((item) => ({
         productId: item.productId,
-        name: item.name,
-        image: item.image,
+        name: productMatch?.name ?? item.name,
+        image: productMatch?.image_url ?? item.image,
         variation: item.variation,
+        variantId: item.variantId,
         price: item.price,
         quantity: item.quantity,
         weight: parseWeight(
@@ -406,23 +449,23 @@ export default function CartPage() {
 
       return result;
     }, {});
-  }, [effectiveSelectedShippingProfiles, productGroups, productRecordMap, selectedKeySet]);
+  }, [effectiveSelectedShippingProfiles, itemAvailabilityIssues, productGroups, productRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
 
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
 
   const allItemKeys = useMemo(
-    () => items.map((item) => getVariantKey(item.productId, item.variation)),
-    [items],
+    () => items.filter((item) => !itemAvailabilityIssues.has(getVariantKey(item))).map((item) => getVariantKey(item)),
+    [itemAvailabilityIssues, items],
   );
 
-  const allItemsSelected = items.length > 0 && selectedKeys.length === items.length;
+  const allItemsSelected = allItemKeys.length > 0 && allItemKeys.every((key) => selectedKeySet.has(key));
 
   const selectedProductCount = useMemo(
     () =>
       productGroups.filter((group) =>
-        group.items.some((item) => selectedKeySet.has(getVariantKey(item.productId, item.variation))),
+        group.items.some((item) => selectedKeySet.has(getVariantKey(item))),
       ).length,
     [productGroups, selectedKeySet],
   );
@@ -430,7 +473,7 @@ export default function CartPage() {
   const shippingSummaryLabel = useMemo(() => {
     const selectedProfileIds = productGroups
       .filter((group) =>
-        group.items.some((item) => selectedKeySet.has(getVariantKey(item.productId, item.variation))),
+        group.items.some((item) => selectedKeySet.has(getVariantKey(item))),
       )
       .map((group) => effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id);
 
@@ -452,8 +495,12 @@ export default function CartPage() {
     setSelectedKeys((current) => (current.length === items.length ? [] : allItemKeys));
   };
 
-  const toggleVariantSelection = (productId: string, variation: string) => {
-    const key = getVariantKey(productId, variation);
+  const toggleVariantSelection = (item: QuoteItem) => {
+    if (itemAvailabilityIssues.has(getVariantKey(item))) {
+      return;
+    }
+
+    const key = getVariantKey(item);
 
     setSelectedKeys((current) =>
       current.includes(key) ? current.filter((itemKey) => itemKey !== key) : [...current, key],
@@ -461,7 +508,14 @@ export default function CartPage() {
   };
 
   const toggleProductSelection = (group: ProductGroup) => {
-    const groupKeys = group.items.map((item) => getVariantKey(item.productId, item.variation));
+    const groupKeys = group.items
+      .filter((item) => !itemAvailabilityIssues.has(getVariantKey(item)))
+      .map((item) => getVariantKey(item));
+
+    if (groupKeys.length === 0) {
+      return;
+    }
+
     const areAllGroupItemsSelected = groupKeys.every((key) => selectedKeySet.has(key));
 
     setSelectedKeys((current) => {
@@ -480,22 +534,31 @@ export default function CartPage() {
     }));
   };
 
-  const handleUpdateQuantity = (productId: string, variation: string, quantity: number) => {
-    updateQuoteItem(productId, variation, Math.min(MAX_QUANTITY, Math.max(0, quantity)));
+  const handleUpdateQuantity = (item: QuoteItem, quantity: number) => {
+    updateQuoteItem(
+      item.productId,
+      item.variation,
+      Math.min(MAX_QUANTITY, Math.max(0, quantity)),
+      item.variantId,
+    );
     setItems(getQuoteItems());
   };
 
-  const handleRemoveVariant = (productId: string, variation: string) => {
-    const variantKey = getVariantKey(productId, variation);
+  const handleRemoveVariant = (item: QuoteItem) => {
+    const variantKey = getVariantKey(item);
 
-    removeQuoteItem(productId, variation);
+    removeQuoteItem(item.productId, item.variation, item.variantId);
     setSelectedKeys((current) => current.filter((key) => key !== variantKey));
     setItems(getQuoteItems());
   };
 
   const handleContinueToCheckout = () => {
     if (selectedCartItems.length === 0) {
-      setActionMessage("Select items to continue to checkout.");
+      setActionMessage(
+        hasUnavailableItems
+          ? "Remove unavailable items or select only valid items to continue."
+          : "Select items to continue to checkout.",
+      );
       return;
     }
 
@@ -546,6 +609,12 @@ export default function CartPage() {
           ) : null}
         </div>
 
+        {hasUnavailableItems ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+            Some items in your cart are no longer available. They are blocked from checkout until removed.
+          </div>
+        ) : null}
+
         {items.length === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
             <h2 className="text-2xl font-semibold text-slate-900">Your cart is empty</h2>
@@ -563,8 +632,9 @@ export default function CartPage() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
             <div className="space-y-4">
               {productGroups.map((group) => {
-                const groupKeys = group.items.map((item) => getVariantKey(item.productId, item.variation));
+                const groupKeys = group.items.map((item) => getVariantKey(item));
                 const isGroupSelected = groupKeys.every((key) => selectedKeySet.has(key));
+                const groupHasUnavailableItems = group.items.some((item) => itemAvailabilityIssues.has(getVariantKey(item)));
                 const selectedProfileId =
                   effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
                 const selectedProfile =
@@ -596,7 +666,7 @@ export default function CartPage() {
 
                         <div className="min-w-0 space-y-1">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            Seller: Prelize Select
+                            Marketplace Product
                           </p>
                           <h2 className="text-lg font-semibold text-slate-900">
                             Product: {group.name}
@@ -605,15 +675,21 @@ export default function CartPage() {
                             {group.items.length} variation{group.items.length > 1 ? "s" : ""} in this
                             product group
                           </p>
+                          {groupHasUnavailableItems ? (
+                            <p className="text-sm font-medium text-amber-700">
+                              Contains unavailable items
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
 
                     <div className="divide-y divide-slate-200">
                       {group.items.map((item) => {
-                        const variantKey = getVariantKey(item.productId, item.variation);
+                        const variantKey = getVariantKey(item);
                         const isSelected = selectedKeySet.has(variantKey);
                         const productMatch = productRecordMap.get(item.productId);
+                        const availabilityIssue = itemAvailabilityIssues.get(variantKey);
                         const parsedWeight = parseWeight(
                               productMatch?.weight == null ? undefined : String(productMatch.weight)
                             );
@@ -624,7 +700,7 @@ export default function CartPage() {
                               <div className="flex gap-3">
                                 <Checkbox
                                   checked={isSelected}
-                                  onChange={() => toggleVariantSelection(item.productId, item.variation)}
+                                  onChange={() => toggleVariantSelection(item)}
                                   label=""
                                 />
 
@@ -648,21 +724,18 @@ export default function CartPage() {
                                   <p className="text-xs text-slate-400">
                                     Weight basis: {parsedWeight ? `${parsedWeight} kg per unit` : "Unknown"}
                                   </p>
+                                  {availabilityIssue ? (
+                                    <p className="text-xs font-medium text-amber-700">{availabilityIssue.message}</p>
+                                  ) : null}
                                 </div>
                               </div>
 
                               <div className="flex flex-col gap-3 sm:flex-row sm:items-center xl:justify-end">
                                 <QuantityControl
                                   quantity={item.quantity}
-                                  onDecrease={() =>
-                                    handleUpdateQuantity(item.productId, item.variation, item.quantity - 1)
-                                  }
-                                  onIncrease={() =>
-                                    handleUpdateQuantity(item.productId, item.variation, item.quantity + 1)
-                                  }
-                                  onInputChange={(value) =>
-                                    handleUpdateQuantity(item.productId, item.variation, value)
-                                  }
+                                  onDecrease={() => handleUpdateQuantity(item, item.quantity - 1)}
+                                  onIncrease={() => handleUpdateQuantity(item, item.quantity + 1)}
+                                  onInputChange={(value) => handleUpdateQuantity(item, value)}
                                 />
 
                                 <div className="min-w-[120px] text-left sm:text-right">
@@ -676,7 +749,7 @@ export default function CartPage() {
 
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveVariant(item.productId, item.variation)}
+                                  onClick={() => handleRemoveVariant(item)}
                                   className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
                                   aria-label={`Remove ${item.variation}`}
                                 >
@@ -698,6 +771,7 @@ export default function CartPage() {
                             onChange={(event) =>
                               handleShippingProfileChange(group.productId, event.target.value)
                             }
+                            disabled={groupHasUnavailableItems}
                             className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                             aria-label={`Shipping method for ${group.name}`}
                           >

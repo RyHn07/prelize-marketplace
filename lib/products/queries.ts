@@ -1,5 +1,6 @@
 import { mockCategories } from "@/data/mock-categories";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
   ProductCategoryOption,
   ProductDbRow,
@@ -7,6 +8,7 @@ import type {
   ProductEditorRecord,
   ProductStatus,
   ProductType,
+  ProductVendorOption,
 } from "@/types/product-db";
 
 function normalizeStatus(value: unknown, isActive: boolean): ProductStatus {
@@ -27,6 +29,7 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
 
   return {
     ...row,
+    vendor_id: typeof row.vendor_id === "string" ? row.vendor_id : null,
     slug: typeof row.slug === "string" && row.slug.trim().length > 0 ? row.slug : String(row.id),
     image_url: typeof row.image_url === "string" ? row.image_url : null,
     description: typeof row.description === "string" ? row.description : null,
@@ -43,6 +46,29 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
 export async function getProducts() {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+
+  return {
+    data: ((data ?? []) as ProductDbRow[]).map(normalizeProduct),
+    error,
+  };
+}
+
+export async function getProductsForVendors(vendorIds: string[]) {
+  const scopedVendorIds = Array.from(new Set(vendorIds.filter(Boolean)));
+
+  if (scopedVendorIds.length === 0) {
+    return {
+      data: [] as ProductDbRow[],
+      error: null,
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .in("vendor_id", scopedVendorIds)
+    .order("created_at", { ascending: false });
 
   return {
     data: ((data ?? []) as ProductDbRow[]).map(normalizeProduct),
@@ -71,6 +97,24 @@ export async function getProductById(id: string) {
   return {
     data: data ? normalizeProduct(data as ProductDbRow) : null,
     error,
+  };
+}
+
+export async function getProductByIdForVendors(id: string, vendorIds: string[]) {
+  const productResult = await getProductById(id);
+
+  if (productResult.error || !productResult.data) {
+    return productResult;
+  }
+
+  const scopedVendorIds = new Set(vendorIds.filter(Boolean));
+
+  return {
+    data:
+      productResult.data.vendor_id && scopedVendorIds.has(productResult.data.vendor_id)
+        ? productResult.data
+        : null,
+    error: null,
   };
 }
 
@@ -105,6 +149,75 @@ export async function getPublicProductBySlug(slug: string) {
   };
 }
 
+function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
+  const parsedPrice = Number(row.price);
+  const parsedMoq = Number(row.moq);
+  const parsedRegularPrice =
+    row.regular_price === null || row.regular_price === undefined ? null : Number(row.regular_price);
+  const parsedDiscountPrice =
+    row.discount_price === null || row.discount_price === undefined ? null : Number(row.discount_price);
+
+  return {
+    ...row,
+    name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : "Default",
+    price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
+    moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
+    regular_price: Number.isFinite(parsedRegularPrice) ? parsedRegularPrice : null,
+    discount_price: Number.isFinite(parsedDiscountPrice) ? parsedDiscountPrice : null,
+    image_url: typeof row.image_url === "string" ? row.image_url : null,
+    attribute_values:
+      row.attribute_values && typeof row.attribute_values === "object" ? row.attribute_values : {},
+  };
+}
+
+export async function getPublicProductDetailBySlug(slug: string) {
+  const productResult = await getPublicProductBySlug(slug);
+
+  if (productResult.error || !productResult.data) {
+    return {
+      data: null as { product: ProductDbRow; variants: ProductDbVariantRow[] } | null,
+      error: productResult.error,
+    };
+  }
+
+  if (productResult.data.product_type !== "variable") {
+    return {
+      data: {
+        product: productResult.data,
+        variants: [] as ProductDbVariantRow[],
+      },
+      error: null,
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data: variants, error: variantsError } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("product_id", productResult.data.id)
+    .order("created_at", { ascending: true });
+
+  if (variantsError) {
+    const missingVariantsTable = variantsError.message.toLowerCase().includes("product_variants");
+
+    return {
+      data: {
+        product: productResult.data,
+        variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
+      },
+      error: missingVariantsTable ? null : variantsError,
+    };
+  }
+
+  return {
+    data: {
+      product: productResult.data,
+      variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
+    },
+    error: null,
+  };
+}
+
 export async function getProductEditorRecord(id: string) {
   const productResult = await getProductById(id);
 
@@ -128,7 +241,7 @@ export async function getProductEditorRecord(id: string) {
     return {
       data: {
         product: productResult.data,
-        variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]),
+        variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
       },
       error: missingVariantsTable ? null : variantsError,
     };
@@ -137,7 +250,45 @@ export async function getProductEditorRecord(id: string) {
   return {
     data: {
       product: productResult.data,
-      variants: (variants ?? []) as ProductDbVariantRow[],
+      variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
+    },
+    error: null,
+  };
+}
+
+export async function getProductEditorRecordForVendors(id: string, vendorIds: string[]) {
+  const productResult = await getProductByIdForVendors(id, vendorIds);
+
+  if (productResult.error || !productResult.data) {
+    return {
+      data: null as ProductEditorRecord | null,
+      error: productResult.error,
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data: variants, error: variantsError } = await supabase
+    .from("product_variants")
+    .select("*")
+    .eq("product_id", id)
+    .order("created_at", { ascending: true });
+
+  if (variantsError) {
+    const missingVariantsTable = variantsError.message.toLowerCase().includes("product_variants");
+
+    return {
+      data: {
+        product: productResult.data,
+        variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
+      },
+      error: missingVariantsTable ? null : variantsError,
+    };
+  }
+
+  return {
+    data: {
+      product: productResult.data,
+      variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
     },
     error: null,
   };
@@ -166,6 +317,22 @@ export async function getProductCategoryOptions() {
           name: category.name,
           slug: category.slug,
         })),
+    error: null,
+  };
+}
+
+export async function getProductVendorOptions() {
+  const { data, error } = await getVendorOptions();
+
+  if (error) {
+    return {
+      data: [] as ProductVendorOption[],
+      error,
+    };
+  }
+
+  return {
+    data,
     error: null,
   };
 }

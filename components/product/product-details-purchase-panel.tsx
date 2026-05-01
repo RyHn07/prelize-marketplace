@@ -4,39 +4,120 @@ import { useEffect, useMemo, useState } from "react";
 
 import { addToQuote } from "@/components/quote/quote-utils";
 import type { Product } from "@/types/product";
+import type {
+  ProductAttribute,
+  ProductCddShippingProfile,
+  ProductDbRow,
+  ProductDbVariantRow,
+} from "@/types/product-db";
 import {
   isProductInWishlist,
   toggleWishlistProduct,
   WISHLIST_UPDATED_EVENT,
 } from "@/components/wishlist/wishlist-utils";
 
-const colorSwatches = [
-  { name: "Stone", value: "#D4D4D8" },
-  { name: "Mist", value: "#E5E7EB" },
-  { name: "Taupe", value: "#D6D3D1" },
-  { name: "Ash", value: "#D4D4D4" },
-];
-
-const variationRows = [
-  { size: "9", price: 500 },
-  { size: "10", price: 500 },
-  { size: "11", price: 500 },
-  { size: "12", price: 500 },
-  { size: "13", price: 520 },
-  { size: "14", price: 520 },
-];
-
-const shouldShowSeeAll = variationRows.length > 4;
 const MAX_QUANTITY = 9999;
-const initialQuantities = Object.fromEntries(variationRows.map((row) => [row.size, 0]));
+
+type ProductOption = {
+  id: string;
+  image: string;
+  label: string;
+  price: number;
+  moq: number;
+  attributeValues: Record<string, string>;
+};
+
+type ProductOptionAttribute = {
+  name: string;
+  values: string[];
+};
+
+const SHIPPING_PROFILE_LABELS: Record<ProductCddShippingProfile, string> = {
+  standard: "Standard shipping review",
+  express: "Express shipping review",
+  fragile: "Fragile cargo review",
+  bulk: "Bulk shipment review",
+};
 
 function formatCurrency(value: number) {
-  return `৳${value.toLocaleString()}`;
+  return `\u09F3${value.toLocaleString()}`;
 }
 
 function getWeightValue(weight: string) {
   const parsed = Number.parseFloat(weight);
   return Number.isNaN(parsed) ? 0.5 : parsed;
+}
+
+function getEffectivePrice(regularPrice: number, discountPrice: number | null) {
+  return discountPrice !== null && discountPrice > 0 && discountPrice < regularPrice
+    ? discountPrice
+    : regularPrice;
+}
+
+function buildOptionAttributes(
+  productRecord: ProductDbRow,
+  variants: ProductDbVariantRow[],
+): ProductOptionAttribute[] {
+  const productAttributes = (productRecord.attributes ?? []).filter(
+    (attribute): attribute is ProductAttribute =>
+      attribute.name.trim().length > 0 && Array.isArray(attribute.values) && attribute.values.length > 0,
+  );
+
+  if (productAttributes.length > 0) {
+    return productAttributes.map((attribute) => ({
+      name: attribute.name,
+      values: attribute.values.filter((value) => value.trim().length > 0),
+    }));
+  }
+
+  const attributeMap = new Map<string, Set<string>>();
+
+  variants.forEach((variant) => {
+    Object.entries(variant.attribute_values ?? {}).forEach(([name, value]) => {
+      if (!name.trim() || !String(value).trim()) {
+        return;
+      }
+
+      const currentValues = attributeMap.get(name) ?? new Set<string>();
+      currentValues.add(String(value));
+      attributeMap.set(name, currentValues);
+    });
+  });
+
+  return Array.from(attributeMap.entries()).map(([name, values]) => ({
+    name,
+    values: Array.from(values),
+  }));
+}
+
+function buildProductOptions(
+  product: Product,
+  productRecord: ProductDbRow,
+  variants: ProductDbVariantRow[],
+): ProductOption[] {
+  if (productRecord.product_type === "variable" && variants.length > 0) {
+    return variants.map((variant) => ({
+      id: variant.id,
+      image: variant.image_url ?? productRecord.image_url ?? product.image,
+      label: variant.name,
+      price: getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
+      moq: variant.moq,
+      attributeValues: Object.fromEntries(
+        Object.entries(variant.attribute_values ?? {}).map(([key, value]) => [key, String(value)]),
+      ),
+    }));
+  }
+
+  return [
+    {
+      id: productRecord.id,
+      image: productRecord.image_url ?? product.image,
+      label: "Default",
+      price: getEffectivePrice(productRecord.regular_price ?? productRecord.price, productRecord.discount_price ?? null),
+      moq: productRecord.moq,
+      attributeValues: {},
+    },
+  ];
 }
 
 function StarRating() {
@@ -158,11 +239,27 @@ function QuantityControl({
   );
 }
 
-export default function ProductDetailsPurchasePanel({ product }: { product: Product }) {
-  const [activeColor, setActiveColor] = useState(colorSwatches[0]?.name ?? "");
+export default function ProductDetailsPurchasePanel({
+  product,
+  productRecord,
+  variants,
+}: {
+  product: Product;
+  productRecord: ProductDbRow;
+  variants: ProductDbVariantRow[];
+}) {
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
-  const [quantities, setQuantities] = useState<Record<string, number>>(initialQuantities);
+  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
+  const optionAttributes = useMemo(
+    () => buildOptionAttributes(productRecord, variants),
+    [productRecord, variants],
+  );
+  const productOptions = useMemo(
+    () => buildProductOptions(product, productRecord, variants),
+    [product, productRecord, variants],
+  );
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const updateWishlistState = () => {
@@ -177,10 +274,28 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
     };
   }, [product.id]);
 
+  useEffect(() => {
+    setSelectedAttributes({});
+    setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
+    setShowAllVariants(false);
+  }, [product.id, productOptions]);
+
+  const filteredOptions = useMemo(() => {
+    return productOptions.filter((option) =>
+      Object.entries(selectedAttributes).every(
+        ([attributeName, selectedValue]) =>
+          !selectedValue || option.attributeValues[attributeName] === selectedValue,
+      ),
+    );
+  }, [productOptions, selectedAttributes]);
+
+  const visibleOptions = showAllVariants ? filteredOptions : filteredOptions.slice(0, 4);
+  const shouldShowSeeAll = filteredOptions.length > 4;
+
   const totals = useMemo(() => {
-    const quantity = variationRows.reduce((sum, row) => sum + (quantities[row.size] ?? 0), 0);
-    const productPrice = variationRows.reduce(
-      (sum, row) => sum + row.price * (quantities[row.size] ?? 0),
+    const quantity = productOptions.reduce((sum, option) => sum + (quantities[option.id] ?? 0), 0);
+    const productPrice = productOptions.reduce(
+      (sum, option) => sum + option.price * (quantities[option.id] ?? 0),
       0,
     );
     const cddCharge = quantity * 15;
@@ -194,39 +309,39 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
       payNow,
       estimatedShipping,
     };
-  }, [product.weight, quantities]);
+  }, [product.weight, productOptions, quantities]);
 
-  const updateQuantity = (size: string, nextQuantity: number) => {
+  const updateQuantity = (optionId: string, nextQuantity: number) => {
     setQuantities((current) => ({
       ...current,
-      [size]: Math.min(MAX_QUANTITY, Math.max(0, nextQuantity)),
+      [optionId]: Math.min(MAX_QUANTITY, Math.max(0, nextQuantity)),
     }));
   };
 
   const handleAddToCart = () => {
-    const selectedVariations = variationRows.filter((row) => (quantities[row.size] ?? 0) > 0);
+    const selectedOptions = productOptions.filter((option) => (quantities[option.id] ?? 0) > 0);
 
-    if (selectedVariations.length === 0) {
+    if (selectedOptions.length === 0) {
       window.alert("Please select quantity");
       return;
     }
 
-    selectedVariations.forEach((row) => {
+    selectedOptions.forEach((option) => {
       addToQuote({
         productId: product.id,
         name: product.name,
-        image: product.image,
-        variation: row.size,
-        price: row.price,
-        quantity: quantities[row.size] ?? 0,
+        image: option.image,
+        productSlug: product.slug,
+        variation: option.label,
+        variantId: option.id !== product.id ? option.id : null,
+        price: option.price,
+        quantity: quantities[option.id] ?? 0,
       });
     });
 
-    setQuantities(initialQuantities);
+    setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
     window.alert("Added to cart");
   };
-
-  const visibleVariationRows = showAllVariants ? variationRows : variationRows.slice(0, 4);
 
   return (
     <>
@@ -243,52 +358,90 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
         </div>
 
         <div className="space-y-4">
-          <div className="space-y-3">
-            <p className="text-base font-semibold text-slate-900">Color</p>
-            <div className="flex flex-wrap gap-4">
-              {colorSwatches.map((swatch) => (
-                <button
-                  key={swatch.name}
-                  type="button"
-                  aria-label={swatch.name}
-                  onClick={() => setActiveColor(swatch.name)}
-                  className={`h-16 w-16 rounded-md border transition-colors ${
-                    activeColor === swatch.name
-                      ? "border-[#615FFF]"
-                      : "border-transparent hover:border-slate-300"
-                  }`}
-                  style={{ backgroundColor: swatch.value }}
-                />
-              ))}
-            </div>
-          </div>
+          {optionAttributes.length > 0 ? (
+            optionAttributes.map((attribute) => (
+              <div key={attribute.name} className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-base font-semibold text-slate-900">{attribute.name}</p>
+                  {selectedAttributes[attribute.name] ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedAttributes((current) => ({
+                          ...current,
+                          [attribute.name]: "",
+                        }))
+                      }
+                      className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {attribute.values.map((value) => {
+                    const isSelected = selectedAttributes[attribute.name] === value;
+
+                    return (
+                      <button
+                        key={`${attribute.name}-${value}`}
+                        type="button"
+                        onClick={() =>
+                          setSelectedAttributes((current) => ({
+                            ...current,
+                            [attribute.name]: current[attribute.name] === value ? "" : value,
+                          }))
+                        }
+                        className={
+                          isSelected
+                            ? "rounded-full border border-[#615FFF] bg-[#615FFF]/10 px-4 py-2 text-sm font-semibold text-[#615FFF]"
+                            : "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
+                        }
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          ) : null}
 
           <div className="space-y-4">
-            <div className="grid grid-cols-[0.8fr_0.7fr_1fr] items-center gap-4 text-base font-semibold text-slate-900">
-              <span className="self-center">Size</span>
+            <div className="grid grid-cols-[1.2fr_0.8fr_1fr] items-center gap-4 text-base font-semibold text-slate-900">
+              <span className="self-center">Option</span>
               <span className="self-center">Price</span>
               <span className="self-center">Quantity</span>
             </div>
 
-            <div className="space-y-4">
-              {visibleVariationRows.map((row) => (
-                <div
-                  key={row.size}
-                  className="grid grid-cols-[0.8fr_0.7fr_1fr] items-center gap-4 text-sm"
-                >
-                  <span className="self-center text-slate-900">{row.size}</span>
-                  <span className="self-center font-semibold text-[#615FFF]">
-                    {formatCurrency(row.price)}
-                  </span>
-                  <QuantityControl
-                    quantity={quantities[row.size] ?? 0}
-                    onDecrease={() => updateQuantity(row.size, (quantities[row.size] ?? 0) - 1)}
-                    onIncrease={() => updateQuantity(row.size, (quantities[row.size] ?? 0) + 1)}
-                    onInputChange={(value) => updateQuantity(row.size, value)}
-                  />
-                </div>
-              ))}
-            </div>
+            {filteredOptions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                No matching variants found for the selected options.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {visibleOptions.map((option) => (
+                  <div
+                    key={option.id}
+                    className="grid grid-cols-[1.2fr_0.8fr_1fr] items-center gap-4 text-sm"
+                  >
+                    <div className="self-center">
+                      <span className="block text-slate-900">{option.label}</span>
+                      <span className="mt-1 block text-xs text-slate-500">MOQ: {option.moq}</span>
+                    </div>
+                    <span className="self-center font-semibold text-[#615FFF]">
+                      {formatCurrency(option.price)}
+                    </span>
+                    <QuantityControl
+                      quantity={quantities[option.id] ?? 0}
+                      onDecrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) - 1)}
+                      onIncrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) + 1)}
+                      onInputChange={(value) => updateQuantity(option.id, value)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             {shouldShowSeeAll ? (
               <button
@@ -309,9 +462,9 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
             <div className="space-y-2">
               <p className="text-sm text-slate-500">Shipping Method</p>
               <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
-                <span>By Air</span>
+                <span>{SHIPPING_PROFILE_LABELS[productRecord.cdd_shipping_profile ?? "standard"]}</span>
                 <span className="text-slate-300">-</span>
-                <span className="text-[#615FFF]">৳1000/kg</span>
+                <span className="text-[#615FFF]">Final rate after review</span>
               </div>
             </div>
             <button
@@ -338,7 +491,7 @@ export default function ProductDetailsPurchasePanel({ product }: { product: Prod
 
             <div className="text-right">
               <p className="text-lg font-semibold text-slate-700">
-                {formatCurrency(totals.estimatedShipping)}
+                {totals.quantity === 0 ? "Pending selection" : formatCurrency(totals.estimatedShipping)}
               </p>
               <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
                 Estimated shipping charge

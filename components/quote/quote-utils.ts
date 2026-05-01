@@ -2,7 +2,9 @@ export type QuoteItem = {
   productId: string;
   name: string;
   image: string;
+  productSlug?: string | null;
   variation: string;
+  variantId?: string | null;
   price: number;
   quantity: number;
 };
@@ -25,12 +27,18 @@ function isQuoteItem(value: unknown): value is QuoteItem {
     typeof item.productId === "string" &&
     typeof item.name === "string" &&
     typeof item.image === "string" &&
+    (item.productSlug === undefined || item.productSlug === null || typeof item.productSlug === "string") &&
     typeof item.variation === "string" &&
+    (item.variantId === undefined || item.variantId === null || typeof item.variantId === "string") &&
     typeof item.price === "number" &&
     Number.isFinite(item.price) &&
     typeof item.quantity === "number" &&
     Number.isFinite(item.quantity)
   );
+}
+
+export function getQuoteItemKey(productId: string, variation: string, variantId?: string | null) {
+  return variantId && variantId.trim().length > 0 ? `${productId}::${variantId}` : `${productId}::${variation}`;
 }
 
 function readQuoteItems() {
@@ -55,6 +63,8 @@ function readQuoteItems() {
       .filter(isQuoteItem)
       .map((item) => ({
         ...item,
+        productSlug: item.productSlug ?? null,
+        variantId: item.variantId ?? null,
         quantity: Math.max(0, Math.floor(item.quantity)),
       }))
       .filter((item) => item.quantity > 0);
@@ -85,8 +95,8 @@ export function addToQuote(item: QuoteItem) {
   const items = getQuoteItems();
   const existingItemIndex = items.findIndex(
     (quoteItem) =>
-      quoteItem.productId === nextItem.productId &&
-      quoteItem.variation === nextItem.variation,
+      getQuoteItemKey(quoteItem.productId, quoteItem.variation, quoteItem.variantId) ===
+      getQuoteItemKey(nextItem.productId, nextItem.variation, nextItem.variantId),
   );
 
   if (existingItemIndex >= 0) {
@@ -103,15 +113,16 @@ export function addToQuote(item: QuoteItem) {
   return items;
 }
 
-export function updateQuoteItem(productId: string, variation: string, quantity: number) {
+export function updateQuoteItem(productId: string, variation: string, quantity: number, variantId?: string | null) {
   const nextQuantity = Math.max(0, Math.floor(quantity));
   const items = getQuoteItems();
+  const targetKey = getQuoteItemKey(productId, variation, variantId);
 
   const nextItems =
     nextQuantity === 0
-      ? items.filter((item) => !(item.productId === productId && item.variation === variation))
+      ? items.filter((item) => getQuoteItemKey(item.productId, item.variation, item.variantId) !== targetKey)
       : items.map((item) =>
-          item.productId === productId && item.variation === variation
+          getQuoteItemKey(item.productId, item.variation, item.variantId) === targetKey
             ? { ...item, quantity: nextQuantity }
             : item,
         );
@@ -121,9 +132,10 @@ export function updateQuoteItem(productId: string, variation: string, quantity: 
   return nextItems;
 }
 
-export function removeQuoteItem(productId: string, variation: string) {
+export function removeQuoteItem(productId: string, variation: string, variantId?: string | null) {
+  const targetKey = getQuoteItemKey(productId, variation, variantId);
   const nextItems = getQuoteItems().filter(
-    (item) => !(item.productId === productId && item.variation === variation),
+    (item) => getQuoteItemKey(item.productId, item.variation, item.variantId) !== targetKey,
   );
 
   saveQuoteItems(nextItems);

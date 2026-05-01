@@ -4,29 +4,31 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import ProductForm from "@/components/product/product-form";
+import { getProductManagementAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
 
 export default function AdminNewProductPage() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [hasProductManagementAccess, setHasProductManagementAccess] = useState(false);
+  const [manageableVendorIds, setManageableVendorIds] = useState<string[]>([]);
+  const [canAssignPlatformProducts, setCanAssignPlatformProducts] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     const supabase = getSupabaseClient();
 
     const validateAccess = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email ?? null;
+      const access = await getProductManagementAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(email);
-      setHasAdminAccess(email ? ADMIN_EMAILS.includes(email) : false);
+      setUserEmail(access.userEmail);
+      setHasProductManagementAccess(access.hasProductManagementAccess);
+      setManageableVendorIds(access.manageableVendorIds);
+      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
       setLoading(false);
     };
 
@@ -60,11 +62,11 @@ export default function AdminNewProductPage() {
     );
   }
 
-  if (!hasAdminAccess) {
+  if (!hasProductManagementAccess) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Add Product</h1>
-        <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
+        <p className="mt-3 text-sm text-slate-500">You do not have product management access</p>
       </div>
     );
   }
@@ -79,8 +81,13 @@ export default function AdminNewProductPage() {
             Back to Products
           </Link>
         </div>
-
-        <ProductForm key="new-product" mode="create" record={null} />
+        <ProductForm
+          key="new-product"
+          mode="create"
+          record={null}
+          allowedVendorIds={manageableVendorIds}
+          canAssignPlatformProducts={canAssignPlatformProducts}
+        />
       </section>
   );
 }

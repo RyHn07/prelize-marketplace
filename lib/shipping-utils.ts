@@ -17,6 +17,7 @@ export type CartItem = {
   name: string
   image: string
   variation: string
+  variantId?: string | null
   price: number
   quantity: number
   weight?: number

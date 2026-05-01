@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import {
   getQuoteItems,
+  getQuoteItemKey,
   QUOTE_STORAGE_KEY,
   QUOTE_UPDATED_EVENT,
   removeQuoteItem,
@@ -90,12 +91,17 @@ type SelectedProductGroup = {
   shippingProfileName: string;
 };
 
+type ItemAvailabilityIssue = {
+  message: string;
+  kind: "missing" | "inactive";
+};
+
 function formatBDT(amount: number) {
   return `\u09F3${amount.toLocaleString()}`;
 }
 
-function getVariantKey(productId: string, variation: string) {
-  return `${productId}-${variation}`;
+function getVariantKey(item: QuoteItem) {
+  return getQuoteItemKey(item.productId, item.variation, item.variantId);
 }
 
 function parseWeight(weight?: string) {
@@ -105,6 +111,26 @@ function parseWeight(weight?: string) {
 
   const parsedWeight = Number.parseFloat(weight);
   return Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : undefined;
+}
+
+function getProductAvailabilityIssue(product: ProductDbRow | undefined): ItemAvailabilityIssue | null {
+  if (!product) {
+    return {
+      kind: "missing",
+      message: "This product is no longer available in the catalog.",
+    };
+  }
+
+  const status = product.status ?? (product.is_active ? "active" : "disabled");
+
+  if (!product.is_active || status !== "active") {
+    return {
+      kind: "inactive",
+      message: "This product is currently unavailable and cannot be checked out.",
+    };
+  }
+
+  return null;
 }
 
 function validateBuyerForm(values: BuyerForm) {
@@ -240,6 +266,24 @@ export default function CheckoutPage() {
     () => new Map(productRecords.map((product) => [product.id, product])),
     [productRecords],
   );
+  const itemAvailabilityIssues = useMemo(() => {
+    const issues = new Map<string, ItemAvailabilityIssue>();
+
+    items.forEach((item) => {
+      const issue = getProductAvailabilityIssue(productRecordMap.get(item.productId));
+
+      if (issue) {
+        issues.set(getVariantKey(item), issue);
+      }
+    });
+
+    return issues;
+  }, [items, productRecordMap]);
+  const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
+  const hasUnavailableSelectedItems = useMemo(
+    () => items.some((item) => selectedKeySet.has(getVariantKey(item)) && itemAvailabilityIssues.has(getVariantKey(item))),
+    [itemAvailabilityIssues, items, selectedKeySet],
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -293,15 +337,13 @@ export default function CheckoutPage() {
     }
   }, [currentUser, hasCheckedAuth, router]);
 
-  const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
-
   const selectedGroupedItems = useMemo<Record<string, CartItem[]>>(() => {
     const groupedItems = new Map<string, QuoteItem[]>();
 
     items.forEach((item) => {
-      const variantKey = getVariantKey(item.productId, item.variation);
+      const variantKey = getVariantKey(item);
 
-      if (!selectedKeySet.has(variantKey)) {
+      if (!selectedKeySet.has(variantKey) || itemAvailabilityIssues.has(variantKey)) {
         return;
       }
 
@@ -323,9 +365,10 @@ export default function CheckoutPage() {
 
       result[productId] = groupItems.map((item) => ({
         productId: item.productId,
-        name: item.name,
-        image: item.image,
+        name: productMatch?.name ?? item.name,
+        image: productMatch?.image_url ?? item.image,
         variation: item.variation,
+        variantId: item.variantId,
         price: item.price,
         quantity: item.quantity,
         weight: parseWeight(
@@ -341,7 +384,7 @@ export default function CheckoutPage() {
 
       return result;
     }, {});
-  }, [items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
+  }, [itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
@@ -350,9 +393,9 @@ export default function CheckoutPage() {
     const groups = new Map<string, SelectedProductGroup>();
 
     items.forEach((item) => {
-      const variantKey = getVariantKey(item.productId, item.variation);
+      const variantKey = getVariantKey(item);
 
-      if (!selectedKeySet.has(variantKey)) {
+      if (!selectedKeySet.has(variantKey) || itemAvailabilityIssues.has(variantKey)) {
         return;
       }
 
@@ -368,15 +411,15 @@ export default function CheckoutPage() {
 
       groups.set(item.productId, {
         productId: item.productId,
-        name: item.name,
-        image: item.image,
+        name: productRecordMap.get(item.productId)?.name ?? item.name,
+        image: productRecordMap.get(item.productId)?.image_url ?? item.image,
         items: [item],
         shippingProfileName: selectedShippingProfile.name,
       });
     });
 
     return Array.from(groups.values());
-  }, [items, selectedKeySet, selectedShippingProfiles]);
+  }, [itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
 
   const handleBuyerFieldChange = (field: keyof BuyerForm, value: string) => {
     setBuyerForm((current) => ({
@@ -396,7 +439,10 @@ export default function CheckoutPage() {
   };
 
   const handlePlaceOrder = async () => {
-    if (selectedCartItems.length === 0 || isPlacingOrder) {
+    if (selectedCartItems.length === 0 || isPlacingOrder || hasUnavailableSelectedItems) {
+      if (hasUnavailableSelectedItems) {
+        setOrderError("Remove unavailable items from your cart before placing the order.");
+      }
       return;
     }
 
@@ -511,7 +557,7 @@ export default function CheckoutPage() {
       }
 
       selectedCartItems.forEach((item) => {
-        removeQuoteItem(item.productId, item.variation);
+        removeQuoteItem(item.productId, item.variation, item.variantId);
       });
 
       window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
@@ -581,6 +627,12 @@ export default function CheckoutPage() {
             Add your buyer details and review the final summary before placing the order.
           </p>
         </div>
+
+        {hasUnavailableSelectedItems ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+            Some selected items are no longer available. Go back to cart to remove them before checkout.
+          </div>
+        ) : null}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
           <div className="space-y-4">
@@ -723,7 +775,7 @@ export default function CheckoutPage() {
                     <div className="mt-4 space-y-2">
                       {group.items.map((item) => (
                         <div
-                          key={getVariantKey(item.productId, item.variation)}
+                          key={getVariantKey(item)}
                           className="rounded-lg border border-slate-200 px-4 py-3"
                         >
                           <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-4">
@@ -787,7 +839,7 @@ export default function CheckoutPage() {
             <div className="space-y-3">
               <button
                 type="button"
-                disabled={selectedCartItems.length === 0 || isPlacingOrder}
+                disabled={selectedCartItems.length === 0 || isPlacingOrder || hasUnavailableSelectedItems}
                 onClick={handlePlaceOrder}
                 className="inline-flex w-full items-center justify-center rounded-full bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
               >

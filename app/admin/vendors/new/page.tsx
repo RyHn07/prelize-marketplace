@@ -1,17 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import * as React from "react";
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
+import VendorForm, {
+  DEFAULT_VENDOR_FORM_VALUES,
+  toVendorPayload,
+} from "@/components/vendor/vendor-form";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { createVendor } from "@/lib/vendors/actions";
 
-export default function AdminCustomersPage() {
+export default function AdminNewVendorPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  useEffect(() => {
+  React.useEffect(() => {
     let isMounted = true;
     const supabase = getSupabaseClient();
 
@@ -45,7 +55,7 @@ export default function AdminCustomersPage() {
   if (!userEmail) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Customers</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Add Vendor</h1>
         <p className="mt-3 text-sm text-slate-500">Please login as admin</p>
         <Link
           href="/login"
@@ -60,7 +70,7 @@ export default function AdminCustomersPage() {
   if (!hasAdminAccess) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Customers</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Add Vendor</h1>
         <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
       </div>
     );
@@ -68,25 +78,45 @@ export default function AdminCustomersPage() {
 
   return (
     <section className="mx-auto max-w-5xl">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">
-          Admin Dashboard
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Customers</h1>
-        <p className="mt-3 max-w-2xl text-sm text-slate-500">
-          Customer management is not built yet, but the admin navigation and layout are now in
-          place for it.
-        </p>
-
-        <div className="mt-6">
-          <Link
-            href="/admin"
-            className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            Back to Dashboard
-          </Link>
-        </div>
+      <div className="mb-6">
+        <Link
+          href="/admin/vendors"
+          className="inline-flex text-sm font-medium text-[#615FFF] transition-colors hover:text-[#5552e6]"
+        >
+          Back to Vendors
+        </Link>
       </div>
+
+      <VendorForm
+        key="new-vendor"
+        initialValues={DEFAULT_VENDOR_FORM_VALUES}
+        title="Add Vendor"
+        submitLabel="Create Vendor"
+        isSubmitting={saving}
+        errorMessage={errorMessage}
+        onSubmit={async (values) => {
+          const payload = toVendorPayload(values);
+
+          if (!payload.name) {
+            setErrorMessage("Vendor name is required.");
+            return;
+          }
+
+          setSaving(true);
+          setErrorMessage("");
+
+          const result = await createVendor(payload);
+
+          if (result.error || !result.data) {
+            setErrorMessage(result.error?.message ?? "Unable to create the vendor right now.");
+            setSaving(false);
+            return;
+          }
+
+          router.push(`/admin/vendors?status=created&id=${result.data.id}`);
+          router.refresh();
+        }}
+      />
     </section>
   );
 }

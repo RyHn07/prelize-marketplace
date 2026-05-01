@@ -3,6 +3,9 @@ export type ProductDbWeight = string | number | null;
 export type ProductStatus = "active" | "disabled" | "draft";
 export type ProductType = "single" | "variable";
 export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bulk";
+export type VendorStatus = "pending" | "active" | "suspended";
+export type VendorMemberRole = "owner" | "staff";
+export type VendorMemberStatus = "active" | "invited" | "disabled";
 
 export type ProductAttribute = {
   name: string;
@@ -26,6 +29,7 @@ export type ProductDbVariantRow = {
 
 export type ProductDbRow = {
   id: string;
+  vendor_id?: string | null;
   category_id: string | null;
   name: string;
   slug: string;
@@ -47,6 +51,7 @@ export type ProductDbRow = {
 };
 
 export type ProductUpsertPayload = {
+  vendor_id: string | null;
   category_id: string | null;
   name: string;
   slug: string;
@@ -83,6 +88,7 @@ export type ProductVariationFormValue = {
 };
 
 export type ProductFormValues = {
+  vendor_id: string;
   category_id: string;
   name: string;
   slug: string;
@@ -105,6 +111,61 @@ export type ProductCategoryOption = {
   id: string;
   name: string;
   slug?: string;
+};
+
+export type ProductVendorOption = {
+  id: string;
+  name: string;
+  slug?: string;
+  status?: VendorStatus;
+};
+
+export type VendorRow = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  banner_url: string | null;
+  description: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  address: string | null;
+  status: VendorStatus;
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type VendorUpsertPayload = {
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  banner_url: string | null;
+  description: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  address: string | null;
+  status: VendorStatus;
+};
+
+export type VendorFormValues = {
+  name: string;
+  slug: string;
+  logo_url: string;
+  banner_url: string;
+  description: string;
+  contact_email: string;
+  contact_phone: string;
+  address: string;
+  status: VendorStatus;
+};
+
+export type VendorMemberRow = {
+  id: string;
+  vendor_id: string;
+  user_id: string;
+  role: VendorMemberRole;
+  status: VendorMemberStatus;
+  created_at: string;
 };
 
 export type ProductEditorRecord = {

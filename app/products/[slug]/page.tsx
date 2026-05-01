@@ -7,7 +7,7 @@ import ProductDetailsPurchasePanel from "@/components/product/product-details-pu
 import ProductDetailsTabs from "@/components/product/product-details-tabs";
 import {
   getProductCategoryOptions,
-  getPublicProductBySlug,
+  getPublicProductDetailBySlug,
   getPublicProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
@@ -18,16 +18,17 @@ type ProductDetailsPageProps = {
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
-  const [{ data: categoryOptions }, { data: productRow }, { data: publicProducts }] = await Promise.all([
+  const [{ data: categoryOptions }, { data: productDetail }, { data: publicProducts }] = await Promise.all([
     getProductCategoryOptions(),
-    getPublicProductBySlug(slug),
+    getPublicProductDetailBySlug(slug),
     getPublicProducts(),
   ]);
 
-  if (!productRow) {
+  if (!productDetail) {
     notFound();
   }
 
+  const { product: productRow, variants } = productDetail;
   const product = mapProductDbToStorefrontProduct(productRow, categoryOptions);
   const category = getCategoryById(productRow.category_id, categoryOptions);
   const relatedProducts = publicProducts
@@ -84,7 +85,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
             </div>
           </div>
 
-          <ProductDetailsPurchasePanel product={product} />
+          <ProductDetailsPurchasePanel product={product} productRecord={productRow} variants={variants} />
         </div>
 
         <ProductDetailsTabs product={product} />

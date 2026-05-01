@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { getAdminAccessState } from "@/lib/admin-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
 const ORDER_STATUSES = [
   "Pending",
   "Confirmed",
@@ -93,25 +92,21 @@ export default function AdminPage() {
     const supabase = getSupabaseClient();
 
     const loadAdminOrders = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
+      const access = await getAdminAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      const email = user?.email ?? null;
-      setUserEmail(email);
+      setUserEmail(access.userEmail);
+      setHasAdminAccess(access.hasAdminAccess);
 
-      if (!email) {
+      if (!access.userEmail) {
         setLoading(false);
         return;
       }
 
-      const isAdmin = ADMIN_EMAILS.includes(email);
-      setHasAdminAccess(isAdmin);
-
-      if (!isAdmin) {
+      if (!access.hasAdminAccess) {
         setLoading(false);
         return;
       }

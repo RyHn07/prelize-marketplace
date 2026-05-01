@@ -287,9 +287,9 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 - [x] Admin structure has been started.
 - [ ] Admin categories page is only a placeholder.
 - [ ] Admin customers page still needs real data and tools.
-- [ ] Admin settings page still needs real settings management.
-- [ ] Storefront catalog still relies on mock product data.
-- [ ] Admin product management is not yet fully connected to the public storefront.
+- [x] Admin settings page now has real persisted settings management.
+- [~] Storefront catalog list and detail pages are Supabase-backed, and the buying flow now uses real variant data, but richer detail parity is still incomplete.
+- [~] Admin product management is partially connected to the public storefront, and cart/checkout snapshots are stronger, but the data model is not fully finalized yet.
 - [ ] Search/filter behavior needs full backend-connected implementation.
 - [ ] Wishlist appears started, but the full wishlist user flow is not yet complete.
 - [x] README now includes a project overview and current direction.
@@ -298,19 +298,22 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 
 ## Biggest Current Gap
 
-The app currently has a split data model:
+The app has moved past the old split where the public catalog pages depended mainly on mock products.
 
-- Public storefront pages use mock product data.
-- Orders and admin product management use Supabase.
+The current gap is now more specific:
 
-This means admins can manage products in the dashboard, but those products are not yet the single source of truth for the public catalog. That is the most important next step.
+- public catalog pages use Supabase
+- product detail purchasing now uses real variant data, but richer storefront fields are still partly derived
+- cart and checkout now use intentional lightweight snapshots, but the snapshot-vs-validation boundary still needs to be finalized
+
+That means the most important next step is aligning product details, quote/cart, and checkout around one stable product data model.
 
 ## Multivendor Readiness
 
 The current app is still structured like a single-seller marketplace in several places:
 
 - Products do not have a `vendor_id` or seller ownership field.
-- Cart and orders use a hardcoded seller label like `Prelize Select`.
+- Cart and orders now use neutral marketplace wording, but seller identity is still not data-driven.
 - Admin access is global, not vendor-scoped.
 - Orders are created as one marketplace order, not split by vendor.
 - There is no vendor onboarding, vendor profile, or vendor dashboard flow yet.
@@ -319,15 +322,15 @@ Because of this, multivendor support should be treated as a major feature phase,
 
 ## Recommended Next Step
 
-### Next Milestone: Connect Storefront Products to Supabase
+### Next Milestone: Align Product Detail, Cart, and Checkout Data
 
-- [ ] Replace `mock-products` as the main storefront source with Supabase product queries.
-- [ ] Load product list pages from the `products` table.
-- [ ] Load product detail pages by slug from the `products` table.
-- [ ] Keep product fields aligned between admin forms, public pages, cart, and checkout.
-- [ ] Decide how to store or derive product variants, specifications, gallery images, badges, and reviews.
-- [ ] Add fallback handling for missing or inactive products.
-- [ ] Confirm admin-created products appear on the live storefront.
+- [x] Load product list pages from the `products` table.
+- [x] Load product detail pages by slug from the `products` table.
+- [~] Keep product fields aligned between admin forms, public pages, cart, and checkout.
+- [x] Replace hardcoded product detail variant/pricing UI with real product data.
+- [ ] Decide how to store or derive product variants, specifications, gallery images, badges, buyer notes, and reviews.
+- [x] Add stronger fallback handling for missing or inactive products in the buying flow.
+- [~] Confirm admin-created products flow cleanly from storefront to cart to checkout.
 
 ## Detailed Roadmap
 
@@ -347,7 +350,7 @@ This roadmap is the execution layer of the project plan. It is meant to help us 
 - [x] Customer order pages exist
 - [x] Admin orders flow exists
 - [x] Admin product management has started
-- [~] Product data is split between mock data and Supabase
+- [~] Product data is more strongly aligned between Supabase, storefront UI mapping, and quote/cart snapshots, but the final shared shape is not fully locked
 - [~] Admin area is partially complete
 - [ ] Multivendor architecture is not implemented yet
 - [ ] Formal schema, QA, and release documentation are not complete yet
@@ -389,19 +392,19 @@ Success criteria:
 - Public catalog shows only valid active products
 
 Tasks:
-- [ ] Build Supabase queries for public product list
-- [ ] Build Supabase query for product details by slug
-- [ ] Refactor `app/products/page.tsx` to use database-backed data
-- [ ] Refactor `app/products/[slug]/page.tsx` to use database-backed data
+- [x] Build Supabase queries for public product list
+- [x] Build Supabase query for product details by slug
+- [x] Refactor `app/products/page.tsx` to use database-backed data
+- [x] Refactor `app/products/[slug]/page.tsx` to use database-backed data
 - [ ] Refactor category browsing to work with real data
-- [ ] Add loading, empty, and error states for public product pages
-- [ ] Add fallback handling for inactive or missing products
-- [ ] Verify related products logic using database-backed category/product relationships
+- [~] Add loading, empty, and error states for public product pages
+- [x] Add fallback handling for inactive or missing products
+- [x] Verify related products logic using database-backed category/product relationships
 
 Deliverables:
-- [ ] Database-backed product listing page
-- [ ] Database-backed product details page
-- [ ] Public catalog no longer depends on mock product records
+- [x] Database-backed product listing page
+- [x] Database-backed product details page
+- [~] Public catalog no longer depends on mock product records for page rendering, and buying data is much closer to real product records, but richer parity cleanup still remains
 
 ### Phase C: Cart, Checkout, and Order Data Stabilization
 
@@ -414,14 +417,15 @@ Success criteria:
 - Order creation still works end to end
 
 Tasks:
-- [ ] Identify all current cart dependencies on mock product data
-- [ ] Replace mock lookups in cart flow with real product data
-- [ ] Replace mock lookups in checkout flow with real product data
-- [ ] Confirm shipping weight and CDD calculations still work with real product records
-- [ ] Confirm selected product variations still work after data refactor
-- [ ] Verify order summary payload remains correct
-- [ ] Verify inserted order items match storefront product data
-- [ ] Test successful order placement from catalog to order details page
+- [x] Identify all current cart dependencies on mock product data
+- [x] Replace direct mock lookups in cart flow with real product data
+- [x] Replace direct mock lookups in checkout flow with real product data
+- [~] Confirm shipping weight and CDD calculations still work with real product records
+- [x] Confirm selected product variations work from real variant data instead of placeholder rows
+- [~] Verify order summary payload remains correct
+- [~] Verify inserted order items match storefront product data
+- [~] Test successful order placement from catalog to order details page
+- [x] Remove hardcoded seller wording and placeholder buying assumptions
 
 Deliverables:
 - [ ] Cart flow works with database-backed products
@@ -469,13 +473,13 @@ Tasks:
 - [x] Admin order status update flow exists
 - [ ] Improve internal notes and order operations workflow
 - [ ] Build real customer management page
-- [ ] Build real admin settings page
-- [ ] Replace simple email-based admin gate with role-based authorization
+- [x] Build real admin settings page
+- [~] Replace simple email-based admin gate with role-based authorization
 - [ ] Define platform admin permissions clearly
 
 Deliverables:
 - [ ] Customer management screen
-- [ ] Settings management screen
+- [x] Settings management screen
 - [ ] Role-based platform admin control
 
 ### Phase F: Multivendor Foundation
@@ -622,31 +626,31 @@ Deliverables:
 
 ### Current Active Work Area
 
-- [~] Converting the platform from mixed mock/database product data to one real product source
+- [~] Aligning product detail, cart, and checkout data around the real Supabase product source
 - [~] Expanding the project plan into a full product and architecture guide
 - [~] Preparing the structure for multivendor support
 
 ### Highest-Priority Next Steps
 
 - [ ] Finalize product schema
-- [ ] Move public catalog to Supabase
-- [ ] Refactor cart and checkout away from mock product dependencies
-- [ ] Replace email-based admin access with role-based access
+- [x] Replace placeholder product detail buying data with real variant/product data
+- [~] Refactor cart and checkout from lightweight snapshots to intentional product snapshots plus validation
+- [~] Replace email-based admin access with role-based access
 - [ ] Define vendor and multivendor order architecture
 
 ## Tracking Board
 
 ### Now
 
-- [ ] Final product schema audit
-- [ ] Public catalog migration to Supabase
-- [ ] Cart/checkout dependency cleanup
+- [~] Final product schema audit
+- [x] Product detail buying-data refactor
+- [x] Cart/checkout dependency cleanup
 
 ### Next
 
 - [ ] Category CRUD
 - [ ] Customer admin page
-- [ ] Admin settings page
+- [x] Admin settings page
 - [ ] Role-based admin authorization
 
 ### Later
@@ -674,7 +678,7 @@ Deliverables:
 - [x] Checkout form
 - [x] Order creation
 - [x] Customer order history
-- [ ] Remove remaining dependence on mock data
+- [~] Remove remaining dependence on mock data
 - [ ] Validate all order and cart totals against real product records
 
 ### Phase 2: Complete Catalog Management
@@ -760,7 +764,7 @@ Deliverables:
 
 ### Step 2: Access Control
 
-- [ ] Replace simple admin email check with role-based access
+- [~] Replace simple admin email check with role-based access
 - [ ] Support platform admin role
 - [ ] Support vendor owner/staff role
 - [ ] Restrict vendor users to only their own products and orders
@@ -809,17 +813,18 @@ Deliverables:
 - [ ] Audit current product fields used by `mock-products` vs `products` table.
 - [ ] Define final product schema for gallery, specs, description, badge, reviews, and variants.
 - [ ] Extend the schema design for vendor ownership and vendor roles.
-- [ ] Refactor public catalog pages to read from Supabase.
-- [ ] Remove hardcoded seller labels and replace them with vendor data.
-- [ ] Refactor cart/checkout dependencies that still assume mock product records.
+- [x] Refactor public catalog pages to read from Supabase.
+- [x] Refactor product detail purchase flow to use real variant data.
+- [~] Remove hardcoded seller labels and replace them with vendor data.
+- [~] Refactor cart/checkout dependencies that still assume mock product records.
 - [~] Update README with real setup instructions.
 - [x] Add a separate schema or setup document for Supabase tables and policies.
 
 ## Definition of Done for the Next Milestone
 
-- [ ] Public product list uses Supabase data.
-- [ ] Public product detail uses Supabase data.
-- [ ] Cart and checkout still work after removing mock dependency.
+- [x] Public product list uses Supabase data.
+- [x] Public product detail uses Supabase data.
+- [~] Cart and checkout still work after removing mock dependency, including unavailable-item blocking.
 - [ ] Admin-created product appears correctly on the storefront.
 - [ ] Inactive product does not appear publicly.
-- [ ] Lint passes after the refactor.
+- [x] Lint/build verification passes after the latest refactor.

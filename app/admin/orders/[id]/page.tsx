@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import { getAdminAccessState } from "@/lib/admin-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
 
 type OrderStatus =
   | "Pending"
@@ -190,26 +189,21 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     const loadOrder = async () => {
       const resolvedParams = await params;
       const orderId = resolvedParams.id;
-
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
+      const access = await getAdminAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      const email = user?.email ?? null;
-      setUserEmail(email);
+      setUserEmail(access.userEmail);
+      setHasAdminAccess(access.hasAdminAccess);
 
-      if (!email) {
+      if (!access.userEmail) {
         setLoading(false);
         return;
       }
 
-      const isAdmin = ADMIN_EMAILS.includes(email);
-      setHasAdminAccess(isAdmin);
-
-      if (!isAdmin) {
+      if (!access.hasAdminAccess) {
         setLoading(false);
         return;
       }

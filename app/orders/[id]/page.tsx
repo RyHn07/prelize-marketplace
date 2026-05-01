@@ -55,7 +55,6 @@ type GroupedOrderItem = {
   productId: string;
   name: string;
   image?: string;
-  sellerLabel: string;
   items: OrderItemRow[];
   variantCount: number;
   totalQuantity: number;
@@ -131,7 +130,7 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-slate-900">{group.name}</h2>
-              <p className="text-sm text-slate-500">Seller: {group.sellerLabel}</p>
+              <p className="text-sm text-slate-500">Marketplace Product</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>Variants: {group.variantCount}</span>
                 <span>Total Qty: {group.totalQuantity}</span>
@@ -291,7 +290,6 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         productId: item.product_id,
         name: item.product_name,
         image: item.product_image,
-        sellerLabel: "Prelize Select",
         items: [item],
         variantCount: 1,
         totalQuantity: item.quantity,

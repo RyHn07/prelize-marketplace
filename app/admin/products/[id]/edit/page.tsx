@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import ProductForm from "@/components/product/product-form";
-import { getProductEditorRecord } from "@/lib/products/queries";
+import { getProductManagementAccessState } from "@/lib/marketplace-access";
+import { getProductEditorRecord, getProductEditorRecordForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductEditorRecord } from "@/types/product-db";
-
-const ADMIN_EMAILS = ["reaz1006@gmail.com"];
 
 export default function AdminEditProductPage({ params }: { params: Promise<{ id: string }> }) {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  const [hasProductManagementAccess, setHasProductManagementAccess] = useState(false);
+  const [manageableVendorIds, setManageableVendorIds] = useState<string[]>([]);
+  const [canAssignPlatformProducts, setCanAssignPlatformProducts] = useState(true);
   const [record, setRecord] = useState<ProductEditorRecord | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -23,29 +24,30 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
 
     const loadPage = async () => {
       const resolvedParams = await params;
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email ?? null;
+      const access = await getProductManagementAccessState(supabase);
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(email);
+      setUserEmail(access.userEmail);
+      setHasProductManagementAccess(access.hasProductManagementAccess);
+      setManageableVendorIds(access.manageableVendorIds);
+      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
 
-      if (!email) {
+      if (!access.userEmail) {
         setLoading(false);
         return;
       }
 
-      const isAdmin = ADMIN_EMAILS.includes(email);
-      setHasAdminAccess(isAdmin);
-
-      if (!isAdmin) {
+      if (!access.hasProductManagementAccess) {
         setLoading(false);
         return;
       }
 
-      const { data, error } = await getProductEditorRecord(resolvedParams.id);
+      const { data, error } = access.hasPlatformAdminAccess
+        ? await getProductEditorRecord(resolvedParams.id)
+        : await getProductEditorRecordForVendors(resolvedParams.id, access.manageableVendorIds);
 
       if (!isMounted) {
         return;
@@ -92,11 +94,11 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
     );
   }
 
-  if (!hasAdminAccess) {
+  if (!hasProductManagementAccess) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Edit Product</h1>
-        <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
+        <p className="mt-3 text-sm text-slate-500">You do not have product management access</p>
       </div>
     );
   }
@@ -134,8 +136,13 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
             Back to Products
           </Link>
         </div>
-
-        <ProductForm key={record.product.id} mode="edit" record={record} />
+        <ProductForm
+          key={record.product.id}
+          mode="edit"
+          record={record}
+          allowedVendorIds={manageableVendorIds}
+          canAssignPlatformProducts={canAssignPlatformProducts}
+        />
       </section>
   );
 }
