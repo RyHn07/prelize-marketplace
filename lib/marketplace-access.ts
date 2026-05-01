@@ -22,6 +22,12 @@ export type ProductManagementAccessState = MarketplaceAccessState & {
   manageableVendorIds: string[];
 };
 
+export type VendorWorkspaceAccessState = MarketplaceAccessState & {
+  hasVendorWorkspaceAccess: boolean;
+  activeVendorId: string | null;
+  activeVendorRole: VendorMemberRole | null;
+};
+
 function isMissingRelationError(message: string) {
   const normalizedMessage = message.toLowerCase();
 
@@ -107,5 +113,20 @@ export async function getProductManagementAccessState(
     manageableVendorIds,
     hasProductManagementAccess:
       accessState.hasPlatformAdminAccess || manageableVendorIds.length > 0,
+  };
+}
+
+export async function getVendorWorkspaceAccessState(
+  supabase: SupabaseClient,
+): Promise<VendorWorkspaceAccessState> {
+  const accessState = await getMarketplaceAccessState(supabase);
+  const activeMembership =
+    accessState.vendorMemberships.find((membership) => membership.status === "active") ?? null;
+
+  return {
+    ...accessState,
+    hasVendorWorkspaceAccess: activeMembership !== null,
+    activeVendorId: activeMembership?.vendor_id ?? null,
+    activeVendorRole: activeMembership?.role ?? null,
   };
 }

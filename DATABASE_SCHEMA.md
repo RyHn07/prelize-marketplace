@@ -1,6 +1,6 @@
 # Wholesale Marketplace Database Schema
 
-Last updated: 2026-04-25
+Last updated: 2026-05-02
 
 ## Purpose
 
@@ -33,16 +33,23 @@ Current fields inferred from the code:
 | `weight` | text or numeric nullable | No | Used by shipping calculation |
 | `badge` | text nullable | No | Example: `Hot`, `New`, `Best Value` |
 | `is_active` | boolean | Yes | Controls visibility/readiness |
+| `vendor_id` | uuid nullable | No | Product ownership for multivendor flows |
+| `status` | text nullable | No | Product workflow status such as `active`, `draft`, `disabled` |
+| `product_type` | text nullable | No | `single` or `variable` |
+| `regular_price` | numeric nullable | No | Editor-facing base price |
+| `discount_price` | numeric nullable | No | Optional discounted price |
+| `gallery_images` | text[] or jsonb nullable | No | Gallery images used by the editor |
+| `attributes` | jsonb nullable | No | Attribute definitions for variable products |
+| `cdd_shipping_profile` | text nullable | No | Shipping profile used by current buying flow |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
 Current gaps:
 
-- No vendor ownership field yet
-- No gallery field yet
 - No specifications field yet
 - No short description field yet
 - No reviews field yet
-- No variant storage yet
+- Vendor identity is not surfaced on public storefront pages yet
+- Product ownership and order-time vendor persistence now exist, but buyer-facing vendor exposure is still incomplete
 
 ### 2. `orders`
 
@@ -123,6 +130,8 @@ Current fields inferred from the code:
 | `price` | numeric | Yes | Snapshot of unit price |
 | `quantity` | integer | Yes | Purchased quantity |
 | `weight` | numeric nullable | No | Snapshot of item weight |
+| `vendor_id` | uuid nullable | No | Vendor ownership for multivendor order reads |
+| `vendor_order_id` | uuid nullable | No | Links item row to `vendor_orders.id` |
 
 ### 4. `platform_settings`
 
@@ -141,6 +150,65 @@ Current fields inferred from the code:
 | `shipping_support_message` | text nullable | No | Reusable shipping support copy |
 | `created_at` | timestamptz | Yes | Creation timestamp |
 | `updated_at` | timestamptz | Yes | Last save timestamp |
+
+### 5. `vendors`
+
+This table now exists in the multivendor foundation migration and is used by the admin vendor screens and vendor workspace shell.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `name` | text | Yes | Vendor/business name |
+| `slug` | text | Yes | Vendor identifier and future public URL segment |
+| `logo_url` | text nullable | No | Optional brand logo |
+| `banner_url` | text nullable | No | Optional storefront banner |
+| `description` | text nullable | No | Vendor description |
+| `contact_email` | text nullable | No | Vendor contact email |
+| `contact_phone` | text nullable | No | Vendor contact phone |
+| `address` | text nullable | No | Vendor business address |
+| `status` | text | Yes | `pending`, `active`, or `suspended` |
+| `created_at` | timestamptz | Yes | Creation timestamp |
+| `updated_at` | timestamptz | Yes | Last update timestamp |
+
+### 6. `vendor_members`
+
+This table now exists in the multivendor foundation migration and is used for vendor workspace and vendor-scoped product access.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `vendor_id` | uuid | Yes | References `vendors.id` |
+| `user_id` | uuid | Yes | Supabase auth user id |
+| `role` | text | Yes | `owner` or `staff` |
+| `status` | text | Yes | `active`, `invited`, or `disabled` |
+| `created_at` | timestamptz | Yes | Creation timestamp |
+
+### 7. `platform_roles`
+
+This table now exists and is used for role-based admin access. The RLS direction now also uses a recursion-safe `public.is_platform_admin()` helper, although legacy email fallback still exists in app code.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `user_id` | uuid | Yes | Supabase auth user id |
+| `role` | text | Yes | Currently used for `platform_admin` |
+| `created_at` | timestamptz | Yes | Creation timestamp |
+
+### 8. `vendor_orders`
+
+This table now exists in the multivendor foundation migration and is now used by checkout, vendor order pages, and admin order monitoring.
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `order_id` | uuid | Yes | References parent `orders.id` |
+| `vendor_id` | uuid | Yes | References `vendors.id` |
+| `status` | text | Yes | Vendor fulfillment status |
+| `summary` | jsonb | Yes | Vendor-level totals |
+| `shipping_method` | jsonb nullable | No | Vendor-level shipping selection |
+| `vendor_note` | text nullable | No | Vendor-side note |
+| `admin_note` | text nullable | No | Platform note for vendor order |
+| `created_at` | timestamptz | Yes | Creation timestamp |
 
 ## Recommended Near-Term Tables
 
@@ -161,9 +229,9 @@ Recommended fields:
 | `sort_order` | integer nullable | No | Optional display order |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
-### 5. `product_variants`
+### 9. `product_variants`
 
-The current app treats variation as a text label stored in local/cart/order state. That should become a first-class table.
+The current app already queries `product_variants` for the public product detail purchase flow and the product editor.
 
 Recommended fields:
 
@@ -181,7 +249,7 @@ Recommended fields:
 | `sort_order` | integer nullable | No | Optional UI ordering |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
-### 6. `product_media`
+### 10. `product_media`
 
 Recommended for gallery support.
 
@@ -194,7 +262,7 @@ Recommended for gallery support.
 | `sort_order` | integer nullable | No | Display ordering |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
-### 7. `product_specifications`
+### 11. `product_specifications`
 
 Recommended for structured product specs.
 
@@ -278,7 +346,7 @@ Recommended fields:
 
 ### 3. `platform_roles`
 
-Recommended if platform admins are no longer hardcoded by email.
+Recommended shape now matches the table already added in `20260425_platform_roles.sql`, but legacy email fallback still exists in code.
 
 | Column | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -330,8 +398,9 @@ Recommended access rules:
 
 - Customers can read only their own `orders` and `order_items`
 - Platform admins can read and update all marketplace orders/products/categories/vendors
-- Vendor users can read and update only vendor-owned products and vendor-owned order records
+- Vendor users can be scoped to vendor-owned products and vendor-owned order records
 - Public users can read only active/public products and categories
+- Platform-admin RLS checks should use `public.is_platform_admin()` instead of self-querying `platform_roles`
 
 ## Immediate Schema Tasks
 
@@ -340,8 +409,10 @@ Recommended access rules:
 - [ ] Add `updated_at` to mutable tables
 - [ ] Decide `product_variants` structure
 - [ ] Decide whether reviews are stored internally or mocked temporarily
-- [ ] Replace hardcoded admin email access with role tables
-- [ ] Add `vendors` and `vendor_members` when multivendor implementation begins
+- [~] Replace hardcoded admin email access with role tables
+- [x] Add `vendors` and `vendor_members` when multivendor implementation begins
+- [x] Wire checkout and vendor/admin order views to `vendor_orders`, `order_items.vendor_id`, and `order_items.vendor_order_id`
+- [ ] Expose vendor-aware order structure clearly in customer order history
 
 ## Notes for Current Implementation
 
@@ -350,12 +421,16 @@ Important current assumptions in code:
 - Public storefront list/detail pages already use Supabase product data
 - Cart and checkout now enrich and validate quote items against live product records
 - Missing or inactive products are now blocked in cart and checkout
-- Seller wording is now neutral in customer-facing flows, but vendor data is not implemented yet
+- Vendor data model and vendor-scoped product access are implemented
+- Checkout now creates one parent marketplace order plus vendor sub-orders
+- Vendor order pages and admin vendor-order monitoring are implemented
+- RLS policies exist for multivendor tables, and the recursion-safe `public.is_platform_admin()` helper is part of the current direction
+- Seller wording is now neutral in customer-facing flows, but vendor identity is still not shown on buyer-facing pages
 - The app already expects `payment_method`, `payment_status`, and `admin_note` to exist or be added to `orders`
 
 Because of that, the next implementation step should be:
 
 1. finalize the real product schema
 2. lock the snapshot-vs-validation boundary for cart, checkout, and orders
-3. replace email-based admin gating with role-backed authorization
-4. then add vendor ownership on top of the stable schema
+3. finish role-backed authorization so legacy email fallback can be removed
+4. harden vendor-aware order status rules and extend buyer-facing vendor order visibility on top of the existing vendor ownership model

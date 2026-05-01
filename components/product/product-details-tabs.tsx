@@ -10,25 +10,6 @@ type ProductDetailsTabsProps = {
 
 type TabKey = "specifications" | "description" | "reviews";
 
-const reviewItems = [
-  {
-    name: "Rahim Traders",
-    role: "Verified wholesale buyer",
-    rating: "5.0 / 5",
-    avatar: "R",
-    comment:
-      "Quality was consistent and the supplier packing was neat. Good option for repeat wholesale buying.",
-  },
-  {
-    name: "Nusrat Collection",
-    role: "Retail and online reseller",
-    rating: "4.8 / 5",
-    avatar: "N",
-    comment:
-      "Product finishing matched expectation. Final shipping confirmation took some time, but the item quality was reliable.",
-  },
-];
-
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "specifications", label: "Product Specifications" },
   { key: "description", label: "Product Description" },
@@ -37,6 +18,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
 
 export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("specifications");
+  const reviews = product.reviews ?? [];
 
   return (
     <div className="mt-10 space-y-6">
@@ -90,23 +72,36 @@ export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps)
         <section className="bg-white">
           <h2 className="text-xl font-semibold text-slate-900">Customer Review</h2>
           <div className="mt-5 space-y-4">
-            {reviewItems.map((review) => (
-              <div key={review.name} className="rounded-lg border border-slate-200 bg-white px-5 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
-                      {review.avatar}
+            {reviews.length > 0 ? (
+              reviews.map((review, index) => (
+                <div
+                  key={`${review.reviewer}-${review.createdAt ?? index}`}
+                  className="rounded-lg border border-slate-200 bg-white px-5 py-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
+                        {review.reviewer.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{review.reviewer}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {review.title ?? "Verified marketplace buyer"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{review.name}</p>
-                      <p className="mt-1 text-xs text-slate-500">{review.role}</p>
-                    </div>
+                    <p className="text-sm font-medium text-amber-500">
+                      {typeof review.rating === "number" ? `${review.rating.toFixed(1)} / 5` : "Unrated"}
+                    </p>
                   </div>
-                  <p className="text-sm font-medium text-amber-500">{review.rating}</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">{review.comment}</p>
                 </div>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{review.comment}</p>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-5 py-6 text-sm text-slate-500">
+                No reviews yet.
               </div>
-            ))}
+            )}
           </div>
         </section>
       ) : null}

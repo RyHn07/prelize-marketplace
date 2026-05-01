@@ -1,6 +1,7 @@
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
 import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { getVendorOptions } from "@/lib/vendors/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 
 type ProductsPageProps = {
@@ -18,13 +19,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const { category } = await searchParams;
   const activeCategory =
     typeof category === "string" && category.length > 0 ? category : undefined;
-  const [{ data: categoryOptions }, { data: publicProducts, error }] = await Promise.all([
+  const [{ data: categoryOptions }, { data: vendorOptions }, { data: publicProducts, error }] = await Promise.all([
     getProductCategoryOptions(),
+    getVendorOptions(),
     getPublicProducts(),
   ]);
 
   const storefrontProducts = publicProducts.map((product) =>
-    mapProductDbToStorefrontProduct(product, categoryOptions),
+    mapProductDbToStorefrontProduct(product, categoryOptions, vendorOptions),
   );
 
   const filteredProducts = activeCategory

@@ -50,6 +50,7 @@ type ProductGroup = {
   name: string;
   image: string;
   slug?: string;
+  shortDescription?: string | null;
   items: QuoteItem[];
 };
 
@@ -66,6 +67,11 @@ type CheckoutDraft = {
 type ItemAvailabilityIssue = {
   message: string;
   kind: "missing" | "inactive";
+};
+
+type CartProductSpecification = {
+  label: string;
+  value: string;
 };
 
 function formatBDT(amount: number) {
@@ -103,6 +109,16 @@ function getProductAvailabilityIssue(product: ProductDbRow | undefined): ItemAva
   }
 
   return null;
+}
+
+function isCartProductSpecification(value: unknown): value is CartProductSpecification {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as CartProductSpecification).label === "string" &&
+    typeof (value as CartProductSpecification).value === "string"
+  );
 }
 
 function Checkbox({
@@ -381,6 +397,7 @@ export default function CartPage() {
         name: item.name,
         image: productMatch?.image_url ?? item.image,
         slug: productMatch?.slug,
+        shortDescription: productMatch?.short_description ?? productMatch?.description ?? null,
         items: [item],
       });
     });
@@ -643,6 +660,17 @@ export default function CartPage() {
                 const selectedGroupTotals = calculateCartTotals(
                   selectedGroupItems.length > 0 ? { [group.productId]: selectedGroupItems } : {},
                 );
+                const groupProduct = productRecordMap.get(group.productId);
+                const visibleSpecifications = Array.isArray(groupProduct?.specifications)
+                  ? groupProduct.specifications
+                      .flatMap((specification) =>
+                        isCartProductSpecification(specification)
+                          ? [{ label: specification.label, value: specification.value }]
+                          : [],
+                      )
+                      .slice(0, 3)
+                  : [];
+                const reviewCount = Array.isArray(groupProduct?.reviews) ? groupProduct.reviews.length : 0;
 
                 return (
                   <article key={group.productId} className="rounded-xl border border-slate-200 bg-white">
@@ -671,9 +699,25 @@ export default function CartPage() {
                           <h2 className="text-lg font-semibold text-slate-900">
                             Product: {group.name}
                           </h2>
+                          {group.shortDescription ? (
+                            <p className="text-sm leading-6 text-slate-500">{group.shortDescription}</p>
+                          ) : null}
                           <p className="text-sm text-slate-500">
                             {group.items.length} variation{group.items.length > 1 ? "s" : ""} in this
                             product group
+                          </p>
+                          {visibleSpecifications.length > 0 ? (
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                              {visibleSpecifications.map((specification) => (
+                                <span key={`${group.productId}-${specification.label}`}>
+                                  <strong className="font-semibold text-slate-600">{specification.label}:</strong>{" "}
+                                  {specification.value}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          <p className="text-xs font-medium text-slate-400">
+                            {reviewCount > 0 ? `Reviews available: ${reviewCount}` : "No reviews yet"}
                           </p>
                           {groupHasUnavailableItems ? (
                             <p className="text-sm font-medium text-amber-700">

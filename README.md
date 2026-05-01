@@ -4,12 +4,13 @@
 
 Wholesale Marketplace is a B2B ecommerce platform for sourcing products from China and managing bulk orders for buyers in Bangladesh. The project is built with Next.js, React, TypeScript, Tailwind CSS, and Supabase.
 
-The app is designed to support two sides of the business:
+The app is designed to support three sides of the business:
 
 - A customer-facing storefront where buyers can browse products, review details, build a quote/cart, and place orders.
 - An admin dashboard where the team can manage products and monitor customer orders.
+- A vendor workspace where approved vendors can manage vendor-owned products and review vendor-scoped sub-orders.
 
-The next major product direction is evolving this into a multivendor marketplace so multiple sellers can manage their own catalog and fulfill their own orders inside the same platform.
+The platform has already moved into a multivendor implementation phase, with vendor ownership, vendor memberships, vendor product management, vendor sub-orders, and admin monitoring now present in the codebase.
 
 ## Current Status
 
@@ -23,15 +24,19 @@ The project already includes the main commerce flow:
 - Order creation in Supabase
 - Customer order history
 - Admin dashboard for orders and products
+- Vendor dashboard shell and vendor product management
+- Vendor-aware order persistence through `vendor_orders`
+- Vendor order detail/status management
+- Admin monitoring of vendor sub-orders
 
-The main next step is connecting the public storefront fully to Supabase product data so the admin-managed catalog becomes the single source of truth.
+The main next step is hardening multivendor correctness and exposing vendor identity more clearly in buyer-facing surfaces so the admin-managed catalog and vendor order architecture feel like one consistent system.
 
-After that, the next major platform upgrade is multivendor support:
+The current multivendor gaps are now more specific:
 
-- vendor profiles and vendor-owned products
-- vendor-aware cart and checkout grouping
-- vendor-specific order management
-- role-based access for platform admins and vendor users
+- buyer-facing vendor identity on product cards, product details, cart, and customer order history
+- stricter vendor-order status rules and parent-order status synchronization
+- removal of remaining legacy email-based admin fallback in favor of role-first access
+- broader QA coverage for multivendor and RLS behavior
 
 For a detailed roadmap, see [PROJECT_PLAN.md](./PROJECT_PLAN.md).
 
@@ -69,8 +74,8 @@ Open `http://localhost:3000` in your browser.
 
 The project is moving toward:
 
-- replacing mock storefront product data with Supabase data
-- adding multivendor marketplace support
+- finishing shared product-data alignment between storefront, cart, checkout, and orders
+- hardening multivendor marketplace behavior and permissions
 - completing admin categories, customers, and settings
 - improving search, filters, and wishlist features
 - documenting database setup, policies, and deployment steps

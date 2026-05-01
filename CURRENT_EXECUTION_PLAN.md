@@ -1,6 +1,6 @@
 # Current Execution Plan
 
-Last updated: 2026-04-25
+Last updated: 2026-05-02
 
 ## Purpose
 
@@ -9,8 +9,8 @@ This file turns the broader project roadmap into a practical execution order for
 It answers:
 
 - what we should do now
-- what must be finished before multivendor starts
-- where multivendor implementation should begin
+- what still must be hardened now that multivendor has started
+- where the next multivendor implementation slice should focus
 
 ## Current Reality
 
@@ -25,14 +25,25 @@ The project already has:
 - persisted admin settings page
 - Supabase-backed product management
 - Supabase-backed public product list and product detail pages
+- multivendor schema migration for vendors, vendor members, vendor orders, and product ownership
+- multivendor RLS migration plus recursion-safe platform admin helper
+- vendor management screens in admin
+- vendor-scoped product management screens in a separate vendor workspace
+- checkout creation of parent `orders` plus vendor-scoped `vendor_orders`
+- vendor order list and vendor order detail pages
+- admin order-detail monitoring of vendor sub-orders
 
-The biggest current gap is now final product-schema decisions and access-model hardening, not the basic storefront page migration itself.
+The biggest current gap is now multivendor hardening and buyer-facing vendor visibility, not the basic multivendor foundation itself.
 
-Because of that, the platform is not ready for full multivendor implementation yet.
+Because of that, the platform is past multivendor setup and into stabilization work.
 
 ## Decision
 
-We should start multivendor planning now, but start multivendor implementation only after the storefront product flow is fully connected to Supabase and cart/checkout no longer depend on mock product records.
+We should treat multivendor foundation as already in progress and focus the next implementation phases on:
+
+- finishing product and access-model hardening
+- hardening vendor-aware order correctness and status behavior
+- exposing vendor identity in buyer-facing surfaces
 
 ## What We Do Now
 
@@ -80,18 +91,18 @@ Definition of done:
 - Checkout creates orders using stable product snapshots
 - No critical cart or checkout logic depends on placeholder storefront assumptions
 
-### Priority 3: Finish the schema decisions that multivendor depends on
+### Priority 3: Finish the schema and access decisions that the current multivendor phase depends on
 
-Before building vendor UI, we should lock the data model.
+Before building vendor-aware orders and storefront exposure, we should lock the remaining data model decisions.
 
 Tasks:
 
 - [ ] Finalize product schema for gallery, specs, variants, and short description
-- [ ] Decide how `vendor_id` will attach to products
+- [x] Decide how `vendor_id` will attach to products
 - [ ] Decide whether categories are global or vendor-specific
-- [ ] Define `vendors` table fields
-- [ ] Define `vendor_members` table for owner/staff access
-- [ ] Decide the multivendor order model
+- [x] Define `vendors` table fields
+- [x] Define `vendor_members` table for owner/staff access
+- [~] Decide the multivendor order model
 
 Decision needed:
 
@@ -102,65 +113,66 @@ Recommendation:
 
 Use one parent marketplace order with vendor sub-orders. It keeps the buyer experience cleaner while still giving vendors scoped fulfillment views.
 
-## When To Start Multivendor
+## Current Multivendor Gate
 
-Start multivendor implementation after all of these are true:
+The foundation is already live. The current multivendor hardening phase should keep these true:
 
-- [ ] Storefront products are fully Supabase-backed
-- [ ] Cart and checkout do not rely on mock product data
-- [ ] Product schema is stable enough to add `vendor_id`
-- [ ] Admin access direction is clear enough to support role-based permissions
+- [x] Storefront products are fully Supabase-backed
+- [~] Cart and checkout do not rely on mock product data
+- [x] Product schema is stable enough to add `vendor_id`
+- [~] Admin access direction is clear enough to support role-based permissions
 
-If those four items are not done, multivendor work will create rework.
+If those items drift, multivendor order work will create rework.
 
-## First Multivendor Phase
+## Current Multivendor Phase
 
-When we start multivendor, this should be the first implementation phase.
+The current repo is already inside the first implementation phase.
 
 ### Phase 1: Multivendor Foundation
 
-- [ ] Create `vendors` table
-- [ ] Create `vendor_members` table
-- [ ] Add nullable `vendor_id` to `products`
-- [ ] Backfill or assign products to vendor records
-- [ ] Define vendor statuses such as `pending`, `active`, and `suspended`
-- [ ] Replace hardcoded seller labels with real vendor data
+- [x] Create `vendors` table
+- [x] Create `vendor_members` table
+- [x] Add nullable `vendor_id` to `products`
+- [~] Backfill or assign products to vendor records
+- [x] Define vendor statuses such as `pending`, `active`, and `suspended`
+- [~] Replace hardcoded seller labels with real vendor data
 - [ ] Show vendor name on product cards, product details, cart, and orders
-- [ ] Add role-based permission rules for platform admins and vendor users
+- [~] Add role-based permission rules for platform admins and vendor users
 
 Definition of done:
 
-- Every product can belong to a vendor
-- Vendor identity exists in the data model
-- Seller labels in the UI come from real data
-- Permissions can be scoped by vendor
+- [x] Every product can belong to a vendor
+- [x] Vendor identity exists in the data model
+- [ ] Seller labels in the UI come from real data
+- [~] Permissions can be scoped by vendor
 
 ### Phase 2: Vendor-Aware Orders
 
-- [ ] Add vendor-aware order structure
-- [ ] Group cart items by vendor
-- [ ] Add vendor-level shipping or note support where needed
-- [ ] Create vendor-specific order views
-- [ ] Keep platform admin visibility across all orders
-- [ ] Keep customer order history simple and understandable
+- [x] Add vendor-aware order structure
+- [x] Group checkout items by vendor during order creation
+- [x] Add vendor-level shipping and note support to `vendor_orders`
+- [x] Create vendor-specific order views
+- [x] Keep platform admin visibility across all orders
+- [ ] Keep customer order history simple and understandable with vendor-aware breakdowns
 
 ### Phase 3: Vendor Experience
 
-- [ ] Vendor dashboard shell
-- [ ] Vendor product management
-- [ ] Vendor order management
+- [x] Vendor dashboard shell
+- [x] Vendor product management
+- [~] Vendor order management
 - [ ] Vendor onboarding and approval flow
 - [ ] Vendor profile/storefront page
+- [~] Vendor categories, media, and shop-settings shells
 
 ## Recommended Working Order
 
 1. Finish product schema alignment.
-2. Refactor storefront product pages to Supabase.
-3. Refactor cart and checkout to database-backed product data.
-4. Lock vendor and order architecture decisions.
-5. Start multivendor foundation.
-6. Add vendor-aware cart, checkout, and orders.
-7. Add vendor dashboard and onboarding experience.
+2. Stabilize cart and checkout around database-backed product snapshots.
+3. Finish role-based access hardening beyond legacy email fallback.
+4. Harden vendor-order status rules and parent-order status sync.
+5. Expose vendor-aware structure in customer order views and storefront surfaces.
+6. Expose vendor identity on storefront product surfaces.
+7. Finish the remaining vendor workspace pages and onboarding flow.
 
 ## Suggested Immediate Sprint
 
@@ -168,12 +180,12 @@ If we want the cleanest next sprint, it should be:
 
 1. Decide the richer storefront detail schema for specs, buyer notes, and reviews.
 2. Lock the shared buying-data shape used by quote items, order items, and storefront detail pages.
-3. Replace simple email-based admin access with a role-based direction note and implementation plan.
-4. Add a short architecture note for vendor ownership and order structure.
-5. Start the next admin completion slice after settings: categories or customers.
+3. Finish replacing simple admin email fallback with role-first authorization.
+4. Harden vendor order status transitions, parent order status sync, and buyer-facing vendor order visibility.
+5. Start the next admin completion slice after settings and vendors: categories or customers.
 
 ## Practical Rule
 
 If a change still assumes one seller, make it neutral or vendor-ready now.
 
-But do not build the full multivendor workflow until product data and checkout are stable on Supabase.
+But do not expand multivendor UI breadth further until product data, checkout, and permissions stay stable on Supabase.

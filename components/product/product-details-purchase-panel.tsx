@@ -248,6 +248,7 @@ export default function ProductDetailsPurchasePanel({
   productRecord: ProductDbRow;
   variants: ProductDbVariantRow[];
 }) {
+  const reviewCount = product.reviews?.length ?? 0;
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
@@ -348,10 +349,14 @@ export default function ProductDetailsPurchasePanel({
       <div className="space-y-6">
         <div className="space-y-3 border-b border-slate-200 pb-6">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{product.name}</h1>
+          {product.vendorName ? (
+            <p className="text-sm font-medium text-slate-500">Vendor: {product.vendorName}</p>
+          ) : null}
+          <p className="text-sm leading-7 text-slate-600">{product.shortDescription}</p>
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <StarRating />
-            <span className="text-[#615FFF]">(3 Reviews)</span>
+            <span className="text-[#615FFF]">({reviewCount} Reviews)</span>
             <span className="text-slate-300">|</span>
             <span>Sold: 26</span>
           </div>

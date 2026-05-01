@@ -33,6 +33,7 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
     slug: typeof row.slug === "string" && row.slug.trim().length > 0 ? row.slug : String(row.id),
     image_url: typeof row.image_url === "string" ? row.image_url : null,
     description: typeof row.description === "string" ? row.description : null,
+    short_description: typeof row.short_description === "string" ? row.short_description : null,
     price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
     moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
     is_active: typeof row.is_active === "boolean" ? row.is_active : true,
@@ -40,6 +41,8 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
     product_type: normalizeProductType(row.product_type),
     gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images : [],
     attributes: Array.isArray(row.attributes) ? row.attributes : [],
+    specifications: Array.isArray(row.specifications) ? row.specifications : [],
+    reviews: Array.isArray(row.reviews) ? row.reviews : [],
   };
 }
 
@@ -152,19 +155,31 @@ export async function getPublicProductBySlug(slug: string) {
 function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
   const parsedPrice = Number(row.price);
   const parsedMoq = Number(row.moq);
+  const parsedWeight = row.weight === null || row.weight === undefined ? null : Number(row.weight);
   const parsedRegularPrice =
     row.regular_price === null || row.regular_price === undefined ? null : Number(row.regular_price);
   const parsedDiscountPrice =
     row.discount_price === null || row.discount_price === undefined ? null : Number(row.discount_price);
+  const parsedMinOrderQuantity =
+    row.min_order_quantity === null || row.min_order_quantity === undefined ? null : Number(row.min_order_quantity);
+  const normalizedMinOrderQuantity =
+    parsedMinOrderQuantity !== null && Number.isFinite(parsedMinOrderQuantity) && parsedMinOrderQuantity > 0
+      ? parsedMinOrderQuantity
+      : row.moq;
 
   return {
     ...row,
     name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : "Default",
+    sku: typeof row.sku === "string" ? row.sku : null,
     price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
     moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
     regular_price: Number.isFinite(parsedRegularPrice) ? parsedRegularPrice : null,
     discount_price: Number.isFinite(parsedDiscountPrice) ? parsedDiscountPrice : null,
+    weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
     image_url: typeof row.image_url === "string" ? row.image_url : null,
+    min_order_quantity: normalizedMinOrderQuantity,
+    is_active: typeof row.is_active === "boolean" ? row.is_active : true,
+    sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
     attribute_values:
       row.attribute_values && typeof row.attribute_values === "object" ? row.attribute_values : {},
   };

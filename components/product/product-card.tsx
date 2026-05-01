@@ -93,6 +93,11 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
 
       <div className={`flex flex-1 flex-col gap-2.5 ${isListView ? "py-1 pr-1" : "p-3"}`}>
         <div className="space-y-1.5">
+          {product.vendorName ? (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Vendor: {product.vendorName}
+            </p>
+          ) : null}
           <h3
             className={`text-[13px] font-semibold leading-5 text-slate-900 ${
               isListView ? "line-clamp-2" : "line-clamp-1 min-h-5"
@@ -100,6 +105,9 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
           >
             {product.name}
           </h3>
+          <p className={`text-xs leading-5 text-slate-500 ${isListView ? "line-clamp-2" : "line-clamp-2 min-h-10"}`}>
+            {product.shortDescription}
+          </p>
           <p className="text-sm font-bold text-[#615FFF]">From ৳{product.priceFrom}</p>
         </div>
 

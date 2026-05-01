@@ -1,6 +1,6 @@
 # Product Data Audit
 
-Last updated: 2026-04-25
+Last updated: 2026-05-02
 
 ## Purpose
 
@@ -143,11 +143,13 @@ This is the right direction for stable purchase behavior, but we still need to d
 
 The current flow now also detects missing or inactive products in cart and checkout and blocks those items from being checked out.
 
-### 3. Seller identity is now neutral in the customer flow, but not yet data-driven
+### 3. Seller identity is now vendor-ready in schema, but not yet data-driven in buyer-facing UI
 
 The cart, checkout-adjacent flow, and customer order pages now use neutral marketplace wording instead of the old hardcoded single-seller label.
 
-The remaining gap is that seller identity still is not coming from real vendor data yet.
+The remaining gap is that seller identity still is not coming from real vendor data yet on public product pages, cart, checkout summaries, or customer order history.
+
+The repo now has vendor ownership in the product model, vendor-aware checkout writes, vendor order pages, and vendor workspace access in code, but those data paths are not exposed clearly through the buyer journey yet.
 
 ### 4. Storefront mapper currently uses fallback/generated content for some fields
 
@@ -210,4 +212,4 @@ The next real milestone is:
 
 - finish remaining storefront detail parity
 - stabilize quote/cart/checkout around real product records
-- prepare the product model for vendor ownership
+- finish exposing the existing vendor ownership model through storefront and customer order flows

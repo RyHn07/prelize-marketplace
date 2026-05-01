@@ -14,10 +14,11 @@ import {
   removeQuoteItem,
   type QuoteItem,
 } from "@/components/quote/quote-utils";
+import { createVendorOrderSummary } from "@/lib/orders/utils";
 import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { ProductDbRow } from "@/types/product-db";
+import type { OrderSummaryRow, ProductDbRow, ShippingMethodRow, VendorOrderRow } from "@/types/product-db";
 
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
@@ -64,24 +65,6 @@ type BuyerForm = {
 };
 
 type BuyerFormErrors = Partial<Record<keyof BuyerForm, string>>;
-
-type ShippingMethod = {
-  productId: string;
-  productName: string;
-  shippingProfileId: string;
-  shippingProfileName: string;
-};
-
-type OrderSummary = {
-  quantity: number;
-  totalQuantity: number;
-  productPrice: number;
-  cddCharge: number;
-  shippingCost: number | null;
-  hasUnknownShipping: boolean;
-  payNow: number;
-  payOnDelivery: number | string | null;
-};
 
 type SelectedProductGroup = {
   productId: string;
@@ -465,7 +448,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    const shippingMethods: ShippingMethod[] = selectedProductGroups.map((group) => {
+    const shippingMethods: ShippingMethodRow[] = selectedProductGroups.map((group) => {
       const shippingProfileId = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
       const shippingProfile =
         shippingProfiles.find((profile) => profile.id === shippingProfileId) ?? shippingProfiles[0];
@@ -478,7 +461,7 @@ export default function CheckoutPage() {
       };
     });
 
-    const summary: OrderSummary = {
+    const summary: OrderSummaryRow = {
       quantity: totals.totalQuantity,
       totalQuantity: totals.totalQuantity,
       productPrice: totals.productPrice,
@@ -537,7 +520,90 @@ export default function CheckoutPage() {
         throw new Error(insertMessage);
       }
 
-      const orderItemsPayload = selectedCartItems.map((item) => ({
+      const shippingMethodByProductId = new Map(
+        shippingMethods.map((shippingMethod) => [shippingMethod.productId, shippingMethod]),
+      );
+      const vendorOrderGroups = new Map<
+        string,
+        {
+          vendorId: string;
+          items: typeof selectedCartItems;
+          shippingMethods: ShippingMethodRow[];
+        }
+      >();
+
+      selectedCartItems.forEach((item) => {
+        const vendorId = productRecordMap.get(item.productId)?.vendor_id;
+
+        if (!vendorId) {
+          return;
+        }
+
+        const existingGroup = vendorOrderGroups.get(vendorId);
+        const shippingMethod = shippingMethodByProductId.get(item.productId);
+
+        if (existingGroup) {
+          existingGroup.items.push(item);
+
+          if (
+            shippingMethod &&
+            !existingGroup.shippingMethods.some(
+              (currentMethod) =>
+                currentMethod.productId === shippingMethod.productId &&
+                currentMethod.shippingProfileId === shippingMethod.shippingProfileId,
+            )
+          ) {
+            existingGroup.shippingMethods.push(shippingMethod);
+          }
+
+          return;
+        }
+
+        vendorOrderGroups.set(vendorId, {
+          vendorId,
+          items: [item],
+          shippingMethods: shippingMethod ? [shippingMethod] : [],
+        });
+      });
+
+      const vendorOrderIdByVendorId = new Map<string, string>();
+
+      if (vendorOrderGroups.size > 0) {
+        const vendorOrdersPayload = Array.from(vendorOrderGroups.values()).map((group) => {
+          const vendorOrderId = crypto.randomUUID();
+          vendorOrderIdByVendorId.set(group.vendorId, vendorOrderId);
+
+          return {
+            id: vendorOrderId,
+            order_id: createdOrder.id,
+            vendor_id: group.vendorId,
+            status: "Pending",
+            summary: createVendorOrderSummary(group.items, group.shippingMethods),
+            shipping_method: group.shippingMethods,
+            vendor_note: null,
+            admin_note: null,
+          };
+        });
+
+        const { error: vendorOrdersError } = await supabase
+          .from("vendor_orders")
+          .insert(vendorOrdersPayload as never);
+
+        if (vendorOrdersError) {
+          const normalizedMessage = vendorOrdersError.message.toLowerCase();
+
+          throw new Error(
+            normalizedMessage.includes("vendor_orders") && normalizedMessage.includes("does not exist")
+              ? "Vendor order tables are missing. Run the multivendor migration before placing vendor-owned orders."
+              : `Unable to create vendor order records: ${vendorOrdersError.message}`,
+          );
+        }
+      }
+
+      const orderItemsPayload = selectedCartItems.map((item) => {
+        const vendorId = productRecordMap.get(item.productId)?.vendor_id ?? null;
+
+        return {
         order_id: createdOrder.id,
         product_id: item.productId,
         product_name: item.name,
@@ -546,14 +612,22 @@ export default function CheckoutPage() {
         price: item.price,
         quantity: item.quantity,
         weight: item.weight ?? null,
-      }));
+          vendor_id: vendorId,
+          vendor_order_id: vendorId ? vendorOrderIdByVendorId.get(vendorId) ?? null : null,
+        };
+      });
 
       const { error: orderItemsError } = await supabase
         .from("order_items")
         .insert(orderItemsPayload as never);
 
       if (orderItemsError) {
-        throw new Error(orderItemsError.message);
+        throw new Error(
+          orderItemsError.message.toLowerCase().includes("vendor_order_id") ||
+          orderItemsError.message.toLowerCase().includes("vendor_id")
+            ? "Order item vendor columns are missing. Run the latest multivendor migration before placing vendor-owned orders."
+            : orderItemsError.message,
+        );
       }
 
       selectedCartItems.forEach((item) => {

@@ -1,4 +1,6 @@
 export type ProductDbWeight = string | number | null;
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | { [key: string]: JsonValue } | JsonValue[];
 
 export type ProductStatus = "active" | "disabled" | "draft";
 export type ProductType = "single" | "variable";
@@ -6,10 +8,31 @@ export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bu
 export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
 export type VendorMemberStatus = "active" | "invited" | "disabled";
+export type VendorOrderStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Processing"
+  | "Shipped"
+  | "Delivered"
+  | "Cancelled";
 
 export type ProductAttribute = {
   name: string;
   values: string[];
+};
+
+export type ProductSpecification = {
+  label: string;
+  value: string;
+};
+
+export type ProductReview = {
+  author?: string;
+  rating?: number;
+  title?: string;
+  comment?: string;
+  created_at?: string;
+  [key: string]: JsonValue | undefined;
 };
 
 export type ProductVariantAttributeValues = Record<string, string>;
@@ -18,11 +41,16 @@ export type ProductDbVariantRow = {
   id: string;
   product_id: string;
   name: string;
+  sku?: string | null;
   regular_price: number | null;
   discount_price: number | null;
   price: number;
   moq: number;
+  weight?: number | null;
   image_url: string | null;
+  min_order_quantity?: number | null;
+  is_active?: boolean;
+  sort_order?: number | null;
   attribute_values: ProductVariantAttributeValues | null;
   created_at?: string;
 };
@@ -48,6 +76,9 @@ export type ProductDbRow = {
   gallery_images?: string[] | null;
   attributes?: ProductAttribute[] | null;
   cdd_shipping_profile?: ProductCddShippingProfile | null;
+  short_description?: string | null;
+  specifications?: ProductSpecification[] | JsonValue | null;
+  reviews?: ProductReview[] | JsonValue | null;
 };
 
 export type ProductUpsertPayload = {
@@ -166,6 +197,50 @@ export type VendorMemberRow = {
   role: VendorMemberRole;
   status: VendorMemberStatus;
   created_at: string;
+};
+
+export type OrderSummaryRow = {
+  quantity?: number;
+  totalQuantity?: number;
+  productPrice: number;
+  cddCharge: number;
+  shippingCost?: number | null;
+  hasUnknownShipping?: boolean;
+  payNow: number;
+  payOnDelivery: number | string | null;
+};
+
+export type ShippingMethodRow = {
+  productId: string;
+  productName: string;
+  shippingProfileId: string;
+  shippingProfileName: string;
+};
+
+export type VendorOrderRow = {
+  id: string;
+  order_id: string;
+  vendor_id: string;
+  status: VendorOrderStatus;
+  summary: OrderSummaryRow;
+  shipping_method: ShippingMethodRow[] | null;
+  vendor_note: string | null;
+  admin_note: string | null;
+  created_at: string;
+};
+
+export type OrderItemRow = {
+  id: string;
+  order_id: string;
+  product_id: string;
+  product_name: string;
+  product_image: string | null;
+  variation: string;
+  price: number;
+  quantity: number;
+  weight: number | null;
+  vendor_id?: string | null;
+  vendor_order_id?: string | null;
 };
 
 export type ProductEditorRecord = {

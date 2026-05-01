@@ -63,6 +63,32 @@ export async function getVendorById(id: string) {
   };
 }
 
+export async function getVendorsByIds(ids: string[]) {
+  const scopedIds = Array.from(new Set(ids.filter(Boolean)));
+
+  if (scopedIds.length === 0) {
+    return {
+      data: [] as VendorRow[],
+      error: null,
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.from("vendors").select("*").in("id", scopedIds);
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: [] as VendorRow[],
+      error: null,
+    };
+  }
+
+  return {
+    data: ((data ?? []) as VendorRow[]).map(normalizeVendor),
+    error,
+  };
+}
+
 export async function getVendorOptions() {
   const result = await getVendors();
 

@@ -1,6 +1,6 @@
 # Wholesale Marketplace Project Plan
 
-Last updated: 2026-04-25
+Last updated: 2026-05-02
 
 ## Current Project Snapshot
 
@@ -152,11 +152,11 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 
 ### 4. Vendor / Seller
 
-- This role is planned for the multivendor phase.
-- Will manage only vendor-owned products.
-- Will view only vendor-relevant orders or sub-orders.
-- Will manage vendor profile, catalog, and fulfillment workflow.
-- May later include sub-roles such as vendor owner and vendor staff.
+- This role is now partially implemented in the current multivendor phase.
+- Can manage only vendor-owned products.
+- Can view vendor-relevant orders or sub-orders.
+- Can manage fulfillment status and vendor notes for vendor orders.
+- May later include broader onboarding, storefront, payout, and reporting workflows.
 
 ## User Flow Details
 
@@ -209,9 +209,7 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 2. Cart groups products by vendor.
 3. Buyer reviews vendor-wise shipping, subtotal, and notes.
 4. Buyer completes one marketplace checkout.
-5. System creates either:
-   one parent order with vendor sub-orders, or
-   separate vendor-linked orders, depending on final architecture decision.
+5. System creates one parent marketplace order and one or more vendor sub-orders.
 6. Platform admin can view the full combined order picture.
 7. Each vendor can view only the vendor-owned portion of that order.
 8. Buyer sees one clear order history experience with vendor-aware breakdown where needed.
@@ -258,6 +256,7 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 - [x] Checkout page exists.
 - [x] Checkout collects buyer details.
 - [x] Checkout creates orders in Supabase.
+- [x] Checkout creates vendor sub-orders for vendor-owned items.
 - [x] Checkout creates order items in Supabase.
 - [x] Checkout clears selected quote/cart items after successful order placement.
 
@@ -310,15 +309,17 @@ That means the most important next step is aligning product details, quote/cart,
 
 ## Multivendor Readiness
 
-The current app is still structured like a single-seller marketplace in several places:
+The current app is now in an in-between multivendor state:
 
-- Products do not have a `vendor_id` or seller ownership field.
-- Cart and orders now use neutral marketplace wording, but seller identity is still not data-driven.
-- Admin access is global, not vendor-scoped.
-- Orders are created as one marketplace order, not split by vendor.
-- There is no vendor onboarding, vendor profile, or vendor dashboard flow yet.
+- Products can be assigned to vendors through `vendor_id`.
+- Vendor records, vendor memberships, and platform role records now exist in the schema and codebase.
+- Product management can already be scoped by vendor membership.
+- A vendor dashboard shell and vendor product workspace now exist.
+- Checkout now creates marketplace parent orders plus vendor sub-orders, but buyer-facing order views still read mostly as marketplace-level screens.
+- Seller identity is still not shown on the public storefront, cart, or customer order history.
+- Vendor-specific order operations, storefront pages, and business settings are still incomplete.
 
-Because of this, multivendor support should be treated as a major feature phase, not a small UI update.
+Because of this, multivendor support is no longer just a future plan, but it is also not complete end to end yet.
 
 ## Recommended Next Step
 
@@ -352,7 +353,7 @@ This roadmap is the execution layer of the project plan. It is meant to help us 
 - [x] Admin product management has started
 - [~] Product data is more strongly aligned between Supabase, storefront UI mapping, and quote/cart snapshots, but the final shared shape is not fully locked
 - [~] Admin area is partially complete
-- [ ] Multivendor architecture is not implemented yet
+- [~] Multivendor foundation is implemented, but vendor-aware order flow and storefront exposure are not complete yet
 - [ ] Formal schema, QA, and release documentation are not complete yet
 
 ### Phase A: Foundation Audit and Product Data Alignment
@@ -493,22 +494,22 @@ Success criteria:
 - Order structure supports vendor participation cleanly
 
 Tasks:
-- [ ] Create `vendors` table
-- [ ] Define vendor profile fields
-- [ ] Add `vendor_id` to `products`
-- [ ] Decide vendor membership model for owner/staff access
-- [ ] Add vendor roles and permission strategy
-- [ ] Define vendor approval workflow
-- [ ] Define vendor status model such as pending, active, suspended
-- [ ] Replace hardcoded seller labels in cart and order views
+- [x] Create `vendors` table
+- [x] Define vendor profile fields
+- [x] Add `vendor_id` to `products`
+- [x] Decide vendor membership model for owner/staff access
+- [~] Add vendor roles and permission strategy
+- [~] Define vendor approval workflow
+- [x] Define vendor status model such as pending, active, suspended
+- [~] Replace hardcoded seller labels in cart and order views
 - [ ] Show vendor information on public product pages
-- [ ] Decide final multivendor order structure
+- [~] Decide final multivendor order structure
 
 Deliverables:
-- [ ] Vendor data model
-- [ ] Vendor-aware product ownership
-- [ ] Vendor permission strategy
-- [ ] Vendor-ready order architecture decision
+- [x] Vendor data model
+- [x] Vendor-aware product ownership
+- [~] Vendor permission strategy
+- [~] Vendor-ready order architecture decision
 
 ### Phase G: Multivendor Cart, Checkout, and Orders
 
@@ -524,11 +525,11 @@ Tasks:
 - [ ] Group cart items by vendor
 - [ ] Show vendor-level subtotal blocks
 - [ ] Show vendor-level shipping and notes if needed
-- [ ] Update checkout payload to support vendor-aware order creation
-- [ ] Create parent order and vendor sub-order model, or finalize separate vendor-linked orders
+- [x] Update checkout payload to support vendor-aware order creation
+- [~] Create parent order and vendor sub-order model, or finalize separate vendor-linked orders
 - [ ] Update customer order history to show vendor-aware structure cleanly
-- [ ] Create vendor order view for vendor-side operations
-- [ ] Keep platform admin visibility across all vendor-linked order data
+- [x] Create vendor order view for vendor-side operations
+- [x] Keep platform admin visibility across all vendor-linked order data
 
 Deliverables:
 - [ ] Multivendor cart UI
@@ -545,17 +546,17 @@ Success criteria:
 
 Tasks:
 - [ ] Create vendor onboarding flow
-- [ ] Create vendor dashboard shell
-- [ ] Create vendor product management flow
-- [ ] Create vendor order management flow
+- [x] Create vendor dashboard shell
+- [x] Create vendor product management flow
+- [~] Create vendor order management flow
 - [ ] Create vendor profile/storefront page
-- [ ] Create vendor settings/business profile page
-- [ ] Add vendor metrics and summary cards
+- [~] Create vendor settings/business profile page
+- [~] Add vendor metrics and summary cards
 
 Deliverables:
-- [ ] Vendor dashboard
+- [~] Vendor dashboard
 - [ ] Vendor storefront/profile
-- [ ] Vendor product and order operations
+- [~] Vendor product and order operations
 
 ### Phase I: Customer Experience Improvements
 
@@ -594,8 +595,8 @@ Success criteria:
 Tasks:
 - [x] Add schema documentation
 - [ ] Add migration/setup documentation
-- [ ] Review RLS and access rules for each table
-- [ ] Add vendor-specific RLS rules
+- [~] Review RLS and access rules for each table
+- [x] Add vendor-specific RLS rules
 - [ ] Add validation rules for product forms
 - [ ] Add validation rules for checkout payloads
 - [ ] Replace starter metadata and branding leftovers
@@ -628,7 +629,7 @@ Deliverables:
 
 - [~] Aligning product detail, cart, and checkout data around the real Supabase product source
 - [~] Expanding the project plan into a full product and architecture guide
-- [~] Preparing the structure for multivendor support
+- [~] Extending the shipped multivendor foundation into vendor-aware orders and storefront behavior
 
 ### Highest-Priority Next Steps
 
@@ -636,7 +637,7 @@ Deliverables:
 - [x] Replace placeholder product detail buying data with real variant/product data
 - [~] Refactor cart and checkout from lightweight snapshots to intentional product snapshots plus validation
 - [~] Replace email-based admin access with role-based access
-- [ ] Define vendor and multivendor order architecture
+- [~] Define and wire the final vendor-aware order architecture through checkout and order views
 
 ## Tracking Board
 
@@ -651,13 +652,13 @@ Deliverables:
 - [ ] Category CRUD
 - [ ] Customer admin page
 - [x] Admin settings page
-- [ ] Role-based admin authorization
+- [~] Role-based admin authorization
 
 ### Later
 
-- [ ] Vendor tables and vendor roles
+- [x] Vendor tables and vendor roles
 - [ ] Multivendor cart and checkout
-- [ ] Vendor dashboard
+- [~] Vendor dashboard
 - [ ] Vendor storefront pages
 - [ ] Payout and reporting model
 
@@ -705,16 +706,16 @@ Deliverables:
 
 ### Phase 4: Add Multivendor Foundation
 
-- [ ] Create vendor table and vendor profile model
-- [ ] Link products to vendors with `vendor_id`
-- [ ] Add vendor-owned admin permissions and policies
-- [ ] Add vendor dashboard shell separate from marketplace admin
+- [x] Create vendor table and vendor profile model
+- [x] Link products to vendors with `vendor_id`
+- [~] Add vendor-owned admin permissions and policies
+- [x] Add vendor dashboard shell separate from marketplace admin
 - [ ] Show vendor/seller info on public product pages
-- [ ] Replace hardcoded seller labels in cart and orders with real vendor data
-- [ ] Define whether checkout creates one parent order with vendor sub-orders or separate orders per vendor
+- [~] Replace hardcoded seller labels in cart and orders with real vendor data
+- [~] Define whether checkout creates one parent order with vendor sub-orders or separate orders per vendor
 - [ ] Split cart totals and fulfillment logic by vendor
 - [ ] Store vendor-specific shipping, notes, and payout data
-- [ ] Add vendor status workflow such as pending approval, active, suspended
+- [x] Add vendor status workflow such as pending approval, active, suspended
 
 ### Phase 5: Improve Customer Experience
 
@@ -756,25 +757,25 @@ Deliverables:
 
 ### Step 1: Data Model
 
-- [ ] Create `vendors` table
-- [ ] Add `vendor_id` to `products`
+- [x] Create `vendors` table
+- [x] Add `vendor_id` to `products`
 - [ ] Decide whether categories are global or vendor-specific
-- [ ] Add vendor fields such as name, slug, logo, banner, description, contact email, phone, address, and status
-- [ ] Add vendor membership or role table if one vendor can have multiple staff users
+- [x] Add vendor fields such as name, slug, logo, banner, description, contact email, phone, address, and status
+- [x] Add vendor membership or role table if one vendor can have multiple staff users
 
 ### Step 2: Access Control
 
 - [~] Replace simple admin email check with role-based access
-- [ ] Support platform admin role
-- [ ] Support vendor owner/staff role
-- [ ] Restrict vendor users to only their own products and orders
+- [x] Support platform admin role
+- [x] Support vendor owner/staff role
+- [~] Restrict vendor users to only their own products and orders
 
 ### Step 3: Vendor Product Management
 
-- [ ] Vendor can create products
-- [ ] Vendor can edit only own products
-- [ ] Vendor can view only own product list
-- [ ] Platform admin can view all vendor products
+- [x] Vendor can create products
+- [x] Vendor can edit only own products
+- [x] Vendor can view only own product list
+- [x] Platform admin can view all vendor products
 - [ ] Add vendor name to product cards/details/cart/order history
 
 ### Step 4: Multivendor Cart and Checkout
@@ -796,8 +797,8 @@ Deliverables:
 
 - [ ] Vendor onboarding flow
 - [ ] Vendor profile/storefront page
-- [ ] Vendor dashboard metrics
-- [ ] Vendor settings and business profile management
+- [~] Vendor dashboard metrics
+- [~] Vendor settings and business profile management
 
 ## Suggested Execution Order
 
@@ -812,7 +813,7 @@ Deliverables:
 
 - [ ] Audit current product fields used by `mock-products` vs `products` table.
 - [ ] Define final product schema for gallery, specs, description, badge, reviews, and variants.
-- [ ] Extend the schema design for vendor ownership and vendor roles.
+- [x] Extend the schema design for vendor ownership and vendor roles.
 - [x] Refactor public catalog pages to read from Supabase.
 - [x] Refactor product detail purchase flow to use real variant data.
 - [~] Remove hardcoded seller labels and replace them with vendor data.

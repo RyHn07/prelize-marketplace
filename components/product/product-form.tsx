@@ -649,6 +649,7 @@ function ProductForm({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const productsIndexHref = pathname.startsWith("/vendor/") ? "/vendor/products" : "/admin/products";
   const messageRef = useRef<HTMLDivElement | null>(null);
   const appliedMediaSelectionRef = useRef<string | null>(null);
   const [values, setValues] = useState<ProductFormValues>(() =>
@@ -891,7 +892,7 @@ function ProductForm({
       }
 
       const successStatus = mode === "create" ? "created" : "updated";
-      router.push(`/admin/products?status=${successStatus}`);
+      router.push(`${productsIndexHref}?status=${successStatus}`);
       router.refresh();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save the product right now.");
@@ -972,7 +973,7 @@ function ProductForm({
             <ProductStatusBadge status={values.status} />
             <button
               type="button"
-              onClick={() => router.push("/admin/products")}
+              onClick={() => router.push(productsIndexHref)}
               className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
             >
               Cancel

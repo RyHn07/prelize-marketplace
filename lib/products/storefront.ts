@@ -1,5 +1,13 @@
-import type { Product, ProductBadge, ProductSpecification } from "@/types/product";
-import type { ProductCategoryOption, ProductDbRow, ProductDbWeight } from "@/types/product-db";
+import type { Product, ProductBadge, ProductReview, ProductSpecification } from "@/types/product";
+import type {
+  JsonValue,
+  ProductCategoryOption,
+  ProductDbRow,
+  ProductDbWeight,
+  ProductReview as ProductDbReview,
+  ProductSpecification as ProductDbSpecification,
+  ProductVendorOption,
+} from "@/types/product-db";
 
 function normalizeBadge(value: string | null): ProductBadge | undefined {
   return value === "Hot" || value === "New" || value === "Best Value" ? value : undefined;
@@ -27,7 +35,29 @@ function buildGallery(product: ProductDbRow) {
   return [];
 }
 
+function isSpecificationRecord(value: JsonValue): value is ProductDbSpecification {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof value.label === "string" &&
+    typeof value.value === "string"
+  );
+}
+
 function buildSpecifications(product: ProductDbRow): ProductSpecification[] {
+  if (Array.isArray(product.specifications)) {
+    const explicitSpecifications = product.specifications.flatMap((specification) =>
+      isSpecificationRecord(specification)
+        ? [{ label: specification.label, value: specification.value }]
+        : [],
+    );
+
+    if (explicitSpecifications.length > 0) {
+      return explicitSpecifications;
+    }
+  }
+
   const attributeSpecifications = (product.attributes ?? [])
     .filter((attribute) => attribute.name.trim().length > 0 && attribute.values.length > 0)
     .map((attribute) => ({
@@ -70,11 +100,44 @@ function buildBuyerNotes(product: ProductDbRow) {
 }
 
 function buildShortDescription(product: ProductDbRow) {
+  if (product.short_description && product.short_description.trim().length > 0) {
+    return product.short_description;
+  }
+
   if (product.description) {
     return product.description.length > 120 ? `${product.description.slice(0, 117).trimEnd()}...` : product.description;
   }
 
   return `Wholesale sourcing option with MOQ ${product.moq} and flexible fulfillment review.`;
+}
+
+function isReviewRecord(value: unknown): value is ProductDbReview {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function buildReviews(product: ProductDbRow): ProductReview[] {
+  if (!Array.isArray(product.reviews)) {
+    return [];
+  }
+
+  return product.reviews.filter(isReviewRecord).map((review, index) => ({
+    reviewer:
+      typeof review.author === "string" && review.author.trim().length > 0
+        ? review.author
+        : `Buyer ${index + 1}`,
+    comment: typeof review.comment === "string" ? review.comment : "No review comment provided.",
+    rating: typeof review.rating === "number" ? review.rating : undefined,
+    title: typeof review.title === "string" ? review.title : undefined,
+    createdAt: typeof review.created_at === "string" ? review.created_at : undefined,
+  }));
+}
+
+function getVendorName(product: ProductDbRow, vendors: ProductVendorOption[]) {
+  if (!product.vendor_id) {
+    return null;
+  }
+
+  return vendors.find((vendor) => vendor.id === product.vendor_id)?.name ?? null;
 }
 
 export function getCategoryById(
@@ -91,6 +154,7 @@ export function getCategoryById(
 export function mapProductDbToStorefrontProduct(
   product: ProductDbRow,
   categories: ProductCategoryOption[] = [],
+  vendors: ProductVendorOption[] = [],
 ): Product {
   const category = getCategoryById(product.category_id, categories);
   const gallery = buildGallery(product);
@@ -109,7 +173,9 @@ export function mapProductDbToStorefrontProduct(
     shortDescription: buildShortDescription(product),
     description: product.description ?? "Product description will be updated soon.",
     specifications: buildSpecifications(product),
+    reviews: buildReviews(product),
     buyerNotes: buildBuyerNotes(product),
     category: category?.slug ?? "uncategorized",
+    vendorName: getVendorName(product, vendors),
   };
 }

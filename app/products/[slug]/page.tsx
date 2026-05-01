@@ -11,6 +11,7 @@ import {
   getPublicProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getVendorOptions } from "@/lib/vendors/queries";
 
 type ProductDetailsPageProps = {
   params: Promise<{ slug: string }>;
@@ -18,8 +19,9 @@ type ProductDetailsPageProps = {
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
-  const [{ data: categoryOptions }, { data: productDetail }, { data: publicProducts }] = await Promise.all([
+  const [{ data: categoryOptions }, { data: vendorOptions }, { data: productDetail }, { data: publicProducts }] = await Promise.all([
     getProductCategoryOptions(),
+    getVendorOptions(),
     getPublicProductDetailBySlug(slug),
     getPublicProducts(),
   ]);
@@ -29,12 +31,12 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const product = mapProductDbToStorefrontProduct(productRow, categoryOptions);
+  const product = mapProductDbToStorefrontProduct(productRow, categoryOptions, vendorOptions);
   const category = getCategoryById(productRow.category_id, categoryOptions);
   const relatedProducts = publicProducts
     .filter((item) => item.category_id === productRow.category_id && item.slug !== productRow.slug)
     .slice(0, 4)
-    .map((item) => mapProductDbToStorefrontProduct(item, categoryOptions));
+    .map((item) => mapProductDbToStorefrontProduct(item, categoryOptions, vendorOptions));
 
   return (
     <main className="min-h-screen bg-white">
