@@ -6,6 +6,7 @@ import Link from "next/link";
 import ProductForm from "@/components/product/product-form";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { createVendorProductRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
 
 export default function VendorNewProductPage() {
   const [loading, setLoading] = useState(true);
@@ -90,6 +91,11 @@ export default function VendorNewProductPage() {
         allowedVendorIds={[activeVendorId]}
         canAssignPlatformProducts={false}
         forcedVendorId={activeVendorId}
+        onSave={(mode, payload, productId) =>
+          mode === "create"
+            ? createVendorProductRecord(payload)
+            : updateVendorProductRecord(productId ?? "", payload)
+        }
       />
     </section>
   );

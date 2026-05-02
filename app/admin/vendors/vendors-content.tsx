@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { updateVendorApprovalStatus } from "@/lib/vendor-onboarding";
 import { getVendorProductCounts, getVendors } from "@/lib/vendors/queries";
 import type { VendorRow, VendorStatus } from "@/types/product-db";
 
@@ -22,7 +23,12 @@ function getStatusClasses(status: VendorStatus) {
 }
 
 function StatusBadge({ status }: { status: VendorStatus }) {
-  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  const label =
+    status === "active"
+      ? "Approved"
+      : status === "suspended"
+        ? "Rejected"
+        : "Pending";
 
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClasses(status)}`}>{label}</span>;
 }
@@ -38,6 +44,7 @@ export default function VendorsContent() {
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | VendorStatus>("all");
+  const [updatingVendorId, setUpdatingVendorId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -125,6 +132,28 @@ export default function VendorsContent() {
       return matchesStatus && matchesSearch;
     });
   }, [vendors, searchQuery, statusFilter]);
+
+  const handleUpdateVendorStatus = async (vendorId: string, status: "active" | "suspended") => {
+    setUpdatingVendorId(vendorId);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      await updateVendorApprovalStatus(vendorId, status);
+      const refreshedVendors = await getVendors();
+
+      if (refreshedVendors.error) {
+        throw refreshedVendors.error;
+      }
+
+      setVendors(refreshedVendors.data);
+      setSuccessMessage(status === "active" ? "Vendor approved." : "Vendor rejected.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update vendor status.");
+    } finally {
+      setUpdatingVendorId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -310,6 +339,22 @@ export default function VendorsContent() {
                   >
                     Edit Vendor
                   </Link>
+                  <button
+                    type="button"
+                    disabled={updatingVendorId === vendor.id || vendor.status === "active"}
+                    onClick={() => void handleUpdateVendorStatus(vendor.id, "active")}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {updatingVendorId === vendor.id && vendor.status !== "suspended" ? "Saving..." : "Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={updatingVendorId === vendor.id || vendor.status === "suspended"}
+                    onClick={() => void handleUpdateVendorStatus(vendor.id, "suspended")}
+                    className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-600 transition-colors hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    {updatingVendorId === vendor.id && vendor.status !== "active" ? "Saving..." : "Reject"}
+                  </button>
                 </div>
               </article>
             ))}

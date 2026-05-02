@@ -60,6 +60,11 @@ type ProductFormProps = {
   allowedVendorIds?: string[];
   canAssignPlatformProducts?: boolean;
   forcedVendorId?: string | null;
+  onSave?: (
+    mode: "create" | "edit",
+    payload: ProductEditorSavePayload,
+    productId: string | null,
+  ) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
 function createId(prefix: string) {
@@ -416,12 +421,14 @@ function MediaField({
   onChange,
   helperText,
   libraryHref,
+  vendorId,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   helperText?: string;
   libraryHref?: string;
+  vendorId?: string | null;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -448,7 +455,7 @@ function MediaField({
     setLibraryError("");
 
       try {
-      const result = await listProductMedia();
+      const result = await listProductMedia({ vendorId });
 
       if (result.error) {
         setLibraryError(result.error.message);
@@ -478,7 +485,7 @@ function MediaField({
     setLibraryError("");
 
     try {
-      const result = await uploadProductMedia(file);
+      const result = await uploadProductMedia(file, { vendorId });
 
       if (result.error || !result.data) {
         setLibraryError(result.error?.message ?? "Unable to upload image.");
@@ -661,6 +668,7 @@ function ProductForm({
   allowedVendorIds = [],
   canAssignPlatformProducts = true,
   forcedVendorId = null,
+  onSave,
 }: ProductFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -732,7 +740,7 @@ function ProductForm({
     params.set("target", target);
     params.set("returnTo", pathname + (searchParamsString ? `?${searchParamsString}` : ""));
 
-    return `/admin/media?${params.toString()}`;
+    return `${pathname.startsWith("/vendor/") ? "/vendor/media" : "/admin/media"}?${params.toString()}`;
   };
 
   const updateField = <K extends keyof ProductFormValues>(field: K, value: ProductFormValues[K]) => {
@@ -908,9 +916,11 @@ function ProductForm({
 
     try {
       const result =
-        mode === "create"
-          ? await createProductEditorRecord(savePayload)
-          : await updateProductEditorRecord(record?.product.id ?? "", savePayload);
+        onSave
+          ? await onSave(mode, savePayload, record?.product.id ?? null)
+          : mode === "create"
+            ? await createProductEditorRecord(savePayload)
+            : await updateProductEditorRecord(record?.product.id ?? "", savePayload);
 
       if (result.error) {
         setErrorMessage(result.error.message);
@@ -1324,13 +1334,14 @@ function ProductForm({
                           </div>
 
                           <div className="md:col-span-2">
-                            <MediaField
-                              label="Variation Image"
-                              value={variation.image_url}
-                              onChange={(value) => handleVariationChange(variation.id, "image_url", value)}
-                              helperText="Select from file gallery or upload from computer."
-                              libraryHref={createMediaLibraryHref(`variation:${variation.id}`)}
-                            />
+                <MediaField
+                  label="Variation Image"
+                  value={variation.image_url}
+                  onChange={(value) => handleVariationChange(variation.id, "image_url", value)}
+                  helperText="Select from file gallery or upload from computer."
+                  libraryHref={createMediaLibraryHref(`variation:${variation.id}`)}
+                  vendorId={forcedVendorId}
+                />
                           </div>
                         </div>
                       </div>
@@ -1427,6 +1438,7 @@ function ProductForm({
                   onChange={(value) => updateField("image_url", value)}
                   helperText="Select from file gallery or upload from computer."
                   libraryHref={createMediaLibraryHref("main-image")}
+                  vendorId={forcedVendorId}
                 />
               </div>
 
@@ -1510,6 +1522,7 @@ function ProductForm({
                             }
                             helperText="Select from file gallery or upload from computer."
                             libraryHref={createMediaLibraryHref("gallery")}
+                            vendorId={forcedVendorId}
                           />
                         </div>
                       </details>

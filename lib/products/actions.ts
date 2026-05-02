@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
   ProductDbRow,
@@ -112,7 +114,7 @@ function isSlugConstraintError(message: string) {
 }
 
 async function resolveUniqueProductSlug(
-  supabase: ReturnType<typeof getSupabaseClient>,
+  supabase: SupabaseClient,
   rawSlug: string,
   excludeId?: string,
 ) {
@@ -162,7 +164,7 @@ async function resolveUniqueProductSlug(
 }
 
 async function insertProductWithFallback(
-  supabase: ReturnType<typeof getSupabaseClient>,
+  supabase: SupabaseClient,
   payload: ProductUpsertPayload & {
     price: number;
     moq: number;
@@ -195,7 +197,7 @@ async function insertProductWithFallback(
 }
 
 async function updateProductWithFallback(
-  supabase: ReturnType<typeof getSupabaseClient>,
+  supabase: SupabaseClient,
   id: string,
   payload: ProductUpsertPayload & {
     price: number;
@@ -263,8 +265,10 @@ function getBaseProductMetrics(
   };
 }
 
-export async function createProductEditorRecord(payload: ProductEditorSavePayload) {
-  const supabase = getSupabaseClient();
+export async function createProductEditorRecordWithClient(
+  supabase: SupabaseClient,
+  payload: ProductEditorSavePayload,
+) {
   const baseMetrics = getBaseProductMetrics(payload.product.product_type, payload.product, payload.variants);
   const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug);
 
@@ -334,11 +338,16 @@ export async function createProductEditorRecord(payload: ProductEditorSavePayloa
   };
 }
 
-export async function updateProductEditorRecord(
+export async function createProductEditorRecord(payload: ProductEditorSavePayload) {
+  const supabase = getSupabaseClient();
+  return createProductEditorRecordWithClient(supabase, payload);
+}
+
+export async function updateProductEditorRecordWithClient(
+  supabase: SupabaseClient,
   id: string,
   payload: ProductEditorSavePayload,
 ) {
-  const supabase = getSupabaseClient();
   const baseMetrics = getBaseProductMetrics(payload.product.product_type, payload.product, payload.variants);
   const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug, id);
 
@@ -416,4 +425,12 @@ export async function updateProductEditorRecord(
     data: data as ProductDbRow,
     error: null,
   };
+}
+
+export async function updateProductEditorRecord(
+  id: string,
+  payload: ProductEditorSavePayload,
+) {
+  const supabase = getSupabaseClient();
+  return updateProductEditorRecordWithClient(supabase, id, payload);
 }

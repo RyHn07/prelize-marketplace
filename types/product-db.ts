@@ -8,6 +8,7 @@ export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bu
 export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
 export type VendorMemberStatus = "active" | "invited" | "disabled";
+export type VendorInvitationStatus = "pending" | "accepted" | "rejected";
 export type VendorOrderStatus =
   | "Pending"
   | "Confirmed"
@@ -196,6 +197,14 @@ export type VendorMemberRow = {
   user_id: string;
   role: VendorMemberRole;
   status: VendorMemberStatus;
+  created_at: string;
+};
+
+export type VendorInvitationRow = {
+  id: string;
+  user_id: string;
+  invited_by: string;
+  status: VendorInvitationStatus;
   created_at: string;
 };
 

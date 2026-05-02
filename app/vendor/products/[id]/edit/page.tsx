@@ -7,6 +7,7 @@ import ProductForm from "@/components/product/product-form";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getProductEditorRecordForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { createVendorProductRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
 import type { ProductEditorRecord } from "@/types/product-db";
 
 export default function VendorEditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -144,6 +145,11 @@ export default function VendorEditProductPage({ params }: { params: Promise<{ id
         allowedVendorIds={[activeVendorId]}
         canAssignPlatformProducts={false}
         forcedVendorId={activeVendorId}
+        onSave={(mode, payload, productId) =>
+          mode === "create"
+            ? createVendorProductRecord(payload)
+            : updateVendorProductRecord(productId ?? "", payload)
+        }
       />
     </section>
   );

@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
-import { getVendorById } from "@/lib/vendors/queries";
+import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 
 type VendorLayoutProps = {
   children: React.ReactNode;
@@ -56,46 +54,44 @@ function SidebarLink({
 
 export default function VendorLayout({ children }: VendorLayoutProps) {
   const pathname = usePathname();
+  const isOnboardingPath = pathname === "/vendor" || pathname === "/vendor/register";
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [hasVendorWorkspaceAccess, setHasVendorWorkspaceAccess] = useState(false);
   const [vendorName, setVendorName] = useState("Vendor");
   const [vendorRole, setVendorRole] = useState<string | null>(null);
   const [vendorId, setVendorId] = useState<string | null>(null);
+  const [canAccessVendorWorkspace, setCanAccessVendorWorkspace] = useState(false);
+  const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
+  const [hasVendorMembership, setHasVendorMembership] = useState(false);
+  const [vendorStatus, setVendorStatus] = useState<"pending" | "active" | "suspended" | null>(null);
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadAccess = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
-      const currentVendorMembership = await getCurrentVendorMembership(supabase);
+      try {
+        const onboardingStatus = await fetchVendorOnboardingStatus();
 
-      if (!isMounted) {
-        return;
+        if (!isMounted) {
+          return;
+        }
+
+        setUserEmail(onboardingStatus.userEmail);
+        setCanAccessVendorWorkspace(onboardingStatus.canAccessVendorWorkspace);
+        setHasPendingInvitation(onboardingStatus.hasPendingInvitation);
+        setHasVendorMembership(onboardingStatus.hasVendorMembership);
+        setVendorRole(onboardingStatus.vendorRole);
+        setVendorId(onboardingStatus.vendorId);
+        setVendorStatus(onboardingStatus.vendorStatus);
+
+        if (onboardingStatus.vendorName) {
+          setVendorName(onboardingStatus.vendorName);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setUserEmail(access.userEmail);
-      setHasVendorWorkspaceAccess(access.hasVendorWorkspaceAccess);
-      setVendorRole(access.activeVendorRole);
-      setVendorId(currentVendorMembership?.vendor_id ?? null);
-
-      if (!access.activeVendorId) {
-        setLoading(false);
-        return;
-      }
-
-      const vendorResult = await getVendorById(access.activeVendorId);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (vendorResult.data?.name) {
-        setVendorName(vendorResult.data.name);
-      }
-
-      setLoading(false);
     };
 
     void loadAccess();
@@ -132,13 +128,19 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     );
   }
 
-  if (!hasVendorWorkspaceAccess) {
+  if (!canAccessVendorWorkspace) {
+    if (isOnboardingPath) {
+      return <div className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">{children}</div>;
+    }
+
     return (
       <div className="min-h-screen bg-slate-100 p-6">
         <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <h1 className="text-2xl font-semibold text-slate-900">Vendor Dashboard</h1>
           <p className="mt-3 text-sm text-slate-500">
-            Your account does not have vendor workspace access yet.
+            {hasVendorMembership || hasPendingInvitation || vendorStatus === "pending"
+              ? "Waiting for admin approval"
+              : "You are not invited as a vendor"}
           </p>
         </div>
       </div>

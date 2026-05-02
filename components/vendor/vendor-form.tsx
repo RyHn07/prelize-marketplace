@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { uploadVendorOnboardingMedia } from "@/lib/media/storage";
 import type { VendorFormValues, VendorStatus, VendorUpsertPayload } from "@/types/product-db";
 
 export const DEFAULT_VENDOR_FORM_VALUES: VendorFormValues = {
@@ -92,6 +93,120 @@ function Field({
   );
 }
 
+function ImageUploadField({
+  label,
+  hint,
+  value,
+  uploadOwnerId,
+  field,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  uploadOwnerId: string | null;
+  field: "logo_url" | "banner_url";
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const inputId = `${field}-upload`;
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState("");
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!uploadOwnerId) {
+      setUploadError("Unable to resolve this vendor registration upload path right now.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please choose an image file.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError("");
+
+    try {
+      const result = await uploadVendorOnboardingMedia(file, {
+        userId: uploadOwnerId,
+        field: field === "logo_url" ? "logo" : "banner",
+      });
+
+      if (result.error || !result.data) {
+        throw result.error ?? new Error("Upload failed.");
+      }
+
+      onChange(result.data.publicUrl);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Unable to upload this image.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="space-y-3">
+        <input
+          id={inputId}
+          type="file"
+          accept="image/*"
+          disabled={disabled || uploading}
+          onChange={(event) => void handleFileChange(event)}
+          className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-[#615FFF] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90 disabled:cursor-not-allowed"
+        />
+
+        {uploadError ? (
+          <p className="text-sm font-medium text-rose-600">{uploadError}</p>
+        ) : null}
+
+        {value ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <img
+              src={value}
+              alt={field === "logo_url" ? "Vendor logo preview" : "Vendor banner preview"}
+              className={`w-full rounded-xl object-cover ${
+                field === "logo_url" ? "h-32 max-w-[220px]" : "h-40"
+              }`}
+            />
+            <div className="mt-3 flex flex-wrap gap-3">
+              <a
+                href={value}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex text-sm font-medium text-[#615FFF] transition-colors hover:text-[#5552e6]"
+              >
+                Open image
+              </a>
+              <button
+                type="button"
+                disabled={disabled || uploading}
+                onClick={() => onChange("")}
+                className="inline-flex text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed"
+              >
+                Remove image
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+            {uploading ? "Uploading image..." : "No image uploaded yet."}
+          </div>
+        )}
+      </div>
+    </Field>
+  );
+}
+
 type VendorFormProps = {
   initialValues: VendorFormValues;
   title: string;
@@ -99,6 +214,9 @@ type VendorFormProps = {
   isSubmitting: boolean;
   errorMessage?: string;
   successMessage?: string;
+  showStatusControls?: boolean;
+  imageInputMode?: "url" | "upload";
+  uploadOwnerId?: string | null;
   onSubmit: (values: VendorFormValues) => void | Promise<void>;
 };
 
@@ -109,9 +227,16 @@ export default function VendorForm({
   isSubmitting,
   errorMessage = "",
   successMessage = "",
+  showStatusControls = true,
+  imageInputMode = "url",
+  uploadOwnerId = null,
   onSubmit,
 }: VendorFormProps) {
   const [values, setValues] = React.useState<VendorFormValues>(initialValues);
+
+  React.useEffect(() => {
+    setValues(initialValues);
+  }, [initialValues]);
 
   const handleFieldChange = <FieldName extends keyof VendorFormValues>(
     field: FieldName,
@@ -186,25 +311,50 @@ export default function VendorForm({
             />
           </Field>
 
-          <Field label="Logo URL" hint="Optional vendor logo for future profile cards and listings.">
-            <input
-              type="url"
-              value={values.logo_url}
-              onChange={(event) => handleFieldChange("logo_url", event.target.value)}
-              placeholder="https://example.com/logo.png"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-            />
-          </Field>
+          {imageInputMode === "upload" ? (
+            <>
+              <ImageUploadField
+                label="Logo"
+                hint="Upload a logo image for your vendor profile."
+                value={values.logo_url}
+                uploadOwnerId={uploadOwnerId}
+                field="logo_url"
+                disabled={isSubmitting}
+                onChange={(value) => handleFieldChange("logo_url", value)}
+              />
+              <ImageUploadField
+                label="Banner"
+                hint="Upload a banner image for your future vendor storefront."
+                value={values.banner_url}
+                uploadOwnerId={uploadOwnerId}
+                field="banner_url"
+                disabled={isSubmitting}
+                onChange={(value) => handleFieldChange("banner_url", value)}
+              />
+            </>
+          ) : (
+            <>
+              <Field label="Logo URL" hint="Optional vendor logo for future profile cards and listings.">
+                <input
+                  type="url"
+                  value={values.logo_url}
+                  onChange={(event) => handleFieldChange("logo_url", event.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </Field>
 
-          <Field label="Banner URL" hint="Optional banner for a future vendor storefront page.">
-            <input
-              type="url"
-              value={values.banner_url}
-              onChange={(event) => handleFieldChange("banner_url", event.target.value)}
-              placeholder="https://example.com/banner.jpg"
-              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-            />
-          </Field>
+              <Field label="Banner URL" hint="Optional banner for a future vendor storefront page.">
+                <input
+                  type="url"
+                  value={values.banner_url}
+                  onChange={(event) => handleFieldChange("banner_url", event.target.value)}
+                  placeholder="https://example.com/banner.jpg"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </Field>
+            </>
+          )}
 
           <div className="md:col-span-2">
             <Field label="Address">
@@ -233,42 +383,50 @@ export default function VendorForm({
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">Vendor Status</p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {(["pending", "active", "suspended"] as const).map((status) => {
-            const selected = values.status === status;
-            const label = status.charAt(0).toUpperCase() + status.slice(1);
+        {showStatusControls ? (
+          <>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">Vendor Status</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              {(["pending", "active", "suspended"] as const).map((status) => {
+                const selected = values.status === status;
+                const label = status.charAt(0).toUpperCase() + status.slice(1);
 
-            return (
-              <label
-                key={status}
-                className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-                  selected ? "border-[#615FFF]/40 bg-[#615FFF]/5" : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="vendor-status"
-                  checked={selected}
-                  onChange={() => handleFieldChange("status", status)}
-                  className="h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
-                />
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{label}</p>
-                  <p className="text-xs text-slate-500">
-                    {status === "pending"
-                      ? "Not approved for active marketplace use yet."
-                      : status === "active"
-                        ? "Ready for product ownership and future storefront visibility."
-                        : "Temporarily blocked from normal marketplace activity."}
-                  </p>
-                </div>
-              </label>
-            );
-          })}
-        </div>
+                return (
+                  <label
+                    key={status}
+                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+                      selected ? "border-[#615FFF]/40 bg-[#615FFF]/5" : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="vendor-status"
+                      checked={selected}
+                      onChange={() => handleFieldChange("status", status)}
+                      className="h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{label}</p>
+                      <p className="text-xs text-slate-500">
+                        {status === "pending"
+                          ? "Not approved for active marketplace use yet."
+                          : status === "active"
+                            ? "Ready for product ownership and future storefront visibility."
+                            : "Temporarily blocked from normal marketplace activity."}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-[#615FFF]/20 bg-[#615FFF]/5 px-4 py-3 text-sm text-slate-600">
+            Your vendor profile will be created in pending status and will wait for admin approval before workspace access is enabled.
+          </div>
+        )}
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className={`${showStatusControls ? "mt-6" : "mt-4"} flex flex-wrap gap-3`}>
           <button
             type="submit"
             disabled={isSubmitting}
