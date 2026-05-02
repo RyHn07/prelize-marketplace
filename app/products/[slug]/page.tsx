@@ -7,11 +7,35 @@ import ProductDetailsPurchasePanel from "@/components/product/product-details-pu
 import ProductDetailsTabs from "@/components/product/product-details-tabs";
 import {
   getProductCategoryOptions,
+  getProductImagesByProductId,
+  getProductImageMapByProductIds,
+  getProductSpecsByProductId,
   getPublicProductDetailBySlug,
   getPublicProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getVendorOptions } from "@/lib/vendors/queries";
+import type { ProductSpecification } from "@/types/product";
+
+function isStorefrontSpecification(value: unknown): value is ProductSpecification {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    "label" in value &&
+    "value" in value &&
+    typeof value.label === "string" &&
+    typeof value.value === "string"
+  );
+}
+
+function getFallbackSpecifications(specifications: unknown): ProductSpecification[] {
+  if (!Array.isArray(specifications)) {
+    return [];
+  }
+
+  return specifications.filter(isStorefrontSpecification);
+}
 
 type ProductDetailsPageProps = {
   params: Promise<{ slug: string }>;
@@ -31,12 +55,53 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const product = mapProductDbToStorefrontProduct(productRow, categoryOptions, vendorOptions);
+  const [{ data: productImages }, { data: productSpecs }] = await Promise.all([
+    getProductImagesByProductId(productRow.id),
+    getProductSpecsByProductId(productRow.id),
+  ]);
+  const galleryFromTable = productImages.map((item) => item.image_url).filter(Boolean);
+  const fallbackGallery =
+    productRow.gallery_images && productRow.gallery_images.length > 0
+      ? productRow.gallery_images
+      : productRow.image_url
+        ? [productRow.image_url]
+        : [];
+  const gallery = galleryFromTable.length > 0 ? galleryFromTable : fallbackGallery;
+  const specifications: ProductSpecification[] =
+    productSpecs.length > 0
+      ? productSpecs
+          .map((item) => ({
+            label: item.label,
+            value: item.value,
+          }))
+          .filter((item) => item.label.trim().length > 0 || item.value.trim().length > 0)
+      : getFallbackSpecifications(productRow.specifications);
+  const baseProduct = mapProductDbToStorefrontProduct(productRow, categoryOptions, vendorOptions);
+  const product = {
+    ...baseProduct,
+    image: gallery[0] ?? baseProduct.image,
+    gallery: gallery.length > 0 ? gallery : [baseProduct.image],
+    specifications,
+  };
   const category = getCategoryById(productRow.category_id, categoryOptions);
-  const relatedProducts = publicProducts
+  const relatedProductRows = publicProducts
     .filter((item) => item.category_id === productRow.category_id && item.slug !== productRow.slug)
-    .slice(0, 4)
-    .map((item) => mapProductDbToStorefrontProduct(item, categoryOptions, vendorOptions));
+    .slice(0, 4);
+  const { data: relatedImageMap } = await getProductImageMapByProductIds(
+    relatedProductRows.map((item) => item.id),
+  );
+  const relatedProducts = relatedProductRows.map((item) =>
+    mapProductDbToStorefrontProduct(
+      {
+        ...item,
+        gallery_images:
+          relatedImageMap.get(item.id) ??
+          (Array.isArray(item.gallery_images) ? item.gallery_images : item.image_url ? [item.image_url] : []),
+      },
+      categoryOptions,
+      vendorOptions,
+    ),
+  );
 
   return (
     <main className="min-h-screen bg-white">

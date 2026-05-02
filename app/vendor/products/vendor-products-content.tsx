@@ -37,7 +37,7 @@ function StatusBadge({ status }: { status: ProductStatus }) {
         ? "bg-amber-100 text-amber-700"
         : "bg-slate-200 text-slate-600";
 
-  const label = status === "disabled" ? "Disabled" : status === "draft" ? "Draft" : "Active";
+  const label = status === "disabled" ? "Archived" : status === "draft" ? "Draft" : "Published";
 
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${classes}`}>{label}</span>;
 }
@@ -230,8 +230,8 @@ export default function VendorProductsContent() {
               className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-emerald-500"
             >
               <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="disabled">Disabled</option>
+              <option value="active">Published</option>
+              <option value="disabled">Archived</option>
               <option value="draft">Draft</option>
             </select>
           </div>
@@ -268,7 +268,7 @@ export default function VendorProductsContent() {
             <p className="mt-2 text-2xl font-semibold text-slate-900">{products.length}</p>
           </div>
           <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Active</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Published</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-700">{activeCount}</p>
           </div>
           <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
@@ -276,7 +276,7 @@ export default function VendorProductsContent() {
             <p className="mt-2 text-2xl font-semibold text-amber-700">{draftCount}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Disabled</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Archived</p>
             <p className="mt-2 text-2xl font-semibold text-slate-700">{disabledCount}</p>
           </div>
         </div>

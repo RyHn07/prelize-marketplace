@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
+  ProductImageRow,
   ProductDbRow,
+  ProductSpecRow,
   ProductType,
   ProductUpsertPayload,
 } from "@/types/product-db";
@@ -60,6 +62,16 @@ function buildSchemaErrorMessage(message: string) {
   }
 
   return message;
+}
+
+function isMissingRelationError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("relation") ||
+    normalizedMessage.includes("does not exist") ||
+    normalizedMessage.includes("could not find")
+  );
 }
 
 function getMissingProductsColumn(message: string) {
@@ -265,6 +277,54 @@ function getBaseProductMetrics(
   };
 }
 
+async function syncProductRelationTables(
+  supabase: SupabaseClient,
+  productId: string,
+  payload: ProductUpsertPayload,
+) {
+  const imageRows = payload.gallery_images
+    .filter(Boolean)
+    .map((imageUrl, index) => ({
+      product_id: productId,
+      image_url: imageUrl,
+      sort_order: index,
+    })) satisfies Array<Pick<ProductImageRow, "product_id" | "image_url" | "sort_order">>;
+  const specRows = payload.specifications
+    .filter((spec) => spec.label.trim().length > 0 || spec.value.trim().length > 0)
+    .map((spec, index) => ({
+      product_id: productId,
+      label: spec.label.trim(),
+      value: spec.value.trim(),
+      sort_order: index,
+    })) satisfies Array<Pick<ProductSpecRow, "product_id" | "label" | "value" | "sort_order">>;
+
+  const { error: deleteImagesError } = await supabase.from("product_images").delete().eq("product_id", productId);
+  if (deleteImagesError && !isMissingRelationError(deleteImagesError.message)) {
+    return deleteImagesError;
+  }
+
+  const { error: deleteSpecsError } = await supabase.from("product_specs").delete().eq("product_id", productId);
+  if (deleteSpecsError && !isMissingRelationError(deleteSpecsError.message)) {
+    return deleteSpecsError;
+  }
+
+  if (imageRows.length > 0) {
+    const { error: insertImagesError } = await supabase.from("product_images").insert(imageRows as never);
+    if (insertImagesError && !isMissingRelationError(insertImagesError.message)) {
+      return insertImagesError;
+    }
+  }
+
+  if (specRows.length > 0) {
+    const { error: insertSpecsError } = await supabase.from("product_specs").insert(specRows as never);
+    if (insertSpecsError && !isMissingRelationError(insertSpecsError.message)) {
+      return insertSpecsError;
+    }
+  }
+
+  return null;
+}
+
 export async function createProductEditorRecordWithClient(
   supabase: SupabaseClient,
   payload: ProductEditorSavePayload,
@@ -331,6 +391,8 @@ export async function createProductEditorRecordWithClient(
       };
     }
   }
+
+  await syncProductRelationTables(supabase, (data as ProductDbRow).id, payload.product);
 
   return {
     data: data as ProductDbRow,
@@ -420,6 +482,8 @@ export async function updateProductEditorRecordWithClient(
       };
     }
   }
+
+  await syncProductRelationTables(supabase, id, payload.product);
 
   return {
     data: data as ProductDbRow,

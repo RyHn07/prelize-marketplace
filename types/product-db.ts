@@ -27,6 +27,23 @@ export type ProductSpecification = {
   value: string;
 };
 
+export type ProductImageRow = {
+  id: string;
+  product_id: string;
+  image_url: string;
+  sort_order: number | null;
+  created_at: string;
+};
+
+export type ProductSpecRow = {
+  id: string;
+  product_id: string;
+  label: string;
+  value: string;
+  sort_order: number | null;
+  created_at: string;
+};
+
 export type ProductReview = {
   author?: string;
   rating?: number;
@@ -100,6 +117,7 @@ export type ProductUpsertPayload = {
   discount_price: number | null;
   gallery_images: string[];
   attributes: ProductAttribute[];
+  specifications: ProductSpecification[];
   cdd_shipping_profile: ProductCddShippingProfile;
 };
 
@@ -135,14 +153,22 @@ export type ProductFormValues = {
   discount_price: string;
   moq: string;
   attributes: ProductAttributeFormValue[];
+  specifications: ProductSpecificationFormValue[];
   variations: ProductVariationFormValue[];
   cdd_shipping_profile: ProductCddShippingProfile;
+};
+
+export type ProductSpecificationFormValue = {
+  id: string;
+  label: string;
+  value: string;
 };
 
 export type ProductCategoryOption = {
   id: string;
   name: string;
   slug?: string;
+  parent_id?: string | null;
 };
 
 export type ProductVendorOption = {

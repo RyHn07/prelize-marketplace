@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -20,6 +20,8 @@ import type {
   ProductCddShippingProfile,
   ProductEditorRecord,
   ProductFormValues,
+  ProductSpecification,
+  ProductSpecificationFormValue,
   ProductStatus,
   ProductVariationFormValue,
   ProductVariantAttributeValues,
@@ -88,6 +90,14 @@ function createEmptyVariation(): ProductVariationFormValue {
     moq: "1",
     image_url: "",
     attribute_values: {},
+  };
+}
+
+function createEmptySpecification(): ProductSpecificationFormValue {
+  return {
+    id: createId("specification"),
+    label: "",
+    value: "",
   };
 }
 
@@ -182,6 +192,22 @@ function getInitialValues(
     discount_price: product?.discount_price ? String(product.discount_price) : "",
     moq: product?.moq ? String(product.moq) : "1",
     attributes: inferAttributesFromVariants(record),
+    specifications:
+      Array.isArray(product?.specifications) && product.specifications.length > 0
+        ? product.specifications
+            .map((spec) => {
+              if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+                return null;
+              }
+
+              return {
+                id: createId("specification"),
+                label: "label" in spec && typeof spec.label === "string" ? spec.label : "",
+                value: "value" in spec && typeof spec.value === "string" ? spec.value : "",
+              };
+            })
+            .filter((spec): spec is ProductSpecificationFormValue => spec !== null)
+        : [createEmptySpecification()],
     cdd_shipping_profile: product?.cdd_shipping_profile ?? "standard",
     variations:
       record?.variants.map((variant) => ({
@@ -262,6 +288,14 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
         values: splitAttributeValues(attribute.values),
       }))
       .filter((attribute) => attribute.name && attribute.values.length > 0),
+    specifications: values.specifications
+      .map(
+        (specification): ProductSpecification => ({
+          label: specification.label.trim(),
+          value: specification.value.trim(),
+        }),
+      )
+      .filter((specification) => specification.label.length > 0 || specification.value.length > 0),
     cdd_shipping_profile: values.cdd_shipping_profile,
   };
 }
@@ -318,7 +352,7 @@ function ProductStatusBadge({ status }: { status: ProductStatus }) {
         ? "bg-amber-100 text-amber-700"
         : "bg-slate-200 text-slate-600";
 
-  const label = status === "disabled" ? "Disabled" : status === "draft" ? "Draft" : "Active";
+  const label = status === "disabled" ? "Archived" : status === "draft" ? "Draft" : "Published";
 
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${styles}`}>{label}</span>;
 }
@@ -422,6 +456,7 @@ function MediaField({
   helperText,
   libraryHref,
   vendorId,
+  allowManualUrl = false,
 }: {
   label: string;
   value: string;
@@ -429,6 +464,7 @@ function MediaField({
   helperText?: string;
   libraryHref?: string;
   vendorId?: string | null;
+  allowManualUrl?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -582,28 +618,30 @@ function MediaField({
 
         <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
 
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-slate-700">Or paste image URL</label>
+        {allowManualUrl ? (
           <div className="space-y-2">
-            <input
-              type="url"
-              value={urlDraft}
-              onChange={(event) => setUrlDraft(event.target.value)}
-              placeholder="https://example.com/image.jpg"
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                clearLocalPreview();
-                onChange(urlDraft.trim());
-              }}
-              className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-            >
-              Use URL
-            </button>
+            <label className="block text-sm font-medium text-slate-700">Or paste image URL</label>
+            <div className="space-y-2">
+              <input
+                type="url"
+                value={urlDraft}
+                onChange={(event) => setUrlDraft(event.target.value)}
+                placeholder="https://example.com/image.jpg"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  clearLocalPreview();
+                  onChange(urlDraft.trim());
+                }}
+                className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+              >
+                Use URL
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {pickerOpen ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -731,6 +769,18 @@ function ProductForm({
       : "Update the product details without affecting storefront checkout or order flows.";
 
   const totalVariationCount = values.variations.length;
+  const orderedCategories = useMemo(() => {
+    const topLevel = categories
+      .filter((category) => !category.parent_id)
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return topLevel.flatMap((category) => [
+      category,
+      ...categories
+        .filter((child) => child.parent_id === category.id)
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    ]);
+  }, [categories]);
 
   const searchParamsString = searchParams.toString();
 
@@ -768,6 +818,19 @@ function ProductForm({
     }));
   };
 
+  const handleSpecificationChange = (
+    id: string,
+    field: keyof ProductSpecificationFormValue,
+    value: string,
+  ) => {
+    setValues((current) => ({
+      ...current,
+      specifications: current.specifications.map((specification) =>
+        specification.id === id ? { ...specification, [field]: value } : specification,
+      ),
+    }));
+  };
+
   const addAttribute = () => {
     setValues((current) => ({
       ...current,
@@ -796,6 +859,23 @@ function ProductForm({
     setValues((current) => ({
       ...current,
       variations: current.variations.filter((variation) => variation.id !== id),
+    }));
+  };
+
+  const addSpecification = () => {
+    setValues((current) => ({
+      ...current,
+      specifications: [...current.specifications, createEmptySpecification()],
+    }));
+  };
+
+  const removeSpecification = (id: string) => {
+    setValues((current) => ({
+      ...current,
+      specifications:
+        current.specifications.length > 1
+          ? current.specifications.filter((specification) => specification.id !== id)
+          : [createEmptySpecification()],
     }));
   };
 
@@ -1024,7 +1104,9 @@ function ProductForm({
                   : mode === "create"
                     ? values.status === "draft"
                       ? "Save Draft"
-                      : "Publish Product"
+                      : values.status === "disabled"
+                        ? "Archive Product"
+                        : "Publish Product"
                     : "Update Product"}
               </button>
           </div>
@@ -1359,7 +1441,8 @@ function ProductForm({
             <div className="space-y-3">
               {(["active", "disabled", "draft"] as const).map((status) => {
                 const selected = values.status === status;
-                const label = status === "active" ? "Active" : status === "disabled" ? "Disabled" : "Draft";
+                const label =
+                  status === "active" ? "Published" : status === "disabled" ? "Archived" : "Draft";
 
                 return (
                   <label
@@ -1379,10 +1462,10 @@ function ProductForm({
                       <p className="text-sm font-semibold text-slate-900">{label}</p>
                       <p className="text-xs text-slate-500">
                         {status === "active"
-                          ? "Visible and ready for internal use."
+                          ? "Published and ready for storefront or marketplace use."
                           : status === "draft"
                             ? "Saved as draft for later completion."
-                            : "Disabled and not ready for publishing."}
+                            : "Archived and hidden from normal active product workflows."}
                       </p>
                     </div>
                   </label>
@@ -1404,9 +1487,9 @@ function ProductForm({
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                 >
                   <option value="">{categoriesLoading ? "Loading categories..." : "Select category"}</option>
-                  {categories.map((category) => (
+                  {orderedCategories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {category.parent_id ? `- ${category.name}` : category.name}
                     </option>
                   ))}
                 </select>
@@ -1533,6 +1616,58 @@ function ProductForm({
             </div>
           </CardSection>
 
+          <CardSection title="Product Specifications" description="Add simple key-value details for technical or marketplace reference information.">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-slate-500">{values.specifications.length} specification row(s)</p>
+                <button
+                  type="button"
+                  onClick={addSpecification}
+                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                >
+                  Add Spec
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {values.specifications.map((specification, index) => (
+                  <div
+                    key={specification.id}
+                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-900">Specification {index + 1}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeSpecification(specification.id)}
+                        className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TextField
+                        id={`product-spec-label-${specification.id}`}
+                        label="Label"
+                        value={specification.label}
+                        onChange={(value) => handleSpecificationChange(specification.id, "label", value)}
+                        placeholder="Material, Origin, Packaging"
+                      />
+                      <TextField
+                        id={`product-spec-value-${specification.id}`}
+                        label="Value"
+                        value={specification.value}
+                        onChange={(value) => handleSpecificationChange(specification.id, "value", value)}
+                        placeholder="Cotton, China, 12 pcs per carton"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardSection>
+
           <CardSection title="Quick Summary" description="A quick overview before you save the product.">
             <div className="space-y-3 text-sm text-slate-600">
               <div className="flex items-center justify-between gap-3">
@@ -1557,6 +1692,17 @@ function ProductForm({
                 <span>Gallery Images</span>
                 <span className="font-semibold text-slate-900">
                   {values.gallery_images.filter(Boolean).length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>Specifications</span>
+                <span className="font-semibold text-slate-900">
+                  {
+                    values.specifications.filter(
+                      (specification) =>
+                        specification.label.trim().length > 0 || specification.value.trim().length > 0,
+                    ).length
+                  }
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">

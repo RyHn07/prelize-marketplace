@@ -11,6 +11,7 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 type CategoryFormState = {
   name: string;
   slug: string;
+  parent_id: string;
 };
 
 function toSlug(value: string) {
@@ -43,6 +44,7 @@ function formatDate(value: string | null | undefined) {
 const EMPTY_FORM: CategoryFormState = {
   name: "",
   slug: "",
+  parent_id: "",
 };
 
 export default function AdminCategoriesPage() {
@@ -110,6 +112,7 @@ export default function AdminCategoriesPage() {
 
   const filteredCategories = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
+    const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
 
     return categories.filter((category) => {
       if (query.length === 0) {
@@ -118,10 +121,37 @@ export default function AdminCategoriesPage() {
 
       return (
         category.name.toLowerCase().includes(query) ||
-        category.slug.toLowerCase().includes(query)
+        category.slug.toLowerCase().includes(query) ||
+        (category.parent_id ? (categoryNameById.get(category.parent_id) ?? "").toLowerCase().includes(query) : false)
       );
     });
   }, [categories, searchQuery]);
+
+  const categoryNameById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category.name])),
+    [categories],
+  );
+
+  const orderedCategories = useMemo(() => {
+    const topLevel = categories
+      .filter((category) => !category.parent_id)
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    return topLevel.flatMap((category) => [
+      category,
+      ...categories
+        .filter((child) => child.parent_id === category.id)
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    ]);
+  }, [categories]);
+
+  const parentOptions = useMemo(
+    () =>
+      categories
+        .filter((category) => !editingCategoryId || category.id !== editingCategoryId)
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [categories, editingCategoryId],
+  );
 
   const assignedCategoriesCount = useMemo(
     () => categories.filter((category) => (productCounts[category.id] ?? 0) > 0).length,
@@ -135,6 +165,7 @@ export default function AdminCategoriesPage() {
     setForm({
       name: category.name,
       slug: category.slug,
+      parent_id: category.parent_id ?? "",
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -163,6 +194,7 @@ export default function AdminCategoriesPage() {
     const payload = {
       name: trimmedName,
       slug: form.slug.trim() || toSlug(trimmedName),
+      parent_id: form.parent_id || null,
     };
 
     const result = editingCategoryId
@@ -348,6 +380,33 @@ export default function AdminCategoriesPage() {
               <p className="mt-2 text-xs text-slate-400">Only letters, numbers, and hyphens will be kept.</p>
             </div>
 
+            <div>
+              <label htmlFor="category-parent" className="mb-1.5 block text-sm font-medium text-slate-700">
+                Parent Category
+              </label>
+              <select
+                id="category-parent"
+                value={form.parent_id}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    parent_id: event.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+              >
+                <option value="">Main Category</option>
+                {parentOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-slate-400">
+                Leave empty for a main category, or pick a parent to create a subcategory.
+              </p>
+            </div>
+
             <div className="flex flex-wrap gap-3 pt-2">
               <button
                 type="submit"
@@ -402,9 +461,10 @@ export default function AdminCategoriesPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredCategories.map((category) => {
+              {orderedCategories.filter((category) => filteredCategories.some((entry) => entry.id === category.id)).map((category) => {
                 const linkedProductCount = productCounts[category.id] ?? 0;
                 const isDeleting = deletingCategoryId === category.id;
+                const parentName = category.parent_id ? categoryNameById.get(category.parent_id) ?? "Unknown parent" : null;
 
                 return (
                   <article
@@ -412,10 +472,17 @@ export default function AdminCategoriesPage() {
                     className="rounded-2xl border border-slate-200 bg-white p-4"
                   >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                      <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
                         <div>
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Name</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">{category.name}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">
+                            {parentName ? `- ${category.name}` : category.name}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Parent</p>
+                          <p className="mt-1 text-sm text-slate-600">{parentName ?? "Main Category"}</p>
                         </div>
 
                         <div>

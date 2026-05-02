@@ -17,19 +17,22 @@ const tabs: Array<{ key: TabKey; label: string }> = [
 ];
 
 export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps) {
+  const hasSpecifications = product.specifications.length > 0;
   const [activeTab, setActiveTab] = useState<TabKey>("specifications");
   const reviews = product.reviews ?? [];
+  const visibleTabs = hasSpecifications ? tabs : tabs.filter((tab) => tab.key !== "specifications");
+  const effectiveActiveTab = !hasSpecifications && activeTab === "specifications" ? "description" : activeTab;
 
   return (
     <div className="mt-10 space-y-6">
       <nav className="flex flex-wrap gap-6 border-b border-slate-200">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
             className={
-              activeTab === tab.key
+              effectiveActiveTab === tab.key
                 ? "border-b-2 border-[#615FFF] px-0 py-3 text-sm font-semibold text-[#615FFF] transition-colors"
                 : "border-b-2 border-transparent px-0 py-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
             }
@@ -39,7 +42,7 @@ export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps)
         ))}
       </nav>
 
-      {activeTab === "specifications" ? (
+      {hasSpecifications && effectiveActiveTab === "specifications" ? (
         <section className="bg-white">
           <h2 className="text-xl font-semibold text-slate-900">Product Specifications</h2>
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
@@ -59,7 +62,7 @@ export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps)
         </section>
       ) : null}
 
-      {activeTab === "description" ? (
+      {effectiveActiveTab === "description" ? (
         <section className="bg-white">
           <h2 className="text-xl font-semibold text-slate-900">Product Description</h2>
           <div className="mt-5 bg-white">
@@ -68,7 +71,7 @@ export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps)
         </section>
       ) : null}
 
-      {activeTab === "reviews" ? (
+      {effectiveActiveTab === "reviews" ? (
         <section className="bg-white">
           <h2 className="text-xl font-semibold text-slate-900">Customer Review</h2>
           <div className="mt-5 space-y-4">

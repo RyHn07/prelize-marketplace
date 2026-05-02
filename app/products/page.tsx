@@ -1,6 +1,6 @@
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
-import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { getProductCategoryOptions, getProductImageMapByProductIds, getPublicProducts } from "@/lib/products/queries";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 
@@ -24,9 +24,19 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     getVendorOptions(),
     getPublicProducts(),
   ]);
+  const { data: imageMap } = await getProductImageMapByProductIds(publicProducts.map((product) => product.id));
 
   const storefrontProducts = publicProducts.map((product) =>
-    mapProductDbToStorefrontProduct(product, categoryOptions, vendorOptions),
+    mapProductDbToStorefrontProduct(
+      {
+        ...product,
+        gallery_images:
+          imageMap.get(product.id) ??
+          (Array.isArray(product.gallery_images) ? product.gallery_images : product.image_url ? [product.image_url] : []),
+      },
+      categoryOptions,
+      vendorOptions,
+    ),
   );
 
   const filteredProducts = activeCategory

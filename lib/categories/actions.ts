@@ -4,6 +4,7 @@ import type { AdminCategoryRow } from "@/lib/categories/queries";
 export type CategoryUpsertPayload = {
   name: string;
   slug: string;
+  parent_id: string | null;
 };
 
 function normalizeCategorySlug(value: string) {
@@ -107,8 +108,9 @@ export async function createCategory(payload: CategoryUpsertPayload) {
     .insert({
       name: payload.name.trim(),
       slug: slugResult.slug,
+      parent_id: payload.parent_id,
     } as never)
-    .select("id, name, slug, created_at")
+    .select("id, name, slug, parent_id, created_at")
     .single();
 
   if (error || !data) {
@@ -146,9 +148,10 @@ export async function updateCategory(id: string, payload: CategoryUpsertPayload)
     .update({
       name: payload.name.trim(),
       slug: slugResult.slug,
+      parent_id: payload.parent_id,
     } as never)
     .eq("id", id)
-    .select("id, name, slug, created_at")
+    .select("id, name, slug, parent_id, created_at")
     .single();
 
   if (error || !data) {
@@ -172,10 +175,16 @@ export async function updateCategory(id: string, payload: CategoryUpsertPayload)
 
 export async function deleteCategory(id: string) {
   const supabase = getSupabaseClient();
-  const { count, error: linkedProductsError } = await supabase
+  const [{ count, error: linkedProductsError }, { count: childCount, error: childCountError }] = await Promise.all([
+    supabase
     .from("products")
     .select("id", { count: "exact", head: true })
-    .eq("category_id", id);
+    .eq("category_id", id),
+    supabase
+      .from("categories")
+      .select("id", { count: "exact", head: true })
+      .eq("parent_id", id),
+  ]);
 
   if (linkedProductsError) {
     return {
@@ -186,10 +195,27 @@ export async function deleteCategory(id: string) {
     };
   }
 
+  if (childCountError) {
+    return {
+      error: {
+        ...childCountError,
+        message: "Unable to confirm whether subcategories are linked to this category right now.",
+      },
+    };
+  }
+
   if ((count ?? 0) > 0) {
     return {
       error: {
         message: "This category is still assigned to products. Reassign those products before deleting it.",
+      },
+    };
+  }
+
+  if ((childCount ?? 0) > 0) {
+    return {
+      error: {
+        message: "This category still has subcategories. Move or remove those subcategories before deleting it.",
       },
     };
   }

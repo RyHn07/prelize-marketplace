@@ -6,6 +6,8 @@ import type {
   ProductDbRow,
   ProductDbVariantRow,
   ProductEditorRecord,
+  ProductImageRow,
+  ProductSpecRow,
   ProductStatus,
   ProductType,
   ProductVendorOption,
@@ -185,6 +187,71 @@ function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
   };
 }
 
+function isMissingRelationError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("relation") ||
+    normalizedMessage.includes("does not exist") ||
+    normalizedMessage.includes("could not find")
+  );
+}
+
+async function loadProductRelationRecords(productId: string) {
+  const supabase = getSupabaseClient();
+  const [{ data: imageRows, error: imageError }, { data: specRows, error: specError }] = await Promise.all([
+    supabase
+      .from("product_images")
+      .select("id, product_id, image_url, sort_order, created_at")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("product_specs")
+      .select("id, product_id, label, value, sort_order, created_at")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ]);
+
+  return {
+    imageRows: imageError && isMissingRelationError(imageError.message) ? [] : ((imageRows ?? []) as ProductImageRow[]),
+    imageError: imageError && isMissingRelationError(imageError.message) ? null : imageError,
+    specRows: specError && isMissingRelationError(specError.message) ? [] : ((specRows ?? []) as ProductSpecRow[]),
+    specError: specError && isMissingRelationError(specError.message) ? null : specError,
+  };
+}
+
+function mergeProductRelations(
+  product: ProductDbRow,
+  imageRows: ProductImageRow[],
+  specRows: ProductSpecRow[],
+) {
+  const galleryImages =
+    imageRows.length > 0
+      ? imageRows.map((row) => row.image_url).filter(Boolean)
+      : Array.isArray(product.gallery_images)
+        ? product.gallery_images
+        : [];
+  const specifications =
+    specRows.length > 0
+      ? specRows
+          .map((row) => ({
+            label: row.label,
+            value: row.value,
+          }))
+          .filter((row) => row.label.trim().length > 0 || row.value.trim().length > 0)
+      : Array.isArray(product.specifications)
+        ? product.specifications
+        : [];
+
+  return {
+    ...product,
+    gallery_images: galleryImages,
+    specifications,
+  };
+}
+
 export async function getPublicProductDetailBySlug(slug: string) {
   const productResult = await getPublicProductBySlug(slug);
 
@@ -196,12 +263,14 @@ export async function getPublicProductDetailBySlug(slug: string) {
   }
 
   if (productResult.data.product_type !== "variable") {
+    const relationResult = await loadProductRelationRecords(productResult.data.id);
+
     return {
       data: {
-        product: productResult.data,
+        product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
         variants: [] as ProductDbVariantRow[],
       },
-      error: null,
+      error: relationResult.imageError ?? relationResult.specError,
     };
   }
 
@@ -214,22 +283,25 @@ export async function getPublicProductDetailBySlug(slug: string) {
 
   if (variantsError) {
     const missingVariantsTable = variantsError.message.toLowerCase().includes("product_variants");
+    const relationResult = await loadProductRelationRecords(productResult.data.id);
 
     return {
       data: {
-        product: productResult.data,
+        product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
         variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
       },
-      error: missingVariantsTable ? null : variantsError,
+      error: missingVariantsTable ? relationResult.imageError ?? relationResult.specError : variantsError,
     };
   }
 
+  const relationResult = await loadProductRelationRecords(productResult.data.id);
+
   return {
     data: {
-      product: productResult.data,
+      product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
       variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
     },
-    error: null,
+    error: relationResult.imageError ?? relationResult.specError,
   };
 }
 
@@ -252,22 +324,25 @@ export async function getProductEditorRecord(id: string) {
 
   if (variantsError) {
     const missingVariantsTable = variantsError.message.toLowerCase().includes("product_variants");
+    const relationResult = await loadProductRelationRecords(id);
 
     return {
       data: {
-        product: productResult.data,
+        product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
         variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
       },
-      error: missingVariantsTable ? null : variantsError,
+      error: missingVariantsTable ? relationResult.imageError ?? relationResult.specError : variantsError,
     };
   }
 
+  const relationResult = await loadProductRelationRecords(id);
+
   return {
     data: {
-      product: productResult.data,
+      product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
       variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
     },
-    error: null,
+    error: relationResult.imageError ?? relationResult.specError,
   };
 }
 
@@ -290,28 +365,31 @@ export async function getProductEditorRecordForVendors(id: string, vendorIds: st
 
   if (variantsError) {
     const missingVariantsTable = variantsError.message.toLowerCase().includes("product_variants");
+    const relationResult = await loadProductRelationRecords(id);
 
     return {
       data: {
-        product: productResult.data,
+        product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
         variants: missingVariantsTable ? [] : ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
       },
-      error: missingVariantsTable ? null : variantsError,
+      error: missingVariantsTable ? relationResult.imageError ?? relationResult.specError : variantsError,
     };
   }
 
+  const relationResult = await loadProductRelationRecords(id);
+
   return {
     data: {
-      product: productResult.data,
+      product: mergeProductRelations(productResult.data, relationResult.imageRows, relationResult.specRows),
       variants: ((variants ?? []) as ProductDbVariantRow[]).map(normalizeVariant),
     },
-    error: null,
+    error: relationResult.imageError ?? relationResult.specError,
   };
 }
 
 export async function getProductCategoryOptions() {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("categories").select("id, name, slug").order("name", { ascending: true });
+  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id").order("name", { ascending: true });
 
   if (error) {
     return {
@@ -319,6 +397,7 @@ export async function getProductCategoryOptions() {
         id: category.id,
         name: category.name,
         slug: category.slug,
+        parent_id: null,
       })) satisfies ProductCategoryOption[],
       error: null,
     };
@@ -331,6 +410,7 @@ export async function getProductCategoryOptions() {
           id: category.id,
           name: category.name,
           slug: category.slug,
+          parent_id: null,
         })),
     error: null,
   };
@@ -348,6 +428,100 @@ export async function getProductVendorOptions() {
 
   return {
     data,
+    error: null,
+  };
+}
+
+export async function getProductImagesByProductId(productId: string) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("product_images")
+    .select("id, product_id, image_url, sort_order, created_at")
+    .eq("product_id", productId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: [] as ProductImageRow[],
+      error: null,
+    };
+  }
+
+  return {
+    data: (data ?? []) as ProductImageRow[],
+    error,
+  };
+}
+
+export async function getProductSpecsByProductId(productId: string) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("product_specs")
+    .select("id, product_id, label, value, sort_order, created_at")
+    .eq("product_id", productId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: [] as ProductSpecRow[],
+      error: null,
+    };
+  }
+
+  return {
+    data: (data ?? []) as ProductSpecRow[],
+    error,
+  };
+}
+
+export async function getProductImageMapByProductIds(productIds: string[]) {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
+
+  if (uniqueIds.length === 0) {
+    return {
+      data: new Map<string, string[]>(),
+      error: null,
+    };
+  }
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("product_images")
+    .select("product_id, image_url, sort_order, created_at")
+    .in("product_id", uniqueIds)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: new Map<string, string[]>(),
+      error: null,
+    };
+  }
+
+  if (error) {
+    return {
+      data: new Map<string, string[]>(),
+      error,
+    };
+  }
+
+  const imageMap = new Map<string, string[]>();
+
+  for (const row of (data ?? []) as Array<{ product_id: string; image_url: string | null }>) {
+    if (!row.product_id || !row.image_url) {
+      continue;
+    }
+
+    const current = imageMap.get(row.product_id) ?? [];
+    current.push(row.image_url);
+    imageMap.set(row.product_id, current);
+  }
+
+  return {
+    data: imageMap,
     error: null,
   };
 }
