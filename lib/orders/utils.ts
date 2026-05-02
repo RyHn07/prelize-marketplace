@@ -192,6 +192,10 @@ export function deriveParentOrderStatus(statuses: VendorOrderStatus[]) {
     return "Processing" as VendorOrderStatus;
   }
 
+  if (normalizedStatuses.some((status) => status === "Confirmed")) {
+    return "Confirmed" as VendorOrderStatus;
+  }
+
   return "Pending" as VendorOrderStatus;
 }
 

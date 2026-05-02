@@ -59,6 +59,7 @@ type ProductFormProps = {
   record?: ProductEditorRecord | null;
   allowedVendorIds?: string[];
   canAssignPlatformProducts?: boolean;
+  forcedVendorId?: string | null;
 };
 
 function createId(prefix: string) {
@@ -145,6 +146,7 @@ function getInitialValues(
   record?: ProductEditorRecord | null,
   allowedVendorIds: string[] = [],
   canAssignPlatformProducts = true,
+  forcedVendorId?: string | null,
 ): ProductFormValues {
   const product = record?.product;
   const isVariable = (product?.product_type ?? (record?.variants.length ? "variable" : "single")) === "variable";
@@ -152,7 +154,9 @@ function getInitialValues(
     ? ((product.status ?? (product.is_active ? "active" : "disabled")) as ProductStatus)
     : "active";
   const defaultVendorId =
-    product?.vendor_id ?? (!canAssignPlatformProducts && allowedVendorIds.length > 0 ? allowedVendorIds[0] : "");
+    forcedVendorId ??
+    product?.vendor_id ??
+    (!canAssignPlatformProducts && allowedVendorIds.length > 0 ? allowedVendorIds[0] : "");
 
   return {
     vendor_id: defaultVendorId,
@@ -254,6 +258,17 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
       }))
       .filter((attribute) => attribute.name && attribute.values.length > 0),
     cdd_shipping_profile: values.cdd_shipping_profile,
+  };
+}
+
+function applyForcedVendorId(payload: ProductUpsertPayload, forcedVendorId?: string | null) {
+  if (!forcedVendorId) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    vendor_id: forcedVendorId,
   };
 }
 
@@ -645,6 +660,7 @@ function ProductForm({
   record,
   allowedVendorIds = [],
   canAssignPlatformProducts = true,
+  forcedVendorId = null,
 }: ProductFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -653,7 +669,7 @@ function ProductForm({
   const messageRef = useRef<HTMLDivElement | null>(null);
   const appliedMediaSelectionRef = useRef<string | null>(null);
   const [values, setValues] = useState<ProductFormValues>(() =>
-    getInitialValues(record, allowedVendorIds, canAssignPlatformProducts),
+    getInitialValues(record, allowedVendorIds, canAssignPlatformProducts, forcedVendorId),
   );
   const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
   const [vendors, setVendors] = useState<ProductVendorOption[]>([]);
@@ -695,10 +711,10 @@ function ProductForm({
   }, [allowedVendorIds]);
 
   useEffect(() => {
-    setValues(getInitialValues(record, allowedVendorIds, canAssignPlatformProducts));
+    setValues(getInitialValues(record, allowedVendorIds, canAssignPlatformProducts, forcedVendorId));
     setErrorMessage("");
     setIsSubmitting(false);
-  }, [allowedVendorIds, canAssignPlatformProducts, mode, record]);
+  }, [allowedVendorIds, canAssignPlatformProducts, forcedVendorId, mode, record]);
 
   const pageTitle = mode === "create" ? "Add Product" : "Update Product";
   const pageDescription =
@@ -819,7 +835,7 @@ function ProductForm({
   };
 
   const validateForm = () => {
-    const payload = buildProductPayload(values);
+    const payload = applyForcedVendorId(buildProductPayload(values), forcedVendorId);
 
     if (!payload.name) {
       return "Product name is required.";
@@ -831,6 +847,16 @@ function ProductForm({
 
     if (!payload.product_type) {
       return "Product type is required.";
+    }
+
+    if (!canAssignPlatformProducts) {
+      if (!payload.vendor_id) {
+        return "No vendor account found for this product form.";
+      }
+
+      if (allowedVendorIds.length > 0 && !allowedVendorIds.includes(payload.vendor_id)) {
+        return "This product cannot be assigned outside your vendor account.";
+      }
     }
 
     if (payload.product_type === "single") {
@@ -874,7 +900,7 @@ function ProductForm({
     }
 
     const savePayload: ProductEditorSavePayload = {
-      product: buildProductPayload(values),
+      product: applyForcedVendorId(buildProductPayload(values), forcedVendorId),
       variants: values.product_type === "variable" ? buildVariantPayloads(values) : [],
     };
 
@@ -1018,7 +1044,7 @@ function ProductForm({
                   id="product-vendor"
                   value={values.vendor_id}
                   onChange={(event) => updateField("vendor_id", event.target.value)}
-                  disabled={!canAssignPlatformProducts && vendors.length <= 1}
+                  disabled={!canAssignPlatformProducts}
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                 >
                   {canAssignPlatformProducts ? (
@@ -1033,7 +1059,7 @@ function ProductForm({
                 <p className="mt-2 text-xs leading-5 text-slate-500">
                   {canAssignPlatformProducts
                     ? "Leave this empty for marketplace-managed products, or assign ownership to a vendor now."
-                    : "This product will stay scoped to your vendor access."}
+                    : "This product is locked to your current vendor account."}
                 </p>
               </div>
 

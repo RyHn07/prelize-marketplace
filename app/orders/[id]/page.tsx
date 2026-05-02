@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { getVendorsByIds } from "@/lib/vendors/queries";
 
 const ORDER_STEPS = ["Pending", "Confirmed", "Processing", "Shipped", "Delivered"] as const;
 
@@ -49,12 +50,14 @@ type OrderItemRow = {
   price: number;
   quantity: number;
   weight: number | null;
+  vendor_id?: string | null;
 };
 
 type GroupedOrderItem = {
   productId: string;
   name: string;
   image?: string;
+  vendorName?: string | null;
   items: OrderItemRow[];
   variantCount: number;
   totalQuantity: number;
@@ -130,7 +133,7 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-slate-900">{group.name}</h2>
-              <p className="text-sm text-slate-500">Marketplace Product</p>
+              <p className="text-sm text-slate-500">{group.vendorName ? `Vendor: ${group.vendorName}` : "Marketplace Product"}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>Variants: {group.variantCount}</span>
                 <span>Total Qty: {group.totalQuantity}</span>
@@ -177,6 +180,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [items, setItems] = useState<OrderItemRow[]>([]);
+  const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
@@ -249,9 +253,26 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         return;
       }
 
+      const normalizedItems = itemsError || !fetchedItems ? [] : (fetchedItems as OrderItemRow[]);
+      const vendorIds = Array.from(
+        new Set(
+          normalizedItems
+            .map((item) => item.vendor_id)
+            .filter((vendorId): vendorId is string => typeof vendorId === "string" && vendorId.length > 0),
+        ),
+      );
+      const vendorResult = vendorIds.length > 0 ? await getVendorsByIds(vendorIds) : { data: [], error: null };
+
+      if (!isMounted) {
+        return;
+      }
+
       setIsAuthorized(true);
       setOrder(orderRow);
-      setItems(itemsError || !fetchedItems ? [] : (fetchedItems as OrderItemRow[]));
+      setItems(normalizedItems);
+      setVendorNamesById(
+        Object.fromEntries(vendorResult.data.map((vendor) => [vendor.id, vendor.name])),
+      );
       setHasLoaded(true);
     };
 
@@ -290,6 +311,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         productId: item.product_id,
         name: item.product_name,
         image: item.product_image,
+        vendorName: item.vendor_id ? vendorNamesById[item.vendor_id] ?? null : null,
         items: [item],
         variantCount: 1,
         totalQuantity: item.quantity,
@@ -298,7 +320,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
     });
 
     return Array.from(groups.values());
-  }, [items, order]);
+  }, [items, order, vendorNamesById]);
 
   if (!hasLoaded || !isAuthorized) {
     return (

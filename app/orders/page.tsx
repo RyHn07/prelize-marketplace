@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
+import { getVendorsByIds } from "@/lib/vendors/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 type OrderSummary = {
@@ -45,12 +46,14 @@ type OrderItemRow = {
   price: number;
   quantity: number;
   weight: number | null;
+  vendor_id?: string | null;
 };
 
 type GroupedOrderItem = {
   productId: string;
   name: string;
   image: string;
+  vendorName?: string | null;
   items: OrderItemRow[];
   variantCount: number;
   totalQuantity: number;
@@ -113,7 +116,7 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-1">
               <h3 className="text-base font-semibold text-slate-900">{group.name}</h3>
-              <p className="text-sm text-slate-500">Marketplace Product</p>
+              <p className="text-sm text-slate-500">{group.vendorName ? `Vendor: ${group.vendorName}` : "Marketplace Product"}</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>Variants: {group.variantCount}</span>
                 <span>Total Qty: {group.totalQuantity}</span>
@@ -160,6 +163,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -237,12 +241,27 @@ export default function OrdersPage() {
       }
 
       const itemsByOrderId = new Map<string, OrderItemRow[]>();
+      const vendorIds = new Set<string>();
 
       (fetchedItems as OrderItemRow[]).forEach((item) => {
+        if (typeof item.vendor_id === "string" && item.vendor_id.length > 0) {
+          vendorIds.add(item.vendor_id);
+        }
+
         const currentItems = itemsByOrderId.get(item.order_id) ?? [];
         currentItems.push(item);
         itemsByOrderId.set(item.order_id, currentItems);
       });
+
+      const vendorResult = vendorIds.size > 0 ? await getVendorsByIds(Array.from(vendorIds)) : { data: [], error: null };
+
+      if (!isMounted) {
+        return;
+      }
+
+      setVendorNamesById(
+        Object.fromEntries(vendorResult.data.map((vendor) => [vendor.id, vendor.name])),
+      );
 
       setOrders(
         orderRows.map((order) => ({
@@ -322,6 +341,7 @@ export default function OrdersPage() {
           productId: item.product_id,
           name: item.product_name,
           image: item.product_image,
+          vendorName: item.vendor_id ? vendorNamesById[item.vendor_id] ?? null : null,
           items: [item],
           variantCount: 1,
           totalQuantity: item.quantity,
@@ -334,7 +354,7 @@ export default function OrdersPage() {
         groupedItems: Array.from(groups.values()),
       };
     });
-  }, [orders]);
+  }, [orders, vendorNamesById]);
 
   const handlePrint = () => {
     window.print();

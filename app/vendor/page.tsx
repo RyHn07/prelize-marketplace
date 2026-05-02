@@ -1,4 +1,34 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { getCurrentVendorMembership } from "@/lib/marketplace-access";
+import { getSupabaseClient } from "@/lib/supabase-client";
+
 export default function VendorDashboardPage() {
+  const [vendorId, setVendorId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const supabase = getSupabaseClient();
+
+    const loadVendorMembership = async () => {
+      const membership = await getCurrentVendorMembership(supabase);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setVendorId(membership?.vendor_id ?? null);
+    };
+
+    void loadVendorMembership();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <section className="mx-auto max-w-7xl">
       <div className="mb-6 space-y-2">
@@ -9,6 +39,7 @@ export default function VendorDashboardPage() {
         <p className="max-w-2xl text-sm text-slate-500">
           This vendor workspace is ready. Next we can connect live vendor product, order, and shop data here.
         </p>
+        {vendorId ? <p className="text-sm font-medium text-slate-600">Current vendor ID: {vendorId}</p> : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

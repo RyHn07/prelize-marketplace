@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
+import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorById } from "@/lib/vendors/queries";
 
@@ -61,6 +61,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
   const [hasVendorWorkspaceAccess, setHasVendorWorkspaceAccess] = useState(false);
   const [vendorName, setVendorName] = useState("Vendor");
   const [vendorRole, setVendorRole] = useState<string | null>(null);
+  const [vendorId, setVendorId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -68,6 +69,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
 
     const loadAccess = async () => {
       const access = await getVendorWorkspaceAccessState(supabase);
+      const currentVendorMembership = await getCurrentVendorMembership(supabase);
 
       if (!isMounted) {
         return;
@@ -76,6 +78,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
       setUserEmail(access.userEmail);
       setHasVendorWorkspaceAccess(access.hasVendorWorkspaceAccess);
       setVendorRole(access.activeVendorRole);
+      setVendorId(currentVendorMembership?.vendor_id ?? null);
 
       if (!access.activeVendorId) {
         setLoading(false);
@@ -154,6 +157,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
             <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">
               {vendorRole ?? "vendor"}
             </p>
+            {vendorId ? <p className="mt-2 text-xs text-slate-500">Vendor ID: {vendorId}</p> : null}
           </Link>
         </div>
 

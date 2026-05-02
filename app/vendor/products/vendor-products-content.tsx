@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
-import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
+import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getProductsForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductDbRow, ProductStatus, ProductType } from "@/types/product-db";
@@ -67,6 +67,7 @@ export default function VendorProductsContent() {
 
     const loadProducts = async () => {
       const access = await getVendorWorkspaceAccessState(supabase);
+      const membership = await getCurrentVendorMembership(supabase);
 
       if (!isMounted) {
         return;
@@ -74,14 +75,14 @@ export default function VendorProductsContent() {
 
       setUserEmail(access.userEmail);
       setHasVendorWorkspaceAccess(access.hasVendorWorkspaceAccess);
-      setActiveVendorId(access.activeVendorId);
+      setActiveVendorId(membership?.vendor_id ?? access.activeVendorId);
 
-      if (!access.userEmail || !access.hasVendorWorkspaceAccess || !access.activeVendorId) {
+      if (!access.userEmail || !membership?.vendor_id) {
         setLoading(false);
         return;
       }
 
-      const productResult = await getProductsForVendors([access.activeVendorId]);
+      const productResult = await getProductsForVendors([membership.vendor_id]);
 
       if (!isMounted) {
         return;
@@ -153,7 +154,7 @@ export default function VendorProductsContent() {
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-        Loading...
+        Loading vendor products...
       </div>
     );
   }
@@ -177,7 +178,10 @@ export default function VendorProductsContent() {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Vendor Products</h1>
-        <p className="mt-3 text-sm text-slate-500">Your account does not have vendor product access yet.</p>
+        <p className="mt-3 text-sm text-slate-500">No vendor account found.</p>
+        <p className="mt-2 text-xs text-slate-400">
+          Ask an admin to create a vendor record and active vendor membership for your user account.
+        </p>
       </div>
     );
   }
@@ -283,6 +287,7 @@ export default function VendorProductsContent() {
             <p className="mt-2 text-sm text-slate-500">
               No vendor products are assigned yet. Add your first product to start building your catalog.
             </p>
+            <p className="mt-2 break-all text-xs text-slate-400">Current vendor ID: {activeVendorId}</p>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">

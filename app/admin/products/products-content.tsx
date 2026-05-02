@@ -334,7 +334,7 @@ export default function ProductsContent() {
                         )}
                       </div>
 
-                      <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
+                      <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-8">
                         <div className="xl:col-span-2">
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Name</p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{product.name}</p>
@@ -359,6 +359,13 @@ export default function ProductsContent() {
                           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor</p>
                           <p className="mt-1 text-sm font-medium text-slate-700">
                             {product.vendor_id ? vendorNameById.get(product.vendor_id) ?? "Assigned Vendor" : "Platform"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor ID</p>
+                          <p className="mt-1 break-all text-sm font-medium text-slate-700">
+                            {product.vendor_id ?? "Platform"}
                           </p>
                         </div>
 

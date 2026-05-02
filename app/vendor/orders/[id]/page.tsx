@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import {
+  deriveParentOrderStatus,
   formatBDT,
   formatOrderDate,
   getAllowedVendorStatusTransitions,
@@ -21,6 +22,7 @@ type ParentOrderRow = {
   id: string;
   order_number: string;
   user_email: string;
+  status: VendorOrderRow["status"];
   buyer: Record<string, string | number | boolean | null> | null;
   created_at: string;
 };
@@ -114,7 +116,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       const [{ data: fetchedParentOrder }, { data: fetchedItems }] = await Promise.all([
         supabase
           .from("orders")
-          .select("id, order_number, user_email, buyer, created_at")
+          .select("id, order_number, user_email, status, buyer, created_at")
           .eq("id", normalizedVendorOrder.order_id)
           .maybeSingle(),
         supabase
@@ -150,6 +152,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
 
   const handleStatusUpdate = async (nextStatus: VendorOrderRow["status"]) => {
     if (!vendorOrder) {
+      setErrorMessage("Vendor order details are missing. Reload this page and try again.");
       return;
     }
 
@@ -176,10 +179,68 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       return;
     }
 
+    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await supabase
+      .from("vendor_orders")
+      .select("status")
+      .eq("order_id", vendorOrder.order_id);
+
+    if (siblingVendorOrdersError) {
+      setVendorOrder({
+        ...vendorOrder,
+        status: nextStatus,
+      });
+      setErrorMessage("Vendor order status updated, but parent marketplace order sync failed while loading vendor statuses.");
+      setIsUpdatingStatus(false);
+      return;
+    }
+
+    const derivedParentStatus = deriveParentOrderStatus(
+      ((siblingVendorOrders ?? []) as Array<{ status: VendorOrderRow["status"] }>).map((row) => safeOrderStatus(row.status)),
+    );
+
+    if (!parentOrder) {
+      setVendorOrder({
+        ...vendorOrder,
+        status: nextStatus,
+      });
+      setErrorMessage("Vendor order status updated, but the parent marketplace order record is unavailable for status sync.");
+      setIsUpdatingStatus(false);
+      return;
+    }
+
+    const currentParentStatus = safeOrderStatus(parentOrder.status);
+
+    if (currentParentStatus !== derivedParentStatus) {
+      const { error: parentOrderSyncError } = await supabase
+        .from("orders")
+        .update({ status: derivedParentStatus } as never)
+        .eq("id", vendorOrder.order_id);
+
+      if (parentOrderSyncError) {
+        setVendorOrder({
+          ...vendorOrder,
+          status: nextStatus,
+        });
+        setErrorMessage(
+          `Vendor order status updated, but parent marketplace order sync failed: ${parentOrderSyncError.message}`,
+        );
+        setIsUpdatingStatus(false);
+        return;
+      }
+    }
+
     setVendorOrder({
       ...vendorOrder,
       status: nextStatus,
     });
+    setParentOrder((current) =>
+      current
+        ? {
+            ...current,
+            status: derivedParentStatus,
+          }
+        : current,
+    );
     setIsUpdatingStatus(false);
   };
 

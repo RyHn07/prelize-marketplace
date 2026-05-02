@@ -1,5 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { ProductVendorOption, VendorRow, VendorStatus } from "@/types/product-db";
+import type { ProductVendorOption, VendorMemberRow, VendorRow, VendorStatus } from "@/types/product-db";
 
 function normalizeVendorStatus(value: unknown): VendorStatus {
   return value === "active" || value === "suspended" ? value : "pending";
@@ -134,5 +134,55 @@ export async function getVendorProductCounts() {
   return {
     data: counts,
     error: null,
+  };
+}
+
+export async function getVendorMemberships() {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("vendor_members")
+    .select("id, vendor_id, user_id, role, status, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: [] as VendorMemberRow[],
+      error: null,
+    };
+  }
+
+  return {
+    data: (data ?? []) as VendorMemberRow[],
+    error,
+  };
+}
+
+export type VendorOwnedProductDebugRow = {
+  id: string;
+  name: string;
+  slug: string;
+  vendor_id: string | null;
+  status?: string | null;
+  created_at?: string | null;
+};
+
+export async function getVendorOwnedProductsDebug() {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, name, slug, vendor_id, status, created_at")
+    .not("vendor_id", "is", null)
+    .order("created_at", { ascending: false });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: [] as VendorOwnedProductDebugRow[],
+      error: null,
+    };
+  }
+
+  return {
+    data: (data ?? []) as VendorOwnedProductDebugRow[],
+    error,
   };
 }

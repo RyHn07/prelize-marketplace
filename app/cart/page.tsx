@@ -18,6 +18,7 @@ import {
 import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { getVendorsByIds } from "@/lib/vendors/queries";
 import type { ProductDbRow } from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
@@ -51,6 +52,7 @@ type ProductGroup = {
   image: string;
   slug?: string;
   shortDescription?: string | null;
+  vendorName?: string | null;
   items: QuoteItem[];
 };
 
@@ -251,6 +253,7 @@ export default function CartPage() {
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
   const hasInitializedSelection = useRef(false);
@@ -335,6 +338,29 @@ export default function CartPage() {
       }
 
       setProductRecords(result.data);
+
+      const vendorIds = Array.from(
+        new Set(
+          result.data
+            .map((product) => product.vendor_id)
+            .filter((vendorId): vendorId is string => typeof vendorId === "string" && vendorId.length > 0),
+        ),
+      );
+
+      if (vendorIds.length === 0) {
+        setVendorNamesById({});
+        return;
+      }
+
+      const vendorResult = await getVendorsByIds(vendorIds);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setVendorNamesById(
+        Object.fromEntries(vendorResult.data.map((vendor) => [vendor.id, vendor.name])),
+      );
     };
 
     void loadProductRecords();
@@ -398,12 +424,13 @@ export default function CartPage() {
         image: productMatch?.image_url ?? item.image,
         slug: productMatch?.slug,
         shortDescription: productMatch?.short_description ?? productMatch?.description ?? null,
+        vendorName: productMatch?.vendor_id ? vendorNamesById[productMatch.vendor_id] ?? null : null,
         items: [item],
       });
     });
 
     return Array.from(groupedItems.values());
-  }, [items, productRecordMap]);
+  }, [items, productRecordMap, vendorNamesById]);
 
   const itemAvailabilityIssues = useMemo(() => {
     const issues = new Map<string, ItemAvailabilityIssue>();
@@ -694,7 +721,7 @@ export default function CartPage() {
 
                         <div className="min-w-0 space-y-1">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            Marketplace Product
+                            {group.vendorName ? `Vendor: ${group.vendorName}` : "Marketplace Product"}
                           </p>
                           <h2 className="text-lg font-semibold text-slate-900">
                             Product: {group.name}

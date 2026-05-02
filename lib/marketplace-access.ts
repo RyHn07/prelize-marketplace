@@ -10,6 +10,8 @@ type VendorMembership = {
   status: VendorMemberStatus;
 };
 
+export type CurrentVendorMembership = VendorMembership | null;
+
 export type MarketplaceAccessState = {
   userId: string | null;
   userEmail: string | null;
@@ -120,8 +122,7 @@ export async function getVendorWorkspaceAccessState(
   supabase: SupabaseClient,
 ): Promise<VendorWorkspaceAccessState> {
   const accessState = await getMarketplaceAccessState(supabase);
-  const activeMembership =
-    accessState.vendorMemberships.find((membership) => membership.status === "active") ?? null;
+  const activeMembership = getCurrentVendorMembershipFromAccessState(accessState);
 
   return {
     ...accessState,
@@ -129,4 +130,17 @@ export async function getVendorWorkspaceAccessState(
     activeVendorId: activeMembership?.vendor_id ?? null,
     activeVendorRole: activeMembership?.role ?? null,
   };
+}
+
+export function getCurrentVendorMembershipFromAccessState(
+  accessState: MarketplaceAccessState,
+): CurrentVendorMembership {
+  return accessState.vendorMemberships.find((membership) => membership.status === "active") ?? null;
+}
+
+export async function getCurrentVendorMembership(
+  supabase: SupabaseClient,
+): Promise<CurrentVendorMembership> {
+  const accessState = await getMarketplaceAccessState(supabase);
+  return getCurrentVendorMembershipFromAccessState(accessState);
 }
