@@ -51,6 +51,10 @@ type OrderRow = {
   buyer: BuyerInfo | null;
   admin_note: string | null;
   cnds_cost_total?: number | null;
+  international_shipping_method_id?: string | null;
+  international_shipping_method_name?: string | null;
+  international_shipping_total?: number | null;
+  international_shipping_status?: string | null;
   summary: OrderSummary;
   shipping_methods: ShippingMethodRow[] | null;
   created_at: string;
@@ -669,6 +673,17 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
             <SummaryRow label="Quantity" value={String(order.summary.quantity ?? order.summary.totalQuantity ?? 0)} />
             <SummaryRow label="Product Price" value={formatBDT(order.summary.productPrice ?? 0)} />
             <SummaryRow label="CNDS Cost" value={formatBDT(order.cnds_cost_total ?? order.summary.cddCharge ?? 0)} />
+            <SummaryRow
+              label="International Shipping"
+              value={
+                order.international_shipping_status === "calculated" &&
+                typeof order.international_shipping_total === "number"
+                  ? formatBDT(order.international_shipping_total)
+                  : typeof order.summary.payOnDelivery === "number"
+                    ? formatBDT(order.summary.payOnDelivery)
+                    : "Pending review"
+              }
+            />
             <SummaryRow label="Pay Now" value={formatBDT(order.summary.payNow ?? 0)} strong />
           </div>
 
@@ -680,9 +695,12 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
               <div className="text-right">
                 <p className="text-lg font-semibold text-slate-700">
-                  {typeof order.summary.payOnDelivery === "number"
-                    ? formatBDT(order.summary.payOnDelivery)
-                    : "Pending review"}
+                  {order.international_shipping_status === "calculated" &&
+                  typeof order.international_shipping_total === "number"
+                    ? formatBDT(order.international_shipping_total)
+                    : typeof order.summary.payOnDelivery === "number"
+                      ? formatBDT(order.summary.payOnDelivery)
+                      : "Pending review"}
                 </p>
                 <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">International shipping</p>
               </div>

@@ -6,6 +6,7 @@ export type ProductStatus = "active" | "disabled" | "draft";
 export type ProductType = "single" | "variable";
 export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bulk";
 export type CndsShippingPricingType = "unit" | "fixed";
+export type InternationalShippingStatus = "pending_review" | "calculated";
 export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
 export type VendorMemberStatus = "active" | "invited" | "disabled";
@@ -74,6 +75,30 @@ export type CndsShippingProfileOption = {
   pricing_type: CndsShippingPricingType;
   is_active: boolean;
   tiers: CndsShippingTierRow[];
+};
+
+export type InternationalShippingTierRow = {
+  id: string;
+  method_id: string;
+  min_weight_kg: number;
+  max_weight_kg: number | null;
+  price_per_kg: number;
+  sort_order: number;
+  created_at: string | null;
+};
+
+export type InternationalShippingMethodRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  delivery_min_days: number | null;
+  delivery_max_days: number | null;
+  minimum_weight_kg: number;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string | null;
+  tiers: InternationalShippingTierRow[];
 };
 
 export type ProductReview = {
@@ -309,6 +334,8 @@ export type OrderItemRow = {
   price: number;
   quantity: number;
   weight: number | null;
+  weight_kg?: number | null;
+  total_weight_kg?: number | null;
   cnds_cost?: number | null;
   cnds_profile_id?: string | null;
   vendor_id?: string | null;

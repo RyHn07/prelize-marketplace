@@ -16,11 +16,17 @@ import {
   updateQuoteItem,
 } from "@/components/quote/quote-utils";
 import { fetchCndsProfilesForCart } from "@/lib/cnds/actions";
+import { fetchActiveInternationalShippingMethods } from "@/lib/international-shipping/actions";
+import {
+  calculateInternationalShippingEstimate,
+  calculateTotalWeightKg,
+  formatDeliveryWindow,
+} from "@/lib/international-shipping/utils";
 import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
-import type { CndsShippingProfileOption, ProductDbRow } from "@/types/product-db";
+import type { CndsShippingProfileOption, InternationalShippingMethodRow, ProductDbRow } from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
 const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
@@ -66,6 +72,7 @@ type AuthUser = {
 type CheckoutDraft = {
   selectedKeys: string[];
   selectedShippingProfiles: Record<string, string>;
+  selectedInternationalShippingMethodId?: string;
 };
 
 type ItemAvailabilityIssue = {
@@ -253,6 +260,8 @@ export default function CartPage() {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
+  const [internationalShippingMethods, setInternationalShippingMethods] = useState<InternationalShippingMethodRow[]>([]);
+  const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileOption>>({});
@@ -281,6 +290,38 @@ export default function CartPage() {
     return () => {
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener(QUOTE_UPDATED_EVENT, syncQuoteItems);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInternationalShippingMethods = async () => {
+      try {
+        const result = await fetchActiveInternationalShippingMethods();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setInternationalShippingMethods(result.methods);
+        setSelectedInternationalShippingMethodId((current) =>
+          current && result.methods.some((method) => method.id === current)
+            ? current
+            : result.methods[0]?.id ?? "",
+        );
+      } catch {
+        if (isMounted) {
+          setInternationalShippingMethods([]);
+          setSelectedInternationalShippingMethodId("");
+        }
+      }
+    };
+
+    void loadInternationalShippingMethods();
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -538,9 +579,34 @@ export default function CartPage() {
   }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, productGroups, productRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
-  const cartDisplayTotals = useMemo(() => calculateCartDisplayTotals(selectedGroupedItems), [selectedGroupedItems]);
-
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
+  const selectedInternationalShippingMethod = useMemo(
+    () =>
+      internationalShippingMethods.find((method) => method.id === selectedInternationalShippingMethodId) ??
+      internationalShippingMethods[0] ??
+      null,
+    [internationalShippingMethods, selectedInternationalShippingMethodId],
+  );
+  const internationalShippingSummary = useMemo(() => {
+    const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg(
+      selectedCartItems.map((item) => ({
+        weight: item.weight ?? null,
+        quantity: item.quantity,
+      })),
+    );
+
+    const estimate = calculateInternationalShippingEstimate(
+      selectedInternationalShippingMethod,
+      totalWeightKg,
+      hasUnknownWeight,
+    );
+
+    return {
+      totalWeightKg,
+      hasUnknownWeight,
+      ...estimate,
+    };
+  }, [selectedCartItems, selectedInternationalShippingMethod]);
 
   const allItemKeys = useMemo(
     () => items.filter((item) => !itemAvailabilityIssues.has(getVariantKey(item))).map((item) => getVariantKey(item)),
@@ -558,25 +624,15 @@ export default function CartPage() {
   );
 
   const shippingSummaryLabel = useMemo(() => {
-    const selectedProfileIds = productGroups
-      .filter((group) =>
-        group.items.some((item) => selectedKeySet.has(getVariantKey(item))),
-      )
-      .map((group) => effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id);
-
-    const uniqueProfileIds = Array.from(new Set(selectedProfileIds));
-
-    if (uniqueProfileIds.length === 0) {
-      return "No shipping method selected";
+    if (!selectedInternationalShippingMethod) {
+      return "No method selected";
     }
 
-    if (uniqueProfileIds.length === 1) {
-      const matchingProfile = shippingProfiles.find((profile) => profile.id === uniqueProfileIds[0]);
-      return matchingProfile?.name ?? "Shipping selected";
-    }
-
-    return "Multiple shipping methods selected";
-  }, [effectiveSelectedShippingProfiles, productGroups, selectedKeySet]);
+    return formatDeliveryWindow(
+      selectedInternationalShippingMethod.delivery_min_days,
+      selectedInternationalShippingMethod.delivery_max_days,
+    );
+  }, [selectedInternationalShippingMethod]);
 
   const toggleSelectAll = () => {
     setSelectedKeys((current) => (current.length === items.length ? [] : allItemKeys));
@@ -614,13 +670,6 @@ export default function CartPage() {
     });
   };
 
-  const handleShippingProfileChange = (productId: string, profileId: string) => {
-    setSelectedShippingProfiles((current) => ({
-      ...current,
-      [productId]: profileId,
-    }));
-  };
-
   const handleUpdateQuantity = (item: QuoteItem, quantity: number) => {
     updateQuoteItem(
       item.productId,
@@ -652,6 +701,8 @@ export default function CartPage() {
     const checkoutDraft: CheckoutDraft = {
       selectedKeys,
       selectedShippingProfiles: effectiveSelectedShippingProfiles,
+      selectedInternationalShippingMethodId:
+        selectedInternationalShippingMethod?.id ?? "",
     };
 
     window.localStorage.setItem(CHECKOUT_DRAFT_STORAGE_KEY, JSON.stringify(checkoutDraft));
@@ -722,10 +773,6 @@ export default function CartPage() {
                 const groupKeys = group.items.map((item) => getVariantKey(item));
                 const isGroupSelected = groupKeys.every((key) => selectedKeySet.has(key));
                 const groupHasUnavailableItems = group.items.some((item) => itemAvailabilityIssues.has(getVariantKey(item)));
-                const selectedProfileId =
-                  effectiveSelectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
-                const selectedProfile =
-                  shippingProfiles.find((profile) => profile.id === selectedProfileId) ?? shippingProfiles[0];
                 const selectedGroupItems = selectedGroupedItems[group.productId] ?? [];
                 const selectedGroupDisplayTotals = calculateCartDisplayTotals(
                   selectedGroupItems.length > 0 ? { [group.productId]: selectedGroupItems } : {},
@@ -880,24 +927,20 @@ export default function CartPage() {
                     <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
                       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                         <div className="space-y-2 lg:max-w-md">
-                          <p className="text-sm font-semibold text-slate-900">Shipping Method</p>
-                          <select
-                            value={selectedProfile.id}
-                            onChange={(event) =>
-                              handleShippingProfileChange(group.productId, event.target.value)
-                            }
-                            disabled={groupHasUnavailableItems}
-                            className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                            aria-label={`Shipping method for ${group.name}`}
-                          >
-                            {shippingProfiles.map((profile) => (
-                              <option key={profile.id} value={profile.id}>
-                                {profile.name} - {formatBDT(profile.ratePerKg)}/kg
-                              </option>
-                            ))}
-                          </select>
+                          <p className="text-sm font-semibold text-slate-900">International Shipping</p>
+                          <div className="rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm font-medium text-slate-800">
+                            {selectedInternationalShippingMethod?.name ?? "No method selected"}
+                          </div>
                           <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                            <span>Estimated delivery: {selectedProfile.estimate}</span>
+                            <span>
+                              Estimated delivery:{" "}
+                              {selectedInternationalShippingMethod
+                                ? formatDeliveryWindow(
+                                    selectedInternationalShippingMethod.delivery_min_days,
+                                    selectedInternationalShippingMethod.delivery_max_days,
+                                  )
+                                : PAY_ON_DELIVERY_PLACEHOLDER}
+                            </span>
                             <span>Group shipping: {PAY_ON_DELIVERY_PLACEHOLDER}</span>
                           </div>
                           <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
@@ -950,7 +993,9 @@ export default function CartPage() {
                     <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
                       <span>To Bangladesh</span>
                       <span className="text-slate-300">-</span>
-                      <span className="text-[#615FFF]">{shippingSummaryLabel}</span>
+                      <span className="text-[#615FFF]">
+                        {selectedInternationalShippingMethod?.name ?? "No method selected"}
+                      </span>
                     </div>
                   </div>
                   <button
@@ -960,6 +1005,39 @@ export default function CartPage() {
                   >
                     <LinkIcon />
                   </button>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    International Method
+                  </label>
+                  <select
+                    value={selectedInternationalShippingMethod?.id ?? ""}
+                    onChange={(event) => setSelectedInternationalShippingMethodId(event.target.value)}
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                    aria-label="Select international shipping method"
+                  >
+                    {internationalShippingMethods.length === 0 ? (
+                      <option value="">No active methods</option>
+                    ) : (
+                      internationalShippingMethods.map((method) => (
+                        <option key={method.id} value={method.id}>
+                          {method.name} - {formatDeliveryWindow(method.delivery_min_days, method.delivery_max_days)}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <p className="text-xs text-slate-500">
+                    Delivery estimate: {shippingSummaryLabel}
+                  </p>
+                  {internationalShippingSummary.warning ? (
+                    <p className="text-xs font-medium text-amber-700">
+                      {internationalShippingSummary.warning}
+                    </p>
+                  ) : internationalShippingSummary.totalWeightKg > 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Total selected weight: {internationalShippingSummary.totalWeightKg} kg
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -972,6 +1050,22 @@ export default function CartPage() {
                 <SummaryRow label="Product Price" value={formatBDT(totals.productPrice)} />
                 <SummaryRow label="CNDS Cost" value={formatBDT(totals.cddCharge)} />
                 <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
+                <SummaryRow
+                  label="International Shipping"
+                  value={
+                    internationalShippingSummary.total === null
+                      ? PAY_ON_DELIVERY_PLACEHOLDER
+                      : formatBDT(internationalShippingSummary.total)
+                  }
+                />
+                <SummaryRow
+                  label="Pay on Delivery"
+                  value={
+                    internationalShippingSummary.total === null
+                      ? PAY_ON_DELIVERY_PLACEHOLDER
+                      : formatBDT(internationalShippingSummary.total)
+                  }
+                />
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -991,7 +1085,11 @@ export default function CartPage() {
                   </div>
 
                   <div className="text-right">
-                    <p className="text-lg font-semibold text-slate-700">{PAY_ON_DELIVERY_PLACEHOLDER}</p>
+                    <p className="text-lg font-semibold text-slate-700">
+                      {internationalShippingSummary.total === null
+                        ? PAY_ON_DELIVERY_PLACEHOLDER
+                        : formatBDT(internationalShippingSummary.total)}
+                    </p>
                     <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
                       International shipping
                     </p>

@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { addToQuote } from "@/components/quote/quote-utils";
+import { calculateInternationalShippingEstimate, calculateTotalWeightKg, formatDeliveryWindow } from "@/lib/international-shipping/utils";
 import type { Product } from "@/types/product";
 import type {
   CndsShippingProfileRow,
+  InternationalShippingMethodRow,
   ProductAttribute,
   ProductDbRow,
   ProductDbVariantRow,
@@ -18,11 +20,6 @@ import {
 
 const MAX_QUANTITY = 9999;
 const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
-const INTERNATIONAL_SHIPPING_METHODS = [
-  { id: "air", name: "Air Shipping", ratePerKg: 1000, estimate: "7-12 days" },
-  { id: "sea", name: "Sea Shipping", ratePerKg: 350, estimate: "25-40 days" },
-  { id: "express-air", name: "Express Air", ratePerKg: 1300, estimate: "5-8 days" },
-] as const;
 
 type ProductOption = {
   id: string;
@@ -258,19 +255,21 @@ export default function ProductDetailsPurchasePanel({
   productRecord,
   variants,
   cndsProfile,
+  internationalShippingMethods,
 }: {
   product: Product;
   productRecord: ProductDbRow;
   variants: ProductDbVariantRow[];
   cndsProfile: CndsShippingProfileRow | null;
+  internationalShippingMethods: InternationalShippingMethodRow[];
 }) {
   const reviewCount = product.reviews?.length ?? 0;
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
-  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<
-    (typeof INTERNATIONAL_SHIPPING_METHODS)[number]["id"]
-  >(INTERNATIONAL_SHIPPING_METHODS[0].id);
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<string>(
+    internationalShippingMethods[0]?.id ?? "",
+  );
   const optionAttributes = useMemo(
     () => buildOptionAttributes(productRecord, variants),
     [productRecord, variants],
@@ -298,14 +297,15 @@ export default function ProductDetailsPurchasePanel({
     setSelectedAttributes({});
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
     setShowAllVariants(false);
-    setSelectedShippingMethodId(INTERNATIONAL_SHIPPING_METHODS[0].id);
-  }, [product.id, productOptions]);
+    setSelectedShippingMethodId(internationalShippingMethods[0]?.id ?? "");
+  }, [internationalShippingMethods, product.id, productOptions]);
 
   const selectedShippingMethod = useMemo(
     () =>
-      INTERNATIONAL_SHIPPING_METHODS.find((method) => method.id === selectedShippingMethodId) ??
-      INTERNATIONAL_SHIPPING_METHODS[0],
-    [selectedShippingMethodId],
+      internationalShippingMethods.find((method) => method.id === selectedShippingMethodId) ??
+      internationalShippingMethods[0] ??
+      null,
+    [internationalShippingMethods, selectedShippingMethodId],
   );
 
   const filteredOptions = useMemo(() => {
@@ -328,16 +328,32 @@ export default function ProductDetailsPurchasePanel({
     );
     const cndsCost = calculateCndsCost(quantity, cndsProfile);
     const payNow = productPrice + cndsCost;
-    const internationalShippingEstimate = null;
+    const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg([
+      {
+        weight:
+          productRecord.weight == null
+            ? null
+            : Number.isFinite(Number(productRecord.weight))
+              ? Number(productRecord.weight)
+              : null,
+        quantity,
+      },
+    ]);
+    const internationalShipping = calculateInternationalShippingEstimate(
+      selectedShippingMethod,
+      totalWeightKg,
+      hasUnknownWeight,
+    );
 
     return {
       quantity,
       productPrice,
       cndsCost,
       payNow,
-      internationalShippingEstimate,
+      totalWeightKg,
+      internationalShipping,
     };
-  }, [cndsProfile, productOptions, quantities]);
+  }, [cndsProfile, productOptions, productRecord.weight, quantities, selectedShippingMethod]);
 
   const updateQuantity = (optionId: string, nextQuantity: number) => {
     setQuantities((current) => ({
@@ -492,21 +508,32 @@ export default function ProductDetailsPurchasePanel({
         <div className="rounded-lg bg-slate-50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
-              <p className="text-sm text-slate-500">CN {"->"} BD Shipping</p>
+              <p className="text-sm text-slate-500">International Shipping</p>
               <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
-                <span>{selectedShippingMethod.name}</span>
+                <span>{selectedShippingMethod?.name ?? "No method available"}</span>
                 <span className="text-slate-300">-</span>
-                <span className="text-[#615FFF]">{selectedShippingMethod.estimate}</span>
+                <span className="text-[#615FFF]">
+                  {selectedShippingMethod
+                    ? formatDeliveryWindow(
+                        selectedShippingMethod.delivery_min_days,
+                        selectedShippingMethod.delivery_max_days,
+                      )
+                    : PAY_ON_DELIVERY_PLACEHOLDER}
+                </span>
               </div>
             </div>
             <button
               type="button"
               onClick={() =>
                 setSelectedShippingMethodId((current) => {
-                  const currentIndex = INTERNATIONAL_SHIPPING_METHODS.findIndex((method) => method.id === current);
-                  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % INTERNATIONAL_SHIPPING_METHODS.length : 0;
+                  if (internationalShippingMethods.length === 0) {
+                    return "";
+                  }
 
-                  return INTERNATIONAL_SHIPPING_METHODS[nextIndex].id;
+                  const currentIndex = internationalShippingMethods.findIndex((method) => method.id === current);
+                  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % internationalShippingMethods.length : 0;
+
+                  return internationalShippingMethods[nextIndex].id;
                 })
               }
               className="rounded-md p-2 text-slate-700 transition-colors hover:bg-white hover:text-[#615FFF]"
@@ -515,6 +542,11 @@ export default function ProductDetailsPurchasePanel({
               <LinkIcon />
             </button>
           </div>
+          {totals.internationalShipping.warning ? (
+            <p className="mt-3 text-sm text-amber-600">{totals.internationalShipping.warning}</p>
+          ) : totals.totalWeightKg > 0 ? (
+            <p className="mt-3 text-sm text-slate-500">Estimated total weight: {totals.totalWeightKg} kg</p>
+          ) : null}
         </div>
 
         <div className="space-y-0">
@@ -532,9 +564,9 @@ export default function ProductDetailsPurchasePanel({
 
             <div className="text-right">
               <p className="text-lg font-semibold text-slate-700">
-                {totals.internationalShippingEstimate === null
+                {totals.internationalShipping.total === null
                   ? PAY_ON_DELIVERY_PLACEHOLDER
-                  : formatCurrency(totals.internationalShippingEstimate)}
+                  : formatCurrency(totals.internationalShipping.total)}
               </p>
               <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
                 International shipping

@@ -15,11 +15,25 @@ import {
   type QuoteItem,
 } from "@/components/quote/quote-utils";
 import { fetchCndsProfilesForCart } from "@/lib/cnds/actions";
+import { fetchActiveInternationalShippingMethods } from "@/lib/international-shipping/actions";
+import {
+  calculateInternationalShippingEstimate,
+  calculateTotalWeightKg,
+  formatDeliveryWindow,
+} from "@/lib/international-shipping/utils";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
 import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { CndsShippingProfileRow, OrderSummaryRow, ProductDbRow, ShippingMethodRow, VendorOrderRow } from "@/types/product-db";
+import type {
+  CndsShippingProfileRow,
+  InternationalShippingMethodRow,
+  InternationalShippingStatus,
+  OrderSummaryRow,
+  ProductDbRow,
+  ShippingMethodRow,
+  VendorOrderRow,
+} from "@/types/product-db";
 
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
@@ -55,6 +69,7 @@ type AuthUser = {
 type CheckoutDraft = {
   selectedKeys: string[];
   selectedShippingProfiles: Record<string, string>;
+  selectedInternationalShippingMethodId?: string;
 };
 
 type BuyerForm = {
@@ -73,7 +88,7 @@ type SelectedProductGroup = {
   name: string;
   image: string;
   items: QuoteItem[];
-  shippingProfileName: string;
+  shippingMethodName: string;
 };
 
 type ItemAvailabilityIssue = {
@@ -166,6 +181,8 @@ export default function CheckoutPage() {
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
+  const [internationalShippingMethods, setInternationalShippingMethods] = useState<InternationalShippingMethodRow[]>([]);
+  const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileRow>>({});
@@ -204,6 +221,7 @@ export default function CheckoutPage() {
           const parsedDraft = JSON.parse(draftValue) as CheckoutDraft;
           setSelectedKeys(Array.isArray(parsedDraft.selectedKeys) ? parsedDraft.selectedKeys : []);
           setSelectedShippingProfiles(parsedDraft.selectedShippingProfiles ?? {});
+          setSelectedInternationalShippingMethodId(parsedDraft.selectedInternationalShippingMethodId ?? "");
         } catch {
           window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
         }
@@ -225,6 +243,38 @@ export default function CheckoutPage() {
       isMounted = false;
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener(QUOTE_UPDATED_EVENT, syncQuoteItems);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInternationalShippingMethods = async () => {
+      try {
+        const result = await fetchActiveInternationalShippingMethods();
+
+        if (!isMounted) {
+          return;
+        }
+
+        setInternationalShippingMethods(result.methods);
+        setSelectedInternationalShippingMethodId((current) =>
+          current && result.methods.some((method) => method.id === current)
+            ? current
+            : result.methods[0]?.id ?? "",
+        );
+      } catch {
+        if (isMounted) {
+          setInternationalShippingMethods([]);
+          setSelectedInternationalShippingMethodId("");
+        }
+      }
+    };
+
+    void loadInternationalShippingMethods();
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -424,6 +474,33 @@ export default function CheckoutPage() {
     [selectedGroupedItems],
   );
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
+  const selectedInternationalShippingMethod = useMemo(
+    () =>
+      internationalShippingMethods.find((method) => method.id === selectedInternationalShippingMethodId) ??
+      internationalShippingMethods[0] ??
+      null,
+    [internationalShippingMethods, selectedInternationalShippingMethodId],
+  );
+  const internationalShippingSummary = useMemo(() => {
+    const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg(
+      selectedCartItems.map((item) => ({
+        weight: item.weight ?? null,
+        quantity: item.quantity,
+      })),
+    );
+
+    const estimate = calculateInternationalShippingEstimate(
+      selectedInternationalShippingMethod,
+      totalWeightKg,
+      hasUnknownWeight,
+    );
+
+    return {
+      totalWeightKg,
+      hasUnknownWeight,
+      ...estimate,
+    };
+  }, [selectedCartItems, selectedInternationalShippingMethod]);
 
   const selectedProductGroups = useMemo<SelectedProductGroup[]>(() => {
     const groups = new Map<string, SelectedProductGroup>();
@@ -435,9 +512,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      const selectedShippingProfileId = selectedShippingProfiles[item.productId] ?? shippingProfiles[0].id;
-      const selectedShippingProfile =
-        shippingProfiles.find((profile) => profile.id === selectedShippingProfileId) ?? shippingProfiles[0];
       const existingGroup = groups.get(item.productId);
 
       if (existingGroup) {
@@ -450,12 +524,12 @@ export default function CheckoutPage() {
         name: productRecordMap.get(item.productId)?.name ?? item.name,
         image: productRecordMap.get(item.productId)?.image_url ?? item.image,
         items: [item],
-        shippingProfileName: selectedShippingProfile.name,
+        shippingMethodName: selectedInternationalShippingMethod?.name ?? "Pending review",
       });
     });
 
     return Array.from(groups.values());
-  }, [itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
+  }, [itemAvailabilityIssues, items, productRecordMap, selectedInternationalShippingMethod, selectedKeySet]);
 
   const handleBuyerFieldChange = (field: keyof BuyerForm, value: string) => {
     setBuyerForm((current) => ({
@@ -501,28 +575,25 @@ export default function CheckoutPage() {
       return;
     }
 
-    const shippingMethods: ShippingMethodRow[] = selectedProductGroups.map((group) => {
-      const shippingProfileId = selectedShippingProfiles[group.productId] ?? shippingProfiles[0].id;
-      const shippingProfile =
-        shippingProfiles.find((profile) => profile.id === shippingProfileId) ?? shippingProfiles[0];
-
-      return {
-        productId: group.productId,
-        productName: group.name,
-        shippingProfileId: shippingProfile.id,
-        shippingProfileName: shippingProfile.name,
-      };
-    });
+    const shippingMethods: ShippingMethodRow[] = selectedProductGroups.map((group) => ({
+      productId: group.productId,
+      productName: group.name,
+      shippingProfileId: selectedInternationalShippingMethod?.id ?? "",
+      shippingProfileName: selectedInternationalShippingMethod?.name ?? "Pending review",
+    }));
 
     const summary: OrderSummaryRow = {
       quantity: totals.totalQuantity,
       totalQuantity: totals.totalQuantity,
       productPrice: totals.productPrice,
       cddCharge: totals.cddCharge,
-      shippingCost: totals.shippingCost,
-      hasUnknownShipping: totals.hasUnknownShipping,
+      shippingCost: internationalShippingSummary.total,
+      hasUnknownShipping: internationalShippingSummary.status !== "calculated",
       payNow: totals.payNow,
-      payOnDelivery: totals.hasUnknownShipping ? "Confirmed after review" : totals.payOnDelivery,
+      payOnDelivery:
+        internationalShippingSummary.total === null
+          ? PAY_ON_DELIVERY_PLACEHOLDER
+          : internationalShippingSummary.total,
     };
 
     setOrderError("");
@@ -539,6 +610,8 @@ export default function CheckoutPage() {
         address: buyerForm.address.trim(),
         note: buyerForm.note.trim(),
       };
+      const internationalShippingStatus: InternationalShippingStatus =
+        internationalShippingSummary.total === null ? "pending_review" : "calculated";
 
       const { data: insertedOrder, error: orderInsertError } = await supabase
         .from("orders")
@@ -551,6 +624,10 @@ export default function CheckoutPage() {
           payment_status: DEFAULT_PAYMENT_STATUS,
           buyer,
           cnds_cost_total: totals.cddCharge,
+          international_shipping_method_id: selectedInternationalShippingMethod?.id ?? null,
+          international_shipping_method_name: selectedInternationalShippingMethod?.name ?? null,
+          international_shipping_total: internationalShippingSummary.total ?? 0,
+          international_shipping_status: internationalShippingStatus,
           summary,
           shipping_methods: shippingMethods,
         } as never)
@@ -672,6 +749,8 @@ export default function CheckoutPage() {
           price: item.price,
           quantity: item.quantity,
           weight: item.weight ?? null,
+          weight_kg: item.weight ?? null,
+          total_weight_kg: item.weight ? item.weight * item.quantity : null,
           cnds_cost: cndsCost,
           cnds_profile_id: item.cndsProfile?.id ?? costBreakdown?.profileId ?? null,
           vendor_id: vendorId,
@@ -900,7 +979,7 @@ export default function CheckoutPage() {
                       <div className="min-w-0 flex-1">
                         <h3 className="text-base font-semibold text-slate-900">{group.name}</h3>
                         <p className="mt-1 text-sm text-slate-500">
-                          Shipping Method: {group.shippingProfileName}
+                          International Shipping: {group.shippingMethodName}
                         </p>
                         <p className="mt-1 text-sm text-slate-500">
                           {group.items.length} variation{group.items.length > 1 ? "s" : ""} selected
@@ -932,6 +1011,53 @@ export default function CheckoutPage() {
           </div>
 
           <aside className="space-y-5 lg:sticky lg:top-6">
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-slate-900">International Shipping</h2>
+                <p className="text-sm text-slate-500">
+                  China to Bangladesh shipping is paid on delivery and stays separate from CNDS.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                <select
+                  value={selectedInternationalShippingMethod?.id ?? ""}
+                  onChange={(event) => setSelectedInternationalShippingMethodId(event.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  aria-label="Select international shipping method"
+                >
+                  {internationalShippingMethods.length === 0 ? (
+                    <option value="">No active methods</option>
+                  ) : (
+                    internationalShippingMethods.map((method) => (
+                      <option key={method.id} value={method.id}>
+                        {method.name} - {formatDeliveryWindow(method.delivery_min_days, method.delivery_max_days)}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                <p className="text-xs text-slate-500">
+                  Delivery estimate:{" "}
+                  {selectedInternationalShippingMethod
+                    ? formatDeliveryWindow(
+                        selectedInternationalShippingMethod.delivery_min_days,
+                        selectedInternationalShippingMethod.delivery_max_days,
+                      )
+                    : PAY_ON_DELIVERY_PLACEHOLDER}
+                </p>
+                {internationalShippingSummary.warning ? (
+                  <p className="text-xs font-medium text-amber-700">
+                    {internationalShippingSummary.warning}
+                  </p>
+                ) : internationalShippingSummary.totalWeightKg > 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Total selected weight: {internationalShippingSummary.totalWeightKg} kg
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Order Summary</h2>
             </div>
@@ -941,6 +1067,22 @@ export default function CheckoutPage() {
               <SummaryRow label="Product Price" value={formatBDT(totals.productPrice)} />
               <SummaryRow label="CNDS Cost" value={formatBDT(totals.cddCharge)} />
               <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
+              <SummaryRow
+                label="International Shipping"
+                value={
+                  internationalShippingSummary.total === null
+                    ? PAY_ON_DELIVERY_PLACEHOLDER
+                    : formatBDT(internationalShippingSummary.total)
+                }
+              />
+              <SummaryRow
+                label="Pay on Delivery"
+                value={
+                  internationalShippingSummary.total === null
+                    ? PAY_ON_DELIVERY_PLACEHOLDER
+                    : formatBDT(internationalShippingSummary.total)
+                }
+              />
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5">
@@ -960,7 +1102,11 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-lg font-semibold text-slate-700">{PAY_ON_DELIVERY_PLACEHOLDER}</p>
+                  <p className="text-lg font-semibold text-slate-700">
+                    {internationalShippingSummary.total === null
+                      ? PAY_ON_DELIVERY_PLACEHOLDER
+                      : formatBDT(internationalShippingSummary.total)}
+                  </p>
                   <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
                     International shipping
                   </p>
