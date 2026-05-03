@@ -36,6 +36,7 @@ type OrderRow = {
   payment_method: string | null;
   payment_status: string | null;
   created_at: string;
+  cnds_cost_total?: number | null;
   summary: OrderSummary;
   shipping_methods: ShippingMethod[] | null;
 };
@@ -50,6 +51,8 @@ type OrderItemRow = {
   price: number;
   quantity: number;
   weight: number | null;
+  cnds_cost?: number | null;
+  cnds_profile_id?: string | null;
   vendor_id?: string | null;
 };
 
@@ -460,8 +463,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                 value={formatBDT(order?.summary.productPrice ?? 0)}
               />
               <SummaryRow
-                label="CDD Charge"
-                value={formatBDT(order?.summary.cddCharge ?? 0)}
+                label="CNDS Cost"
+                value={formatBDT(order?.cnds_cost_total ?? order?.summary.cddCharge ?? 0)}
               />
               <SummaryRow
                 label="Pay Now"
@@ -480,10 +483,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                   <p className="text-lg font-semibold text-slate-700">
                     {typeof order?.summary.payOnDelivery === "number"
                       ? formatBDT(order.summary.payOnDelivery)
-                      : order?.summary.payOnDelivery ?? "Confirmed after review"}
+                      : "Pending review"}
                   </p>
                   <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
-                    Estimated shipping charge
+                    International shipping
                   </p>
                 </div>
               </div>

@@ -15,13 +15,15 @@ import {
   type QuoteItem,
   updateQuoteItem,
 } from "@/components/quote/quote-utils";
+import { fetchCndsProfilesForCart } from "@/lib/cnds/actions";
 import { getProductsByIds } from "@/lib/products/queries";
-import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
+import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
-import type { ProductDbRow } from "@/types/product-db";
+import type { CndsShippingProfileOption, ProductDbRow } from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
+const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
 
@@ -253,6 +255,7 @@ export default function CartPage() {
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileOption>>({});
   const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
@@ -338,6 +341,28 @@ export default function CartPage() {
       }
 
       setProductRecords(result.data);
+
+      const cndsProfileIds = Array.from(
+        new Set(
+          result.data
+            .map((product) => product.cnds_profile_id)
+            .filter((profileId): profileId is string => typeof profileId === "string" && profileId.length > 0),
+        ),
+      );
+
+      if (cndsProfileIds.length === 0) {
+        setCndsProfilesById({});
+      } else {
+        const cndsProfileResult = await fetchCndsProfilesForCart(cndsProfileIds);
+
+        if (!isMounted) {
+          return;
+        }
+
+        setCndsProfilesById(
+          Object.fromEntries(cndsProfileResult.profiles.map((profile) => [profile.id, profile])),
+        );
+      }
 
       const vendorIds = Array.from(
         new Set(
@@ -472,30 +497,48 @@ export default function CartPage() {
       const selectedShippingProfile =
         shippingProfiles.find((profile) => profile.id === selectedShippingProfileId) ?? shippingProfiles[0];
 
-      result[group.productId] = selectedItemsForGroup.map((item) => ({
-        productId: item.productId,
-        name: productMatch?.name ?? item.name,
-        image: productMatch?.image_url ?? item.image,
-        variation: item.variation,
-        variantId: item.variantId,
-        price: item.price,
-        quantity: item.quantity,
-        weight: parseWeight(
-        productMatch?.weight == null ? undefined : String(productMatch.weight)
-      ),
-        shippingProfile: {
-          id: selectedShippingProfile.id,
-          name: selectedShippingProfile.name,
-          ratePerKg: selectedShippingProfile.ratePerKg,
-        },
-        cddTiers: (productMatch as typeof productMatch & { cddTiers?: CartItem["cddTiers"] })?.cddTiers,
-      }));
+      result[group.productId] = selectedItemsForGroup.map((item) => {
+        const cndsProfileId = productMatch?.cnds_profile_id ?? null;
+        const cndsProfile = cndsProfileId ? cndsProfilesById[cndsProfileId] ?? null : null;
+
+        return {
+          productId: item.productId,
+          name: productMatch?.name ?? item.name,
+          image: productMatch?.image_url ?? item.image,
+          variation: item.variation,
+          variantId: item.variantId,
+          price: item.price,
+          quantity: item.quantity,
+          weight: parseWeight(
+            productMatch?.weight == null ? undefined : String(productMatch.weight)
+          ),
+          shippingProfile: {
+            id: selectedShippingProfile.id,
+            name: selectedShippingProfile.name,
+            ratePerKg: selectedShippingProfile.ratePerKg,
+          },
+          cndsProfile: cndsProfile
+            ? {
+                id: cndsProfile.id,
+                name: cndsProfile.name,
+                pricingType: cndsProfile.pricing_type,
+                tiers: cndsProfile.tiers.map((tier) => ({
+                  minQty: tier.min_qty,
+                  maxQty: tier.max_qty,
+                  price: tier.price,
+                })),
+              }
+            : null,
+          cddTiers: (productMatch as typeof productMatch & { cddTiers?: CartItem["cddTiers"] })?.cddTiers,
+        };
+      });
 
       return result;
     }, {});
-  }, [effectiveSelectedShippingProfiles, itemAvailabilityIssues, productGroups, productRecordMap, selectedKeySet]);
+  }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, productGroups, productRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
+  const cartDisplayTotals = useMemo(() => calculateCartDisplayTotals(selectedGroupedItems), [selectedGroupedItems]);
 
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
 
@@ -684,9 +727,10 @@ export default function CartPage() {
                 const selectedProfile =
                   shippingProfiles.find((profile) => profile.id === selectedProfileId) ?? shippingProfiles[0];
                 const selectedGroupItems = selectedGroupedItems[group.productId] ?? [];
-                const selectedGroupTotals = calculateCartTotals(
+                const selectedGroupDisplayTotals = calculateCartDisplayTotals(
                   selectedGroupItems.length > 0 ? { [group.productId]: selectedGroupItems } : {},
                 );
+                const selectedGroupCnds = calculateCndsShipping(selectedGroupItems);
                 const groupProduct = productRecordMap.get(group.productId);
                 const visibleSpecifications = Array.isArray(groupProduct?.specifications)
                   ? groupProduct.specifications
@@ -854,12 +898,29 @@ export default function CartPage() {
                           </select>
                           <div className="flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
                             <span>Estimated delivery: {selectedProfile.estimate}</span>
-                            <span>
-                              Group shipping:{" "}
-                              {selectedGroupTotals.hasUnknownShipping || selectedGroupTotals.payOnDelivery === null
-                                ? "Confirmed after review"
-                                : formatBDT(selectedGroupTotals.payOnDelivery)}
-                            </span>
+                            <span>Group shipping: {PAY_ON_DELIVERY_PLACEHOLDER}</span>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>CNDS Shipping</span>
+                              <span className="font-semibold text-slate-900">
+                                {selectedGroupCnds.profileName
+                                  ? formatBDT(selectedGroupDisplayTotals.cndsShipping)
+                                  : "Not assigned"}
+                              </span>
+                            </div>
+                            {selectedGroupCnds.profileName ? (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                {selectedGroupCnds.profileName} / 
+                                {selectedGroupCnds.pricingType === "unit"
+                                  ? "Per unit"
+                                  : "Fixed tier"}
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-[11px] text-slate-500">
+                                No CNDS profile is assigned to this product yet.
+                              </p>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500">
                             Final shipping cost will be confirmed after review.
@@ -909,7 +970,7 @@ export default function CartPage() {
               <div className="space-y-0 rounded-xl border border-slate-200 bg-white px-5">
                 <SummaryRow label="Quantity" value={String(totals.totalQuantity)} />
                 <SummaryRow label="Product Price" value={formatBDT(totals.productPrice)} />
-                <SummaryRow label="CDD Charge" value={formatBDT(totals.cddCharge)} />
+                <SummaryRow label="CNDS Cost" value={formatBDT(totals.cddCharge)} />
                 <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
               </div>
 
@@ -930,13 +991,9 @@ export default function CartPage() {
                   </div>
 
                   <div className="text-right">
-                    <p className="text-lg font-semibold text-slate-700">
-                      {totals.hasUnknownShipping || totals.payOnDelivery === null
-                        ? "Confirmed after review"
-                        : formatBDT(totals.payOnDelivery)}
-                    </p>
+                    <p className="text-lg font-semibold text-slate-700">{PAY_ON_DELIVERY_PLACEHOLDER}</p>
                     <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
-                      Estimated shipping charge
+                      International shipping
                     </p>
                   </div>
                 </div>
@@ -981,3 +1038,4 @@ export default function CartPage() {
     </main>
   );
 }
+

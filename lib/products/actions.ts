@@ -29,6 +29,7 @@ const REMOVABLE_LEGACY_COLUMNS = new Set([
   "badge",
   "category_id",
   "cdd_shipping_profile",
+  "cnds_profile_id",
   "description",
   "discount_price",
   "gallery_images",
@@ -52,9 +53,10 @@ function buildSchemaErrorMessage(message: string) {
     normalizedMessage.includes("vendor_id") ||
     normalizedMessage.includes("gallery_images") ||
     normalizedMessage.includes("attributes") ||
-    normalizedMessage.includes("cdd_shipping_profile")
+    normalizedMessage.includes("cdd_shipping_profile") ||
+    normalizedMessage.includes("cnds_profile_id")
   ) {
-    return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, and cdd_shipping_profile before saving the full product editor data.";
+    return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, cdd_shipping_profile, and cnds_profile_id before saving the full product editor data.";
   }
 
   if (normalizedMessage.includes("product_variants")) {

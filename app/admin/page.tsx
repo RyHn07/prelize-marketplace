@@ -433,7 +433,7 @@ export default function AdminPage() {
                       <p className="mt-1 text-sm font-medium text-slate-700">
                         {typeof order.summary.payOnDelivery === "number"
                           ? formatBDT(order.summary.payOnDelivery)
-                          : order.summary.payOnDelivery ?? "Confirmed after review"}
+                          : "Pending review"}
                       </p>
                     </div>
                   </div>

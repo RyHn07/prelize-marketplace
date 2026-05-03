@@ -12,6 +12,19 @@ type CDDTier = {
   charge: number
 }
 
+type CndsShippingTier = {
+  minQty: number
+  maxQty: number | null
+  price: number
+}
+
+type CndsShippingProfile = {
+  id: string
+  name: string
+  pricingType: "unit" | "fixed"
+  tiers: CndsShippingTier[]
+}
+
 export type CartItem = {
   productId: string
   name: string
@@ -23,6 +36,7 @@ export type CartItem = {
   weight?: number
   shippingProfile?: ShippingProfile
   cddTiers?: CDDTier[]
+  cndsProfile?: CndsShippingProfile | null
 }
 
 /* ----------------------------------------
@@ -86,6 +100,130 @@ export function calculateCDD(items: CartItem[]) {
   }
 }
 
+function getMatchedCndsTier(quantity: number, tiers: CndsShippingTier[]) {
+  return tiers.find((tier) =>
+    quantity >= tier.minQty &&
+    (tier.maxQty === null || quantity <= tier.maxQty)
+  ) ?? null
+}
+
+export function calculateCndsShipping(items: CartItem[]) {
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
+  const profile = items[0]?.cndsProfile ?? null
+
+  if (!profile || profile.tiers.length === 0) {
+    return {
+      totalQuantity,
+      profileName: null,
+      pricingType: null,
+      matchedTier: null,
+      shippingCost: 0
+    }
+  }
+
+  const matchedTier = getMatchedCndsTier(totalQuantity, profile.tiers)
+
+  if (!matchedTier) {
+    return {
+      totalQuantity,
+      profileName: profile.name,
+      pricingType: profile.pricingType,
+      matchedTier: null,
+      shippingCost: 0
+    }
+  }
+
+  const shippingCost =
+    profile.pricingType === "unit"
+      ? totalQuantity * matchedTier.price
+      : matchedTier.price
+
+  return {
+    totalQuantity,
+    profileName: profile.name,
+    pricingType: profile.pricingType,
+    matchedTier,
+    shippingCost
+  }
+}
+
+function calculateImmediateCharge(items: CartItem[]) {
+  const cnds = calculateCndsShipping(items)
+
+  if (cnds.profileName) {
+    return {
+      label: "cnds" as const,
+      amount: cnds.shippingCost
+    }
+  }
+
+  const cdd = calculateCDD(items)
+
+  return {
+    label: "cdd" as const,
+    amount: cdd.cddCharge
+  }
+}
+
+function roundCurrency(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100
+}
+
+function allocateFixedAmountByQuantity(items: CartItem[], totalAmount: number) {
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0)
+
+  if (totalQuantity <= 0) {
+    return items.map(() => 0)
+  }
+
+  let allocated = 0
+
+  return items.map((item, index) => {
+    if (index === items.length - 1) {
+      return roundCurrency(totalAmount - allocated)
+    }
+
+    const share = roundCurrency((totalAmount * item.quantity) / totalQuantity)
+    allocated += share
+    return share
+  })
+}
+
+export function calculateImmediateChargeBreakdown(items: CartItem[]) {
+  const cnds = calculateCndsShipping(items)
+
+  if (cnds.profileName && cnds.matchedTier) {
+    const matchedTierPrice = cnds.matchedTier.price
+
+    if (cnds.pricingType === "unit") {
+      const itemCosts = items.map((item) => roundCurrency(item.quantity * matchedTierPrice))
+
+      return {
+        label: "cnds" as const,
+        total: roundCurrency(itemCosts.reduce((sum, itemCost) => sum + itemCost, 0)),
+        profileId: items[0]?.cndsProfile?.id ?? null,
+        itemCosts
+      }
+    }
+
+    return {
+      label: "cnds" as const,
+      total: roundCurrency(cnds.shippingCost),
+      profileId: items[0]?.cndsProfile?.id ?? null,
+      itemCosts: allocateFixedAmountByQuantity(items, cnds.shippingCost)
+    }
+  }
+
+  const cdd = calculateCDD(items)
+
+  return {
+    label: "cdd" as const,
+    total: roundCurrency(cdd.cddCharge),
+    profileId: null,
+    itemCosts: items.map((item) => roundCurrency(item.quantity * cdd.ratePerItem))
+  }
+}
+
 /* ----------------------------------------
    3. SHIPPING CALCULATION
 ---------------------------------------- */
@@ -133,9 +271,9 @@ export function calculateCartTotals(
       productPrice += item.price * item.quantity
     }
 
-    // CDD
-    const cdd = calculateCDD(items)
-    cddCharge += cdd.cddCharge
+    // Immediate charge: CNDS first, legacy CDD fallback for older products
+    const immediateCharge = calculateImmediateCharge(items)
+    cddCharge += immediateCharge.amount
 
     // Shipping
     const shipping = calculateShipping(items)
@@ -155,5 +293,19 @@ export function calculateCartTotals(
     hasUnknownShipping,
     payNow: productPrice + cddCharge,
     payOnDelivery: hasUnknownShipping ? null : shippingCost
+  }
+}
+
+export function calculateCartDisplayTotals(
+  groupedItems: Record<string, CartItem[]>
+) {
+  const totals = calculateCartTotals(groupedItems)
+
+  return {
+    totalQuantity: totals.totalQuantity,
+    productPrice: totals.productPrice,
+    cndsShipping: totals.cddCharge,
+    subtotal: totals.productPrice,
+    total: totals.payNow
   }
 }

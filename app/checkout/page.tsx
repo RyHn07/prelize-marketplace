@@ -14,15 +14,17 @@ import {
   removeQuoteItem,
   type QuoteItem,
 } from "@/components/quote/quote-utils";
+import { fetchCndsProfilesForCart } from "@/lib/cnds/actions";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
 import { getProductsByIds } from "@/lib/products/queries";
-import { calculateCartTotals, type CartItem } from "@/lib/shipping-utils";
+import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { OrderSummaryRow, ProductDbRow, ShippingMethodRow, VendorOrderRow } from "@/types/product-db";
+import type { CndsShippingProfileRow, OrderSummaryRow, ProductDbRow, ShippingMethodRow, VendorOrderRow } from "@/types/product-db";
 
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
 const DEFAULT_PAYMENT_STATUS = "Pending";
+const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
 
 const shippingProfiles = [
   {
@@ -166,6 +168,7 @@ export default function CheckoutPage() {
   const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileRow>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -236,6 +239,29 @@ export default function CheckoutPage() {
       }
 
       setProductRecords(result.data);
+
+      const cndsProfileIds = Array.from(
+        new Set(
+          result.data
+            .map((product) => product.cnds_profile_id)
+            .filter((profileId): profileId is string => typeof profileId === "string" && profileId.length > 0),
+        ),
+      );
+
+      if (cndsProfileIds.length === 0) {
+        setCndsProfilesById({});
+        return;
+      }
+
+      const cndsProfileResult = await fetchCndsProfilesForCart(cndsProfileIds);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setCndsProfilesById(
+        Object.fromEntries(cndsProfileResult.profiles.map((profile) => [profile.id, profile])),
+      );
     };
 
     void loadProductRecords();
@@ -346,30 +372,57 @@ export default function CheckoutPage() {
       const selectedShippingProfile =
         shippingProfiles.find((profile) => profile.id === selectedShippingProfileId) ?? shippingProfiles[0];
 
-      result[productId] = groupItems.map((item) => ({
-        productId: item.productId,
-        name: productMatch?.name ?? item.name,
-        image: productMatch?.image_url ?? item.image,
-        variation: item.variation,
-        variantId: item.variantId,
-        price: item.price,
-        quantity: item.quantity,
-        weight: parseWeight(
+      result[productId] = groupItems.map((item) => {
+        const cndsProfileId = productMatch?.cnds_profile_id ?? null;
+        const cndsProfile = cndsProfileId ? cndsProfilesById[cndsProfileId] ?? null : null;
+
+        return {
+          productId: item.productId,
+          name: productMatch?.name ?? item.name,
+          image: productMatch?.image_url ?? item.image,
+          variation: item.variation,
+          variantId: item.variantId,
+          price: item.price,
+          quantity: item.quantity,
+          weight: parseWeight(
             productMatch?.weight == null ? undefined : String(productMatch.weight)
           ),
-        shippingProfile: {
-          id: selectedShippingProfile.id,
-          name: selectedShippingProfile.name,
-          ratePerKg: selectedShippingProfile.ratePerKg,
-        },
-        cddTiers: (productMatch as typeof productMatch & { cddTiers?: CartItem["cddTiers"] })?.cddTiers,
-      }));
+          shippingProfile: {
+            id: selectedShippingProfile.id,
+            name: selectedShippingProfile.name,
+            ratePerKg: selectedShippingProfile.ratePerKg,
+          },
+          cndsProfile: cndsProfile
+            ? {
+                id: cndsProfile.id,
+                name: cndsProfile.name,
+                pricingType: cndsProfile.pricing_type,
+                tiers: cndsProfile.tiers.map((tier) => ({
+                  minQty: tier.min_qty,
+                  maxQty: tier.max_qty,
+                  price: tier.price,
+                })),
+              }
+            : null,
+          cddTiers: (productMatch as typeof productMatch & { cddTiers?: CartItem["cddTiers"] })?.cddTiers,
+        };
+      });
 
       return result;
     }, {});
-  }, [itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
+  }, [cndsProfilesById, itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
+  const immediateChargeBreakdowns = useMemo(
+    () =>
+      new Map(
+        Object.entries(selectedGroupedItems).map(([productId, groupItems]) => [
+          productId,
+          calculateImmediateChargeBreakdown(groupItems),
+        ]),
+      ),
+    [selectedGroupedItems],
+  );
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
 
   const selectedProductGroups = useMemo<SelectedProductGroup[]>(() => {
@@ -497,6 +550,7 @@ export default function CheckoutPage() {
           payment_method: PAYMENT_METHOD,
           payment_status: DEFAULT_PAYMENT_STATUS,
           buyer,
+          cnds_cost_total: totals.cddCharge,
           summary,
           shipping_methods: shippingMethods,
         } as never)
@@ -600,18 +654,26 @@ export default function CheckoutPage() {
         }
       }
 
+      const productItemCostIndex = new Map<string, number>();
       const orderItemsPayload = selectedCartItems.map((item) => {
         const vendorId = productRecordMap.get(item.productId)?.vendor_id ?? null;
+        const costBreakdown = immediateChargeBreakdowns.get(item.productId);
+        const itemIndex = productItemCostIndex.get(item.productId) ?? 0;
+        const cndsCost = costBreakdown?.itemCosts[itemIndex] ?? 0;
+
+        productItemCostIndex.set(item.productId, itemIndex + 1);
 
         return {
-        order_id: createdOrder.id,
-        product_id: item.productId,
-        product_name: item.name,
-        product_image: item.image,
-        variation: item.variation,
-        price: item.price,
-        quantity: item.quantity,
-        weight: item.weight ?? null,
+          order_id: createdOrder.id,
+          product_id: item.productId,
+          product_name: item.name,
+          product_image: item.image,
+          variation: item.variation,
+          price: item.price,
+          quantity: item.quantity,
+          weight: item.weight ?? null,
+          cnds_cost: cndsCost,
+          cnds_profile_id: item.cndsProfile?.id ?? costBreakdown?.profileId ?? null,
           vendor_id: vendorId,
           vendor_order_id: vendorId ? vendorOrderIdByVendorId.get(vendorId) ?? null : null,
         };
@@ -877,7 +939,7 @@ export default function CheckoutPage() {
             <div className="space-y-0 rounded-xl border border-slate-200 bg-white px-5">
               <SummaryRow label="Quantity" value={String(totals.totalQuantity)} />
               <SummaryRow label="Product Price" value={formatBDT(totals.productPrice)} />
-              <SummaryRow label="CDD Charge" value={formatBDT(totals.cddCharge)} />
+              <SummaryRow label="CNDS Cost" value={formatBDT(totals.cddCharge)} />
               <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
             </div>
 
@@ -898,13 +960,9 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-lg font-semibold text-slate-700">
-                    {totals.hasUnknownShipping || totals.payOnDelivery === null
-                      ? "Confirmed after review"
-                      : formatBDT(totals.payOnDelivery)}
-                  </p>
+                  <p className="text-lg font-semibold text-slate-700">{PAY_ON_DELIVERY_PLACEHOLDER}</p>
                   <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
-                    Estimated shipping charge
+                    International shipping
                   </p>
                 </div>
               </div>

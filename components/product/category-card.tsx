@@ -10,7 +10,7 @@ interface CategoryCardProps {
 export default function CategoryCard({ category }: CategoryCardProps) {
   return (
     <Link
-      href={`/products?category=${category.slug}`}
+      href={`/categories/${category.slug}`}
       className="group overflow-hidden rounded-2xl border border-slate-200 bg-white transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_16px_36px_rgba(15,23,42,0.08)]"
     >
       <div className="aspect-[16/10] overflow-hidden bg-slate-50">

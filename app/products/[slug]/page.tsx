@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import ProductCard from "@/components/product/product-card";
 import ProductDetailsPurchasePanel from "@/components/product/product-details-purchase-panel";
 import ProductDetailsTabs from "@/components/product/product-details-tabs";
+import { getActiveCndsShippingProfileById } from "@/lib/cnds/server";
 import {
   getProductCategoryOptions,
   getProductImagesByProductId,
@@ -55,9 +56,10 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const [{ data: productImages }, { data: productSpecs }] = await Promise.all([
+  const [{ data: productImages }, { data: productSpecs }, { data: cndsProfile }] = await Promise.all([
     getProductImagesByProductId(productRow.id),
     getProductSpecsByProductId(productRow.id),
+    getActiveCndsShippingProfileById(productRow.cnds_profile_id),
   ]);
   const galleryFromTable = productImages.map((item) => item.image_url).filter(Boolean);
   const fallbackGallery =
@@ -152,7 +154,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
             </div>
           </div>
 
-          <ProductDetailsPurchasePanel product={product} productRecord={productRow} variants={variants} />
+          <ProductDetailsPurchasePanel product={product} productRecord={productRow} variants={variants} cndsProfile={cndsProfile} />
         </div>
 
         <ProductDetailsTabs product={product} />

@@ -5,6 +5,7 @@ export type JsonValue = JsonPrimitive | { [key: string]: JsonValue } | JsonValue
 export type ProductStatus = "active" | "disabled" | "draft";
 export type ProductType = "single" | "variable";
 export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bulk";
+export type CndsShippingPricingType = "unit" | "fixed";
 export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
 export type VendorMemberStatus = "active" | "invited" | "disabled";
@@ -42,6 +43,37 @@ export type ProductSpecRow = {
   value: string;
   sort_order: number | null;
   created_at: string;
+};
+
+export type CndsShippingTierRow = {
+  id: string;
+  profile_id: string;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order: number;
+  created_at: string | null;
+};
+
+export type CndsShippingProfileRow = {
+  id: string;
+  vendor_id: string | null;
+  name: string;
+  description: string | null;
+  pricing_type: CndsShippingPricingType;
+  is_active: boolean;
+  created_at: string | null;
+  tiers: CndsShippingTierRow[];
+};
+
+export type CndsShippingProfileOption = {
+  id: string;
+  vendor_id: string | null;
+  name: string;
+  description: string | null;
+  pricing_type: CndsShippingPricingType;
+  is_active: boolean;
+  tiers: CndsShippingTierRow[];
 };
 
 export type ProductReview = {
@@ -97,6 +129,7 @@ export type ProductDbRow = {
   short_description?: string | null;
   specifications?: ProductSpecification[] | JsonValue | null;
   reviews?: ProductReview[] | JsonValue | null;
+  cnds_profile_id?: string | null;
 };
 
 export type ProductUpsertPayload = {
@@ -119,6 +152,7 @@ export type ProductUpsertPayload = {
   attributes: ProductAttribute[];
   specifications: ProductSpecification[];
   cdd_shipping_profile: ProductCddShippingProfile;
+  cnds_profile_id: string | null;
 };
 
 export type ProductAttributeFormValue = {
@@ -156,6 +190,7 @@ export type ProductFormValues = {
   specifications: ProductSpecificationFormValue[];
   variations: ProductVariationFormValue[];
   cdd_shipping_profile: ProductCddShippingProfile;
+  cnds_profile_id: string;
 };
 
 export type ProductSpecificationFormValue = {
@@ -274,6 +309,8 @@ export type OrderItemRow = {
   price: number;
   quantity: number;
   weight: number | null;
+  cnds_cost?: number | null;
+  cnds_profile_id?: string | null;
   vendor_id?: string | null;
   vendor_order_id?: string | null;
 };

@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { addToQuote } from "@/components/quote/quote-utils";
 import type { Product } from "@/types/product";
 import type {
+  CndsShippingProfileRow,
   ProductAttribute,
-  ProductCddShippingProfile,
   ProductDbRow,
   ProductDbVariantRow,
 } from "@/types/product-db";
@@ -17,6 +17,12 @@ import {
 } from "@/components/wishlist/wishlist-utils";
 
 const MAX_QUANTITY = 9999;
+const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
+const INTERNATIONAL_SHIPPING_METHODS = [
+  { id: "air", name: "Air Shipping", ratePerKg: 1000, estimate: "7-12 days" },
+  { id: "sea", name: "Sea Shipping", ratePerKg: 350, estimate: "25-40 days" },
+  { id: "express-air", name: "Express Air", ratePerKg: 1300, estimate: "5-8 days" },
+] as const;
 
 type ProductOption = {
   id: string;
@@ -32,20 +38,8 @@ type ProductOptionAttribute = {
   values: string[];
 };
 
-const SHIPPING_PROFILE_LABELS: Record<ProductCddShippingProfile, string> = {
-  standard: "Standard shipping review",
-  express: "Express shipping review",
-  fragile: "Fragile cargo review",
-  bulk: "Bulk shipment review",
-};
-
 function formatCurrency(value: number) {
   return `\u09F3${value.toLocaleString()}`;
-}
-
-function getWeightValue(weight: string) {
-  const parsed = Number.parseFloat(weight);
-  return Number.isNaN(parsed) ? 0.5 : parsed;
 }
 
 function getEffectivePrice(regularPrice: number, discountPrice: number | null) {
@@ -118,6 +112,26 @@ function buildProductOptions(
       attributeValues: {},
     },
   ];
+}
+
+function calculateCndsCost(
+  quantity: number,
+  cndsProfile: CndsShippingProfileRow | null,
+) {
+  if (!cndsProfile || quantity <= 0) {
+    return 0;
+  }
+
+  const matchedTier =
+    cndsProfile.tiers.find(
+      (tier) => quantity >= tier.min_qty && (tier.max_qty === null || quantity <= tier.max_qty),
+    ) ?? null;
+
+  if (!matchedTier) {
+    return 0;
+  }
+
+  return cndsProfile.pricing_type === "unit" ? quantity * matchedTier.price : matchedTier.price;
 }
 
 function StarRating() {
@@ -243,15 +257,20 @@ export default function ProductDetailsPurchasePanel({
   product,
   productRecord,
   variants,
+  cndsProfile,
 }: {
   product: Product;
   productRecord: ProductDbRow;
   variants: ProductDbVariantRow[];
+  cndsProfile: CndsShippingProfileRow | null;
 }) {
   const reviewCount = product.reviews?.length ?? 0;
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<
+    (typeof INTERNATIONAL_SHIPPING_METHODS)[number]["id"]
+  >(INTERNATIONAL_SHIPPING_METHODS[0].id);
   const optionAttributes = useMemo(
     () => buildOptionAttributes(productRecord, variants),
     [productRecord, variants],
@@ -279,7 +298,15 @@ export default function ProductDetailsPurchasePanel({
     setSelectedAttributes({});
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
     setShowAllVariants(false);
+    setSelectedShippingMethodId(INTERNATIONAL_SHIPPING_METHODS[0].id);
   }, [product.id, productOptions]);
+
+  const selectedShippingMethod = useMemo(
+    () =>
+      INTERNATIONAL_SHIPPING_METHODS.find((method) => method.id === selectedShippingMethodId) ??
+      INTERNATIONAL_SHIPPING_METHODS[0],
+    [selectedShippingMethodId],
+  );
 
   const filteredOptions = useMemo(() => {
     return productOptions.filter((option) =>
@@ -299,18 +326,18 @@ export default function ProductDetailsPurchasePanel({
       (sum, option) => sum + option.price * (quantities[option.id] ?? 0),
       0,
     );
-    const cddCharge = quantity * 15;
-    const payNow = productPrice + cddCharge;
-    const estimatedShipping = Math.round(quantity * getWeightValue(product.weight) * 1000);
+    const cndsCost = calculateCndsCost(quantity, cndsProfile);
+    const payNow = productPrice + cndsCost;
+    const internationalShippingEstimate = null;
 
     return {
       quantity,
       productPrice,
-      cddCharge,
+      cndsCost,
       payNow,
-      estimatedShipping,
+      internationalShippingEstimate,
     };
-  }, [product.weight, productOptions, quantities]);
+  }, [cndsProfile, productOptions, quantities]);
 
   const updateQuantity = (optionId: string, nextQuantity: number) => {
     setQuantities((current) => ({
@@ -341,7 +368,7 @@ export default function ProductDetailsPurchasePanel({
     });
 
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
-    window.alert("Added to cart");
+    // window.alert("Added to cart");
   };
 
   return (
@@ -465,16 +492,25 @@ export default function ProductDetailsPurchasePanel({
         <div className="rounded-lg bg-slate-50 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-2">
-              <p className="text-sm text-slate-500">Shipping Method</p>
+              <p className="text-sm text-slate-500">CN {"->"} BD Shipping</p>
               <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
-                <span>{SHIPPING_PROFILE_LABELS[productRecord.cdd_shipping_profile ?? "standard"]}</span>
+                <span>{selectedShippingMethod.name}</span>
                 <span className="text-slate-300">-</span>
-                <span className="text-[#615FFF]">Final rate after review</span>
+                <span className="text-[#615FFF]">{selectedShippingMethod.estimate}</span>
               </div>
             </div>
             <button
               type="button"
+              onClick={() =>
+                setSelectedShippingMethodId((current) => {
+                  const currentIndex = INTERNATIONAL_SHIPPING_METHODS.findIndex((method) => method.id === current);
+                  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % INTERNATIONAL_SHIPPING_METHODS.length : 0;
+
+                  return INTERNATIONAL_SHIPPING_METHODS[nextIndex].id;
+                })
+              }
               className="rounded-md p-2 text-slate-700 transition-colors hover:bg-white hover:text-[#615FFF]"
+              aria-label="Change international shipping method"
             >
               <LinkIcon />
             </button>
@@ -484,7 +520,7 @@ export default function ProductDetailsPurchasePanel({
         <div className="space-y-0">
           <SummaryRow label="Quantity" value={String(totals.quantity)} />
           <SummaryRow label="Product Price" value={formatCurrency(totals.productPrice)} />
-          <SummaryRow label="CDD Charge" value={formatCurrency(totals.cddCharge)} />
+          <SummaryRow label="CNDS Cost" value={formatCurrency(totals.cndsCost)} />
           <SummaryRow label="Pay Now" value={formatCurrency(totals.payNow)} strong />
         </div>
 
@@ -496,10 +532,12 @@ export default function ProductDetailsPurchasePanel({
 
             <div className="text-right">
               <p className="text-lg font-semibold text-slate-700">
-                {totals.quantity === 0 ? "Pending selection" : formatCurrency(totals.estimatedShipping)}
+                {totals.internationalShippingEstimate === null
+                  ? PAY_ON_DELIVERY_PLACEHOLDER
+                  : formatCurrency(totals.internationalShippingEstimate)}
               </p>
               <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
-                Estimated shipping charge
+                International shipping
               </p>
             </div>
           </div>

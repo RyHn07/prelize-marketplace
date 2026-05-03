@@ -50,6 +50,7 @@ type OrderRow = {
   payment_status: PaymentStatus | null;
   buyer: BuyerInfo | null;
   admin_note: string | null;
+  cnds_cost_total?: number | null;
   summary: OrderSummary;
   shipping_methods: ShippingMethodRow[] | null;
   created_at: string;
@@ -667,7 +668,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
           <div className="space-y-0 rounded-2xl border border-slate-200 bg-white px-5">
             <SummaryRow label="Quantity" value={String(order.summary.quantity ?? order.summary.totalQuantity ?? 0)} />
             <SummaryRow label="Product Price" value={formatBDT(order.summary.productPrice ?? 0)} />
-            <SummaryRow label="CDD Charge" value={formatBDT(order.summary.cddCharge ?? 0)} />
+            <SummaryRow label="CNDS Cost" value={formatBDT(order.cnds_cost_total ?? order.summary.cddCharge ?? 0)} />
             <SummaryRow label="Pay Now" value={formatBDT(order.summary.payNow ?? 0)} strong />
           </div>
 
@@ -681,9 +682,9 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
                 <p className="text-lg font-semibold text-slate-700">
                   {typeof order.summary.payOnDelivery === "number"
                     ? formatBDT(order.summary.payOnDelivery)
-                    : order.summary.payOnDelivery ?? "Confirmed after review"}
+                    : "Pending review"}
                 </p>
-                <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">Estimated shipping charge</p>
+                <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">International shipping</p>
               </div>
             </div>
           </div>

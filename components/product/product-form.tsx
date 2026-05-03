@@ -11,13 +11,14 @@ import {
   type ProductEditorSavePayload,
   type ProductVariantUpsertPayload,
 } from "@/lib/products/actions";
+import { getCndsShippingProfilesForVendor } from "@/lib/cnds/queries";
 import { listProductMedia, uploadProductMedia } from "@/lib/media/storage";
 import { getProductCategoryOptions, getProductVendorOptions } from "@/lib/products/queries";
 import type {
+  CndsShippingProfileOption,
   ProductAttribute,
   ProductAttributeFormValue,
   ProductCategoryOption,
-  ProductCddShippingProfile,
   ProductEditorRecord,
   ProductFormValues,
   ProductSpecification,
@@ -28,33 +29,6 @@ import type {
   ProductUpsertPayload,
   ProductVendorOption,
 } from "@/types/product-db";
-
-const CDD_SHIPPING_PROFILES: Array<{
-  id: ProductCddShippingProfile;
-  label: string;
-  description: string;
-}> = [
-  {
-    id: "standard",
-    label: "Standard CDD",
-    description: "Default profile for regular wholesale products.",
-  },
-  {
-    id: "express",
-    label: "Express CDD",
-    description: "For products that need faster handling or priority flow.",
-  },
-  {
-    id: "fragile",
-    label: "Fragile CDD",
-    description: "For breakable or sensitive products needing extra care.",
-  },
-  {
-    id: "bulk",
-    label: "Bulk CDD",
-    description: "For heavy, large, or bulk-handling product groups.",
-  },
-];
 
 type ProductFormProps = {
   mode: "create" | "edit";
@@ -209,6 +183,7 @@ function getInitialValues(
             .filter((spec): spec is ProductSpecificationFormValue => spec !== null)
         : [createEmptySpecification()],
     cdd_shipping_profile: product?.cdd_shipping_profile ?? "standard",
+    cnds_profile_id: product?.cnds_profile_id ?? "",
     variations:
       record?.variants.map((variant) => ({
         id: variant.id,
@@ -237,6 +212,10 @@ function normalizeCategoryId(value: string) {
 }
 
 function normalizeVendorId(value: string) {
+  return normalizeOptionalUuid(value);
+}
+
+function normalizeCndsProfileId(value: string) {
   return normalizeOptionalUuid(value);
 }
 
@@ -297,6 +276,7 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
       )
       .filter((specification) => specification.label.length > 0 || specification.value.length > 0),
     cdd_shipping_profile: values.cdd_shipping_profile,
+    cnds_profile_id: normalizeCndsProfileId(values.cnds_profile_id),
   };
 }
 
@@ -718,8 +698,10 @@ function ProductForm({
     getInitialValues(record, allowedVendorIds, canAssignPlatformProducts, forcedVendorId),
   );
   const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
+  const [cndsProfiles, setCndsProfiles] = useState<CndsShippingProfileOption[]>([]);
   const [vendors, setVendors] = useState<ProductVendorOption[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [cndsProfilesLoading, setCndsProfilesLoading] = useState(true);
   const [vendorsLoading, setVendorsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -757,6 +739,36 @@ function ProductForm({
   }, [allowedVendorIds]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const loadCndsProfiles = async () => {
+      if (!values.vendor_id) {
+        if (isMounted) {
+          setCndsProfiles([]);
+          setCndsProfilesLoading(false);
+        }
+        return;
+      }
+
+      setCndsProfilesLoading(true);
+      const result = await getCndsShippingProfilesForVendor(values.vendor_id, { includeInactive: false });
+
+      if (!isMounted) {
+        return;
+      }
+
+      setCndsProfiles(result.data);
+      setCndsProfilesLoading(false);
+    };
+
+    void loadCndsProfiles();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [values.vendor_id]);
+
+  useEffect(() => {
     setValues(getInitialValues(record, allowedVendorIds, canAssignPlatformProducts, forcedVendorId));
     setErrorMessage("");
     setIsSubmitting(false);
@@ -781,6 +793,38 @@ function ProductForm({
         .sort((left, right) => left.name.localeCompare(right.name)),
     ]);
   }, [categories]);
+
+  const availableCndsProfiles = useMemo(() => {
+    if (!values.cnds_profile_id || cndsProfiles.some((profile) => profile.id === values.cnds_profile_id)) {
+      return cndsProfiles;
+    }
+
+    return [
+      ...cndsProfiles,
+      {
+        id: values.cnds_profile_id,
+        vendor_id: values.vendor_id || null,
+        name: "Current profile (inactive or unavailable)",
+        description: null,
+        pricing_type: "fixed",
+        is_active: false,
+        tiers: [],
+      } satisfies CndsShippingProfileOption,
+    ];
+  }, [cndsProfiles, values.cnds_profile_id]);
+
+  useEffect(() => {
+    if (!values.cnds_profile_id) {
+      return;
+    }
+
+    const profileStillAvailable = cndsProfiles.some((profile) => profile.id === values.cnds_profile_id);
+    const initialVendorId = forcedVendorId ?? record?.product.vendor_id ?? "";
+
+    if (!profileStillAvailable && (mode === "create" || values.vendor_id !== initialVendorId)) {
+      updateField("cnds_profile_id", "");
+    }
+  }, [cndsProfiles, forcedVendorId, mode, record?.product.vendor_id, values.cnds_profile_id, values.vendor_id]);
 
   const searchParamsString = searchParams.toString();
 
@@ -1171,27 +1215,29 @@ function ProductForm({
 
               <div className="md:col-span-2">
                 <label
-                  htmlFor="product-cdd-shipping-profile"
+                  htmlFor="product-cnds-shipping-profile"
                   className="mb-1.5 block text-sm font-medium text-slate-700"
                 >
-                  CDD Shipping Profile
+                  CNDS Shipping Profile
                 </label>
                 <select
-                  id="product-cdd-shipping-profile"
-                  value={values.cdd_shipping_profile}
-                  onChange={(event) =>
-                    updateField("cdd_shipping_profile", event.target.value as ProductCddShippingProfile)
-                  }
+                  id="product-cnds-shipping-profile"
+                  value={values.cnds_profile_id}
+                  onChange={(event) => updateField("cnds_profile_id", event.target.value)}
                   className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                 >
-                  {CDD_SHIPPING_PROFILES.map((profile) => (
+                  <option value="">
+                    {cndsProfilesLoading ? "Loading CNDS profiles..." : "No CNDS profile selected"}
+                  </option>
+                  {availableCndsProfiles.map((profile) => (
                     <option key={profile.id} value={profile.id}>
-                      {profile.label}
+                      {profile.name} ({profile.pricing_type === "unit" ? "Per Unit" : "Fixed"})
                     </option>
                   ))}
                 </select>
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Select the CDD shipping profile now. We can design the full CDD management page later.
+                  Assign an active CNDS shipping profile now. This only stores the profile on the product and does not
+                  change checkout calculations yet.
                 </p>
               </div>
             </div>
@@ -1710,9 +1756,10 @@ function ProductForm({
                 <span className="font-semibold text-slate-900">{totalVariationCount}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span>CDD Shipping Profile</span>
+                <span>CNDS Shipping Profile</span>
                 <span className="font-semibold text-slate-900">
-                  {CDD_SHIPPING_PROFILES.find((profile) => profile.id === values.cdd_shipping_profile)?.label}
+                  {availableCndsProfiles.find((profile) => profile.id === values.cnds_profile_id)?.name ??
+                    "Not selected"}
                 </span>
               </div>
             </div>

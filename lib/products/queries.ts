@@ -36,6 +36,7 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
     image_url: typeof row.image_url === "string" ? row.image_url : null,
     description: typeof row.description === "string" ? row.description : null,
     short_description: typeof row.short_description === "string" ? row.short_description : null,
+    cnds_profile_id: typeof row.cnds_profile_id === "string" ? row.cnds_profile_id : null,
     price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
     moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
     is_active: typeof row.is_active === "boolean" ? row.is_active : true,

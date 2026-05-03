@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/vendor/orders", label: "Orders" },
   { href: "/vendor/products", label: "Products" },
   { href: "/vendor/media", label: "Media" },
+  { href: "/vendor/cnds", label: "CNDS" },
   { href: "/vendor/categories", label: "Categories" },
   { href: "/vendor/shop-settings", label: "Shop Settings" },
 ] as const;

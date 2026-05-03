@@ -451,7 +451,7 @@ export default function OrdersPage() {
                     <p className="mt-1 text-base font-semibold text-slate-900">
                       {typeof order.summary.payOnDelivery === "number"
                         ? formatBDT(order.summary.payOnDelivery)
-                        : order.summary.payOnDelivery ?? "Confirmed after review"}
+                        : "Pending review"}
                     </p>
                   </div>
                 </div>
