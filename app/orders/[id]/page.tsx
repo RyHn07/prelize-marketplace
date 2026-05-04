@@ -52,7 +52,11 @@ type OrderItemRow = {
   product_name: string;
   product_image: string;
   variation: string;
+  variant_name?: string | null;
+  variant_value?: string | null;
   price: number;
+  unit_price?: number | null;
+  total_price?: number | null;
   quantity: number;
   weight: number | null;
   cnds_cost?: number | null;
@@ -166,12 +170,15 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
             className="rounded-lg border border-slate-200 px-4 py-3"
           >
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-slate-900">Variation: {item.variation}</p>
+              <p className="text-sm font-semibold text-slate-900">
+                Variation: {item.variant_value ?? item.variation}
+              </p>
+              {item.variant_name ? <p className="text-xs text-slate-500">Type: {item.variant_name}</p> : null}
               <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
                 <p>Qty: {item.quantity}</p>
-                <p>Unit Price: {formatBDT(item.price)}</p>
+                <p>Unit Price: {formatBDT(item.unit_price ?? item.price)}</p>
                 <p className="font-medium text-slate-900">
-                  Total: {formatBDT(item.price * item.quantity)}
+                  Total: {formatBDT(item.total_price ?? item.price * item.quantity)}
                 </p>
               </div>
             </div>
@@ -310,7 +317,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         existingGroup.items.push(item);
         existingGroup.variantCount += 1;
         existingGroup.totalQuantity += item.quantity;
-        existingGroup.subtotal += item.price * item.quantity;
+        existingGroup.subtotal += item.total_price ?? item.price * item.quantity;
         return;
       }
 
@@ -322,7 +329,7 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
         items: [item],
         variantCount: 1,
         totalQuantity: item.quantity,
-        subtotal: item.price * item.quantity,
+        subtotal: item.total_price ?? item.price * item.quantity,
       });
     });
 

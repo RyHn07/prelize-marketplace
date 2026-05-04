@@ -74,13 +74,14 @@ export function groupOrderItems(items: OrderItemRow[]) {
   const groups = new Map<string, GroupedOrderItem>();
 
   items.forEach((item) => {
+    const itemSubtotal = item.total_price ?? item.price * item.quantity;
     const existingGroup = groups.get(item.product_id);
 
     if (existingGroup) {
       existingGroup.items.push(item);
       existingGroup.variantCount += 1;
       existingGroup.totalQuantity += item.quantity;
-      existingGroup.subtotal += item.price * item.quantity;
+      existingGroup.subtotal += itemSubtotal;
       return;
     }
 
@@ -91,7 +92,7 @@ export function groupOrderItems(items: OrderItemRow[]) {
       items: [item],
       variantCount: 1,
       totalQuantity: item.quantity,
-      subtotal: item.price * item.quantity,
+      subtotal: itemSubtotal,
     });
   });
 
@@ -202,7 +203,7 @@ export function deriveParentOrderStatus(statuses: VendorOrderStatus[]) {
 export function summarizeOrderItems(items: OrderItemRow[]) {
   const summary = createEmptySummary();
   const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.total_price ?? item.price * item.quantity), 0);
 
   summary.quantity = quantity;
   summary.totalQuantity = quantity;

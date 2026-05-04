@@ -62,6 +62,7 @@ function createEmptyVariation(): ProductVariationFormValue {
     regular_price: "",
     discount_price: "",
     moq: "1",
+    stock: "0",
     image_url: "",
     attribute_values: {},
   };
@@ -191,6 +192,7 @@ function getInitialValues(
         regular_price: variant.regular_price !== null ? String(variant.regular_price) : String(variant.price),
         discount_price: variant.discount_price !== null ? String(variant.discount_price) : "",
         moq: String(variant.moq),
+        stock: String(variant.stock ?? 0),
         image_url: variant.image_url ?? "",
         attribute_values: variant.attribute_values ?? {},
       })) ?? [],
@@ -296,13 +298,20 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
     const regularPrice = parseNumber(variation.regular_price) ?? 0;
     const discountPrice = parseNumber(variation.discount_price);
     const moq = parseNumber(variation.moq) ?? 1;
+    const stock = Math.max(0, Math.floor(parseNumber(variation.stock) ?? 0));
+    const derivedValue = Object.values(variation.attribute_values)
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .join(" / ");
 
     return {
       name: variation.name.trim(),
+      value: derivedValue.length > 0 ? derivedValue : variation.name.trim() || null,
       regular_price: regularPrice,
       discount_price: discountPrice,
       price: getEffectivePrice(regularPrice, discountPrice),
       moq,
+      stock,
       image_url: normalizeOptionalText(variation.image_url),
       attribute_values: variation.attribute_values,
     };
@@ -950,6 +959,7 @@ function ProductForm({
         regular_price: "",
         discount_price: "",
         moq: values.moq || "1",
+        stock: "0",
         image_url: "",
         attribute_values: attributeValues,
       };
@@ -1458,6 +1468,15 @@ function ProductForm({
                               min="1"
                               step="1"
                               required
+                            />
+                            <NumberField
+                              id={`variation-stock-${variation.id}`}
+                              label="Stock"
+                              value={variation.stock}
+                              onChange={(value) => handleVariationChange(variation.id, "stock", value)}
+                              placeholder="0"
+                              min="0"
+                              step="1"
                             />
                           </div>
 

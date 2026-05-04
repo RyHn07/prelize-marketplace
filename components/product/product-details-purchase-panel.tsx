@@ -25,8 +25,11 @@ type ProductOption = {
   id: string;
   image: string;
   label: string;
+  variantName: string | null;
+  variantValue: string | null;
   price: number;
   moq: number;
+  stock: number;
   attributeValues: Record<string, string>;
 };
 
@@ -91,8 +94,18 @@ function buildProductOptions(
       id: variant.id,
       image: variant.image_url ?? productRecord.image_url ?? product.image,
       label: variant.name,
+      variantName:
+        Object.keys(variant.attribute_values ?? {}).join(" / ").trim() || (variant.name.trim().length > 0 ? "Variant" : null),
+      variantValue: (
+        variant.value ??
+        Object.values(variant.attribute_values ?? {})
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+          .join(" / ")
+      ) || variant.name,
       price: getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
       moq: variant.moq,
+      stock: Math.max(0, variant.stock ?? 0),
       attributeValues: Object.fromEntries(
         Object.entries(variant.attribute_values ?? {}).map(([key, value]) => [key, String(value)]),
       ),
@@ -104,8 +117,11 @@ function buildProductOptions(
       id: productRecord.id,
       image: productRecord.image_url ?? product.image,
       label: "Default",
+      variantName: null,
+      variantValue: null,
       price: getEffectivePrice(productRecord.regular_price ?? productRecord.price, productRecord.discount_price ?? null),
       moq: productRecord.moq,
+      stock: 0,
       attributeValues: {},
     },
   ];
@@ -356,9 +372,12 @@ export default function ProductDetailsPurchasePanel({
   }, [cndsProfile, productOptions, productRecord.weight, quantities, selectedShippingMethod]);
 
   const updateQuantity = (optionId: string, nextQuantity: number) => {
+    const option = productOptions.find((item) => item.id === optionId);
+    const trackedStock = option && option.stock > 0 ? option.stock : null;
+
     setQuantities((current) => ({
       ...current,
-      [optionId]: Math.min(MAX_QUANTITY, Math.max(0, nextQuantity)),
+      [optionId]: Math.min(trackedStock ?? MAX_QUANTITY, MAX_QUANTITY, Math.max(0, nextQuantity)),
     }));
   };
 
@@ -378,6 +397,8 @@ export default function ProductDetailsPurchasePanel({
         productSlug: product.slug,
         variation: option.label,
         variantId: option.id !== product.id ? option.id : null,
+        variantName: option.variantName,
+        variantValue: option.variantValue,
         price: option.price,
         quantity: quantities[option.id] ?? 0,
       });
@@ -475,7 +496,10 @@ export default function ProductDetailsPurchasePanel({
                   >
                     <div className="self-center">
                       <span className="block text-slate-900">{option.label}</span>
-                      <span className="mt-1 block text-xs text-slate-500">MOQ: {option.moq}</span>
+                      <span className="mt-1 block text-xs text-slate-500">
+                        MOQ: {option.moq}
+                        {option.stock > 0 ? ` | Stock: ${option.stock}` : ""}
+                      </span>
                     </div>
                     <span className="self-center font-semibold text-[#615FFF]">
                       {formatCurrency(option.price)}

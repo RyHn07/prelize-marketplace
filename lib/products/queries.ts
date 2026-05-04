@@ -158,6 +158,7 @@ export async function getPublicProductBySlug(slug: string) {
 function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
   const parsedPrice = Number(row.price);
   const parsedMoq = Number(row.moq);
+  const parsedStock = Number(row.stock);
   const parsedWeight = row.weight === null || row.weight === undefined ? null : Number(row.weight);
   const parsedRegularPrice =
     row.regular_price === null || row.regular_price === undefined ? null : Number(row.regular_price);
@@ -173,9 +174,11 @@ function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
   return {
     ...row,
     name: typeof row.name === "string" && row.name.trim().length > 0 ? row.name : "Default",
+    value: typeof row.value === "string" && row.value.trim().length > 0 ? row.value : null,
     sku: typeof row.sku === "string" ? row.sku : null,
     price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
     moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
+    stock: Number.isFinite(parsedStock) && parsedStock >= 0 ? parsedStock : 0,
     regular_price: Number.isFinite(parsedRegularPrice) ? parsedRegularPrice : null,
     discount_price: Number.isFinite(parsedDiscountPrice) ? parsedDiscountPrice : null,
     weight: Number.isFinite(parsedWeight) ? parsedWeight : null,

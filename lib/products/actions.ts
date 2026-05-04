@@ -11,10 +11,12 @@ import type {
 
 export type ProductVariantUpsertPayload = {
   name: string;
+  value: string | null;
   regular_price: number | null;
   discount_price: number | null;
   price: number;
   moq: number;
+  stock: number;
   image_url: string | null;
   attribute_values: Record<string, string>;
 };

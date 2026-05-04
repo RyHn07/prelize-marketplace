@@ -548,6 +548,8 @@ export default function CartPage() {
           image: productMatch?.image_url ?? item.image,
           variation: item.variation,
           variantId: item.variantId,
+          variantName: item.variantName ?? null,
+          variantValue: item.variantValue ?? null,
           price: item.price,
           quantity: item.quantity,
           weight: parseWeight(

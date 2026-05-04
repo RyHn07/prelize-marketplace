@@ -417,12 +417,15 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
                     {group.items.map((item) => (
                       <div key={item.id} className="rounded-lg border border-slate-200 px-4 py-3">
                         <div className="space-y-2">
-                          <p className="text-sm font-semibold text-slate-900">Variation: {item.variation}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            Variation: {item.variant_value ?? item.variation}
+                          </p>
+                          {item.variant_name ? <p className="text-xs text-slate-500">Type: {item.variant_name}</p> : null}
                           <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-4">
                             <p>Quantity: {item.quantity}</p>
-                            <p>Unit Price: {formatBDT(item.price)}</p>
+                            <p>Unit Price: {formatBDT(item.unit_price ?? item.price)}</p>
                             <p className="sm:col-span-2 sm:text-right">
-                              Row Total: <span className="font-medium text-slate-900">{formatBDT(item.price * item.quantity)}</span>
+                              Row Total: <span className="font-medium text-slate-900">{formatBDT(item.total_price ?? item.price * item.quantity)}</span>
                             </p>
                           </div>
                         </div>

@@ -5,6 +5,8 @@ export type QuoteItem = {
   productSlug?: string | null;
   variation: string;
   variantId?: string | null;
+  variantName?: string | null;
+  variantValue?: string | null;
   price: number;
   quantity: number;
 };
@@ -30,6 +32,8 @@ function isQuoteItem(value: unknown): value is QuoteItem {
     (item.productSlug === undefined || item.productSlug === null || typeof item.productSlug === "string") &&
     typeof item.variation === "string" &&
     (item.variantId === undefined || item.variantId === null || typeof item.variantId === "string") &&
+    (item.variantName === undefined || item.variantName === null || typeof item.variantName === "string") &&
+    (item.variantValue === undefined || item.variantValue === null || typeof item.variantValue === "string") &&
     typeof item.price === "number" &&
     Number.isFinite(item.price) &&
     typeof item.quantity === "number" &&
@@ -65,6 +69,8 @@ function readQuoteItems() {
         ...item,
         productSlug: item.productSlug ?? null,
         variantId: item.variantId ?? null,
+        variantName: item.variantName ?? null,
+        variantValue: item.variantValue ?? null,
         quantity: Math.max(0, Math.floor(item.quantity)),
       }))
       .filter((item) => item.quantity > 0);

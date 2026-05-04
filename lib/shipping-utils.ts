@@ -31,6 +31,8 @@ export type CartItem = {
   image: string
   variation: string
   variantId?: string | null
+  variantName?: string | null
+  variantValue?: string | null
   price: number
   quantity: number
   weight?: number

@@ -116,11 +116,13 @@ export type ProductDbVariantRow = {
   id: string;
   product_id: string;
   name: string;
+  value?: string | null;
   sku?: string | null;
   regular_price: number | null;
   discount_price: number | null;
   price: number;
   moq: number;
+  stock?: number;
   weight?: number | null;
   image_url: string | null;
   min_order_quantity?: number | null;
@@ -192,6 +194,7 @@ export type ProductVariationFormValue = {
   regular_price: string;
   discount_price: string;
   moq: string;
+  stock: string;
   image_url: string;
   attribute_values: ProductVariantAttributeValues;
 };
@@ -328,10 +331,15 @@ export type OrderItemRow = {
   id: string;
   order_id: string;
   product_id: string;
+  variant_id?: string | null;
   product_name: string;
   product_image: string | null;
   variation: string;
+  variant_name?: string | null;
+  variant_value?: string | null;
   price: number;
+  unit_price?: number | null;
+  total_price?: number | null;
   quantity: number;
   weight: number | null;
   weight_kg?: number | null;
