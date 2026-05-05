@@ -46,12 +46,10 @@ function Badge({ label }: { label: NonNullable<Product["badge"]> }) {
 function getCardMeta(productId: string) {
   const seed = Number(productId.replace(/\D/g, "")) || 1;
   const ratings = ["4.8", "4.7", "4.9", "4.6"];
-  const soldCounts = ["2.6K", "1.9K", "3.1K", "980"];
   const deliveryWindows = ["20-25 days", "18-22 days", "15-20 days", "22-28 days"];
 
   return {
     rating: ratings[(seed - 1) % ratings.length],
-    sold: soldCounts[(seed - 1) % soldCounts.length],
     delivery: deliveryWindows[(seed - 1) % deliveryWindows.length],
   };
 }
@@ -105,18 +103,15 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
           >
             {product.name}
           </h3>
-          <p className={`text-xs leading-5 text-slate-500 ${isListView ? "line-clamp-2" : "line-clamp-2 min-h-10"}`}>
-            {product.shortDescription}
-          </p>
           <p className="text-sm font-bold text-[#615FFF]">From ৳{product.priceFrom}</p>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
-            <span className="text-[13px] tracking-tight text-amber-400">★★★★★</span>
+            <span className="-mt-0.5 text-[19px] leading-none tracking-tight text-amber-400">★★★★★</span>
             <span className="font-medium text-slate-600">{meta.rating}</span>
           </div>
-          <span>Sold: {meta.sold}</span>
+          <span>MOQ: {product.moq}</span>
         </div>
 
         <div className="mt-auto flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">

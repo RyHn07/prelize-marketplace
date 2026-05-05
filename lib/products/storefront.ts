@@ -99,18 +99,6 @@ function buildBuyerNotes(product: ProductDbRow) {
   ];
 }
 
-function buildShortDescription(product: ProductDbRow) {
-  if (product.short_description && product.short_description.trim().length > 0) {
-    return product.short_description;
-  }
-
-  if (product.description) {
-    return product.description.length > 120 ? `${product.description.slice(0, 117).trimEnd()}...` : product.description;
-  }
-
-  return `Wholesale sourcing option with MOQ ${product.moq} and flexible fulfillment review.`;
-}
-
 function isReviewRecord(value: unknown): value is ProductDbReview {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -170,7 +158,6 @@ export function mapProductDbToStorefrontProduct(
     moq: `${product.moq} unit${product.moq === 1 ? "" : "s"}`,
     weight: normalizeWeight(product.weight),
     badge: normalizeBadge(product.badge),
-    shortDescription: buildShortDescription(product),
     description: product.description ?? "Product description will be updated soon.",
     specifications: buildSpecifications(product),
     reviews: buildReviews(product),

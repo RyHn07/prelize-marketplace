@@ -17,6 +17,7 @@ import {
   getResolvedProductPricingMapByProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type { ProductSpecification } from "@/types/product";
 
@@ -46,10 +47,11 @@ type ProductDetailsPageProps = {
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
+  const supabase = getSupabaseServiceRoleClient();
   const [{ data: categoryOptions }, { data: vendorOptions }, { data: productDetail }, { data: publicProducts }] = await Promise.all([
     getProductCategoryOptions(),
     getVendorOptions(),
-    getPublicProductDetailBySlug(slug),
+    getPublicProductDetailBySlug(slug, supabase),
     getPublicProducts(),
   ]);
 
@@ -61,7 +63,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }] = await Promise.all([
     getProductImagesByProductId(productRow.id),
     getProductSpecsByProductId(productRow.id),
-    getResolvedProductPricingMapByProducts([productRow]),
+    getResolvedProductPricingMapByProducts([productRow], supabase),
     getActiveCndsShippingProfileById(productRow.cnds_profile_id),
     getActiveInternationalShippingMethodsForServer(),
   ]);

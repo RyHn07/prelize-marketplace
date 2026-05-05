@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import AdminPageHeader from "@/components/admin/admin-page-header";
 import ProductForm from "@/components/product/product-form";
+import { createAdminProductRecord, updateAdminProductRecord } from "@/lib/admin-product-actions";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
@@ -72,22 +74,34 @@ export default function AdminNewProductPage() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl">
-        <div className="mb-6">
-          <Link
-            href="/admin/products"
-            className="inline-flex text-sm font-medium text-[#615FFF] transition-colors hover:text-[#5552e6]"
-          >
-            Back to Products
-          </Link>
-        </div>
-        <ProductForm
-          key="new-product"
-          mode="create"
-          record={null}
-          allowedVendorIds={manageableVendorIds}
-          canAssignPlatformProducts={canAssignPlatformProducts}
+    <section className="mx-auto max-w-7xl space-y-6">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <AdminPageHeader
+          eyebrow="Product Editor"
+          title="Add Product"
+          description="Create a new marketplace product without changing the existing submission logic."
+          actions={
+            <Link
+              href="/admin/products"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+            >
+              Back to Products
+            </Link>
+          }
         />
-      </section>
+      </div>
+      <ProductForm
+        key="new-product"
+        mode="create"
+        record={null}
+        allowedVendorIds={manageableVendorIds}
+        canAssignPlatformProducts={canAssignPlatformProducts}
+        onSave={(mode, payload, productId) =>
+          mode === "create"
+            ? createAdminProductRecord(payload)
+            : updateAdminProductRecord(productId ?? "", payload)
+        }
+      />
+    </section>
   );
 }

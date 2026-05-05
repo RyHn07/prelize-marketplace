@@ -31,11 +31,29 @@ function UserIcon() {
   );
 }
 
+function getUserInitial(user: User) {
+  const fullName =
+    typeof user.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name
+      : typeof user.user_metadata?.name === "string"
+        ? user.user_metadata.name
+        : "";
+
+  if (fullName.trim()) {
+    return fullName.trim().charAt(0).toUpperCase();
+  }
+
+  if (typeof user.email === "string" && user.email.trim()) {
+    return user.email.trim().charAt(0).toUpperCase();
+  }
+
+  return "U";
+}
+
 export default function HeaderAuthButton() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(hasSupabaseEnv);
-  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseEnv) {
@@ -70,20 +88,6 @@ export default function HeaderAuthButton() {
     };
   }, []);
 
-  const handleLogout = async () => {
-    setIsSigningOut(true);
-
-    try {
-      const supabase = getSupabaseClient();
-      await supabase.auth.signOut();
-      setUser(null);
-      router.push("/");
-      router.refresh();
-    } finally {
-      setIsSigningOut(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="inline-flex items-center gap-2.5 rounded-full px-1 text-sm font-medium text-slate-400">
@@ -106,20 +110,13 @@ export default function HeaderAuthButton() {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-        <UserIcon />
-        <span className="max-w-[160px] truncate font-medium">{user.email}</span>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleLogout}
-        disabled={isSigningOut}
-        className="inline-flex items-center rounded-full px-1 text-sm font-medium text-slate-700 transition-colors hover:text-[#615FFF] disabled:cursor-not-allowed disabled:text-slate-400"
-      >
-        {isSigningOut ? "Logging out..." : "Logout"}
-      </button>
-    </div>
+    <Link
+      href="/account"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-[#615FFF]"
+      aria-label="My account"
+      title={user.email ?? "My account"}
+    >
+      <span>{getUserInitial(user)}</span>
+    </Link>
   );
 }

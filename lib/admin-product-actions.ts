@@ -9,13 +9,18 @@ type SaveProductResponse = {
   error: { message: string } | null;
 };
 
+type LoadProductResponse = {
+  data: ProductEditorRecord | null;
+  error: { message: string } | null;
+};
+
 async function getAccessToken() {
   const supabase = getSupabaseClient();
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
-async function authorizedProductFetch<T>(input: string, init?: RequestInit) {
+async function authorizedAdminProductFetch<T>(input: string, init?: RequestInit) {
   const accessToken = await getAccessToken();
 
   if (!accessToken) {
@@ -37,7 +42,7 @@ async function authorizedProductFetch<T>(input: string, init?: RequestInit) {
     return {
       data: null,
       error: {
-        message: body?.error ?? "Unable to save the vendor product.",
+        message: body?.error ?? "Unable to save the product.",
       },
     } as { data: T | null; error: { message: string } | null };
   }
@@ -48,22 +53,22 @@ async function authorizedProductFetch<T>(input: string, init?: RequestInit) {
   } as { data: T | null; error: { message: string } | null };
 }
 
-export async function createVendorProductRecord(payload: ProductEditorSavePayload) {
-  return authorizedProductFetch<SaveProductResponse>("/api/vendor/products", {
+export async function createAdminProductRecord(payload: ProductEditorSavePayload) {
+  return authorizedAdminProductFetch<ProductDbRow>("/api/admin/products", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateVendorProductRecord(id: string, payload: ProductEditorSavePayload) {
-  return authorizedProductFetch<SaveProductResponse>(`/api/vendor/products/${id}`, {
+export async function updateAdminProductRecord(id: string, payload: ProductEditorSavePayload) {
+  return authorizedAdminProductFetch<ProductDbRow>(`/api/admin/products/${id}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export async function getVendorProductEditorRecord(id: string) {
-  return authorizedProductFetch<ProductEditorRecord>(`/api/vendor/products/${id}`, {
+export async function getAdminProductEditorRecord(id: string) {
+  return authorizedAdminProductFetch<ProductEditorRecord>(`/api/admin/products/${id}`, {
     method: "GET",
-  });
+  }) as Promise<LoadProductResponse>;
 }

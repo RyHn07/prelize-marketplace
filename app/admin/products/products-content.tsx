@@ -4,17 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import AdminEmptyState from "@/components/admin/admin-empty-state";
+import AdminPageHeader from "@/components/admin/admin-page-header";
+import AdminStatCard from "@/components/admin/admin-stat-card";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
-import { getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
+import { getProductCategoryOptions, getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import type { ProductDbRow, ProductStatus, ProductType, ProductVendorOption } from "@/types/product-db";
+import type { ProductCategoryOption, ProductDbRow, ProductStatus, ProductType, ProductVendorOption } from "@/types/product-db";
 
 function formatPrice(amount: number) {
   return `\u09F3${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
-}
-
-function formatWeight(weight: ProductDbRow["weight"]) {
-  return weight === null || weight === undefined || weight === "" ? "-" : String(weight);
 }
 
 function getProductStatus(product: ProductDbRow): ProductStatus {
@@ -58,6 +57,7 @@ export default function ProductsContent() {
   const [canAssignPlatformProducts, setCanAssignPlatformProducts] = useState(true);
   const [products, setProducts] = useState<ProductDbRow[]>([]);
   const [vendorOptions, setVendorOptions] = useState<ProductVendorOption[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<ProductCategoryOption[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
@@ -87,9 +87,10 @@ export default function ProductsContent() {
         return;
       }
 
-      const [productResult, vendorResult] = await Promise.all([
+      const [productResult, vendorResult, categoryResult] = await Promise.all([
         access.hasPlatformAdminAccess ? getProducts() : getProductsForVendors(access.manageableVendorIds),
         getProductVendorOptions(),
+        getProductCategoryOptions(),
       ]);
 
       if (!isMounted) {
@@ -105,6 +106,7 @@ export default function ProductsContent() {
 
       setProducts(productResult.data);
       setVendorOptions(vendorResult.data);
+      setCategoryOptions(categoryResult.data);
       setLoading(false);
     };
 
@@ -163,6 +165,10 @@ export default function ProductsContent() {
     () => new Map(vendorOptions.map((vendor) => [vendor.id, vendor.name])),
     [vendorOptions],
   );
+  const categoryNameById = useMemo(
+    () => new Map(categoryOptions.map((category) => [category.id, category.name])),
+    [categoryOptions],
+  );
 
   if (loading) {
     return (
@@ -197,23 +203,19 @@ export default function ProductsContent() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl">
-      <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Dashboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-            {canAssignPlatformProducts ? "All Products" : "Your Vendor Products"}
-          </h1>
-          <p className="text-sm text-slate-500">Search, filter, and manage product records from one place.</p>
-        </div>
-
-        <Link
-          href="/admin/products/new"
-          className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Add Product
-        </Link>
-      </div>
+    <section className="mx-auto max-w-7xl space-y-6">
+      <AdminPageHeader
+        title={canAssignPlatformProducts ? "All Products" : "Your Vendor Products"}
+        description="Search, filter, and manage product records from one clean catalog workspace."
+        actions={
+          <Link
+            href="/admin/products/new"
+            className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Add Product
+          </Link>
+        }
+      />
 
       <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -273,129 +275,103 @@ export default function ProductsContent() {
         </div>
       ) : null}
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Products</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{products.length}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Published</p>
-            <p className="mt-2 text-2xl font-semibold text-emerald-700">{activeCount}</p>
-          </div>
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-amber-500">Draft</p>
-            <p className="mt-2 text-2xl font-semibold text-amber-700">{draftCount}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-100 px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Archived</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-700">{disabledCount}</p>
-          </div>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AdminStatCard label="Total Products" value={products.length} />
+        <AdminStatCard label="Published" value={activeCount} tone="success" />
+        <AdminStatCard label="Draft" value={draftCount} tone="warning" />
+        <AdminStatCard label="Archived" value={disabledCount} />
+      </div>
 
-        {products.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
-            <h2 className="text-xl font-semibold text-slate-900">No products found</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              No product records are being returned yet. Add your first product to start building the admin catalog.
-            </p>
-            <p className="mt-2 text-xs text-slate-400">
-              If you just saved a product and it still is not showing here, the product may not have been written to the
-              database or your current read policy may be blocking the list query.
-            </p>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-12 text-center">
-            <h2 className="text-xl font-semibold text-slate-900">No matching products found</h2>
-            <p className="mt-2 text-sm text-slate-500">Try another search term or change the product status filter.</p>
-          </div>
+      {products.length === 0 ? (
+        <AdminEmptyState
+          title="No products found"
+          description="Add your first product to start building the admin catalog. If you just saved one and it is still missing, the product may not have been written to the database or your read policy may be blocking the query."
+          action={
+            <Link
+              href="/admin/products/new"
+              className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Add Product
+            </Link>
+          }
+        />
+      ) : filteredProducts.length === 0 ? (
+        <AdminEmptyState
+          title="No matching products found"
+          description="Try another search term or change the product status filter."
+        />
         ) : (
-          <div className="space-y-4">
-            {filteredProducts.map((product) => {
-              const status = getProductStatus(product);
-              const type = getProductType(product);
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-sm">
+                <thead className="bg-slate-50">
+                  <tr className="text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    <th className="px-5 py-4">Product</th>
+                    <th className="px-5 py-4">Category</th>
+                    <th className="px-5 py-4">Price</th>
+                    <th className="px-5 py-4">MOQ</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4">Vendor</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {filteredProducts.map((product) => {
+                    const status = getProductStatus(product);
+                    const type = getProductType(product);
 
-              return (
-                <article key={product.id} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex min-w-0 flex-1 gap-4">
-                      <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                        {product.image_url ? (
-                          <div
-                            role="img"
-                            aria-label={product.name}
-                            className="h-full w-full bg-cover bg-center"
-                            style={{ backgroundImage: `url("${product.image_url}")` }}
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs font-medium text-slate-400">
-                            No Image
+                    return (
+                      <tr key={product.id} className="align-top">
+                        <td className="px-5 py-4">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                              {product.image_url ? (
+                                <div
+                                  role="img"
+                                  aria-label={product.name}
+                                  className="h-full w-full bg-cover bg-center"
+                                  style={{ backgroundImage: `url("${product.image_url}")` }}
+                                />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-[10px] font-medium text-slate-400">No Image</div>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-900">{product.name}</p>
+                              <p className="mt-1 truncate text-xs text-slate-500">{product.slug}</p>
+                              <div className="mt-2">
+                                <ProductTypeBadge type={type} />
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-
-                      <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-8">
-                        <div className="xl:col-span-2">
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Name</p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">{product.name}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Slug</p>
-                          <p className="mt-1 break-all text-sm text-slate-600">{product.slug}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Price</p>
-                          <p className="mt-1 text-sm font-semibold text-[#615FFF]">{formatPrice(product.price)}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">MOQ</p>
-                          <p className="mt-1 text-sm font-medium text-slate-700">{product.moq}</p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor</p>
-                          <p className="mt-1 text-sm font-medium text-slate-700">
-                            {product.vendor_id ? vendorNameById.get(product.vendor_id) ?? "Assigned Vendor" : "Platform"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor ID</p>
-                          <p className="mt-1 break-all text-sm font-medium text-slate-700">
-                            {product.vendor_id ?? "Platform"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Weight</p>
-                          <p className="mt-1 text-sm font-medium text-slate-700">{formatWeight(product.weight)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3 xl:w-56 xl:items-end">
-                      <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                        <StatusBadge status={status} />
-                        <ProductTypeBadge type={type} />
-                      </div>
-
-                      <Link
-                        href={`/admin/products/${product.id}/edit`}
-                        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                      >
-                        Edit Product
-                      </Link>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">{categoryNameById.get(product.category_id ?? "") ?? "Uncategorized"}</td>
+                        <td className="px-5 py-4 font-semibold text-[#615FFF]">{formatPrice(product.price)}</td>
+                        <td className="px-5 py-4 text-slate-700">{product.moq}</td>
+                        <td className="px-5 py-4">
+                          <StatusBadge status={status} />
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          {product.vendor_id ? vendorNameById.get(product.vendor_id) ?? "Assigned Vendor" : "Platform"}
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end">
+                            <Link
+                              href={`/admin/products/${product.id}/edit`}
+                              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                            >
+                              Edit Product
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-      </div>
     </section>
   );
 }

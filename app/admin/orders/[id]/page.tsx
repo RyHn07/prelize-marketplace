@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import AdminPageHeader from "@/components/admin/admin-page-header";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -411,34 +412,38 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
   return (
     <section className="mx-auto max-w-7xl">
-      <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <Link
-            href="/admin"
-            className="inline-flex text-sm font-medium text-[#615FFF] transition-colors hover:text-[#5552e6]"
-          >
-            Back to Admin
-          </Link>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{order.order_number}</h1>
-          <p className="text-sm text-slate-500">Created Date: {formatOrderDate(order.created_at)}</p>
-        </div>
-
-        <div className="flex flex-col items-start gap-3 sm:items-end">
-          <StatusBadge status={safeOrderStatus(order.status)} />
-          <select
-            value={safeOrderStatus(order.status)}
-            onChange={(event) => handleStatusChange(event.target.value as OrderStatus)}
-            disabled={isUpdatingStatus}
-            className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF] disabled:cursor-not-allowed disabled:bg-slate-50"
-            aria-label={`Update status for ${order.order_number}`}
-          >
-            {ORDER_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <AdminPageHeader
+          eyebrow="Order Detail"
+          title={order.order_number}
+          description={`Created ${formatOrderDate(order.created_at)}`}
+          actions={
+            <>
+              <Link
+                href="/admin/orders"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+              >
+                Back to Orders
+              </Link>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={safeOrderStatus(order.status)} />
+                <select
+                  value={safeOrderStatus(order.status)}
+                  onChange={(event) => handleStatusChange(event.target.value as OrderStatus)}
+                  disabled={isUpdatingStatus}
+                  className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF] disabled:cursor-not-allowed disabled:bg-slate-50"
+                  aria-label={`Update status for ${order.order_number}`}
+                >
+                  {ORDER_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          }
+        />
       </div>
 
       {errorMessage ? (

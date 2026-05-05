@@ -5,9 +5,8 @@ import Link from "next/link";
 
 import ProductForm from "@/components/product/product-form";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getProductEditorRecordForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
-import { createVendorProductRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
+import { createVendorProductRecord, getVendorProductEditorRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
 import type { ProductEditorRecord } from "@/types/product-db";
 
 export default function VendorEditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +39,7 @@ export default function VendorEditProductPage({ params }: { params: Promise<{ id
         return;
       }
 
-      const { data, error } = await getProductEditorRecordForVendors(resolvedParams.id, [membership.vendor_id]);
+      const { data, error } = await getVendorProductEditorRecord(resolvedParams.id);
 
       if (!isMounted) {
         return;

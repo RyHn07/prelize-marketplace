@@ -1,21 +1,37 @@
 import { notFound } from "next/navigation";
 
 import Header from "@/components/Header";
-import CategoryBrowseContent from "./category-browse-content";
-import { getProductCategoryOptions, getProductImageMapByProductIds, getPublicProducts } from "@/lib/products/queries";
+import ProductBrowseShell from "@/components/product/product-browse-shell";
+import {
+  getProductCategoryOptions,
+  getProductImageMapByProductIds,
+  getPublicProductsByBrowseParams,
+  type ProductBrowseSort,
+} from "@/lib/products/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getVendorOptions } from "@/lib/vendors/queries";
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{
+    search?: string;
+    subcategory?: string;
+    min?: string;
+    max?: string;
+    moq?: string;
+    vendor?: string;
+    sort?: ProductBrowseSort;
+    page?: string;
+    limit?: string;
+  }>;
 };
 
-export default async function CategoryPage({ params }: CategoryPageProps) {
+export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { slug } = await params;
-  const [{ data: categoryOptions }, { data: vendorOptions }, { data: publicProducts }] = await Promise.all([
+  const filters = await searchParams;
+  const [{ data: categoryOptions }, { data: vendorOptions }] = await Promise.all([
     getProductCategoryOptions(),
     getVendorOptions(),
-    getPublicProducts(),
   ]);
 
   const category = categoryOptions.find((item) => item.slug === slug) ?? null;
@@ -27,8 +43,10 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   const subcategories = categoryOptions
     .filter((item) => item.parent_id === category.id)
     .sort((left, right) => left.name.localeCompare(right.name));
-  const categoryIds = new Set([category.id, ...subcategories.map((item) => item.id)]);
-  const scopedProducts = publicProducts.filter((product) => categoryIds.has(product.category_id ?? ""));
+  const { data: scopedProducts, error, totalCount, page, limit } = await getPublicProductsByBrowseParams({
+    ...filters,
+    category: slug,
+  });
   const { data: imageMap } = await getProductImageMapByProductIds(scopedProducts.map((product) => product.id));
   const storefrontProducts = scopedProducts.map((product) =>
     mapProductDbToStorefrontProduct(
@@ -58,10 +76,33 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           </nav>
         </div>
 
-        <CategoryBrowseContent
-          category={category}
-          subcategories={subcategories}
+        {error ? (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            We could not load some category data from Supabase. Showing currently available results only.
+          </div>
+        ) : null}
+
+        <ProductBrowseShell
+          title={category.name}
+          description="Browse active products from this category and its linked subcategories with search, filter, and sorting."
           products={storefrontProducts}
+          totalCount={totalCount}
+          categories={categoryOptions}
+          vendors={vendorOptions}
+          lockedCategory={category}
+          subcategories={subcategories}
+          currentFilters={{
+            search: typeof filters.search === "string" ? filters.search : "",
+            category: slug,
+            subcategory: typeof filters.subcategory === "string" ? filters.subcategory : "",
+            min: typeof filters.min === "string" ? filters.min : "",
+            max: typeof filters.max === "string" ? filters.max : "",
+            moq: typeof filters.moq === "string" ? filters.moq : "",
+            vendor: typeof filters.vendor === "string" ? filters.vendor : "",
+            sort: filters.sort ?? "newest",
+            page: String(page),
+            limit: String(limit),
+          }}
         />
       </section>
     </main>

@@ -28,7 +28,6 @@ export interface Product {
   moq: string;
   weight: string;
   badge?: ProductBadge;
-  shortDescription: string;
   description: string;
   specifications: ProductSpecification[];
   reviews?: ProductReview[];

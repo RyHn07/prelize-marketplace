@@ -37,8 +37,6 @@ export const mockProducts: Product[] = [
     moq: "10 pcs",
     weight: "0.5 kg",
     badge: "Hot",
-    shortDescription:
-      "Soft-touch cardigan set with export-ready finishing for fashion wholesalers.",
     description:
       "This knit cardigan set is designed for wholesale buyers looking for reliable quality, stable sizing, and repeat-friendly colors. It is suitable for online resellers, boutique stores, and seasonal fashion campaigns.",
     specifications: [
@@ -71,8 +69,6 @@ export const mockProducts: Product[] = [
     moq: "12 pcs",
     weight: "0.7 kg",
     badge: "New",
-    shortDescription:
-      "Modern ladies bag line with clean stitching and reseller-friendly price range.",
     description:
       "A practical wholesale bag option for fashion importers in Bangladesh. The structure, finishing, and hardware are selected to support repeat orders in retail and online channels.",
     specifications: [
@@ -105,8 +101,6 @@ export const mockProducts: Product[] = [
     moq: "8 pairs",
     weight: "0.9 kg",
     badge: "Hot",
-    shortDescription:
-      "Streetwear-inspired sneakers with stable quality for high-volume resellers.",
     description:
       "Built for wholesalers who need trend-driven footwear with practical sizing coverage. This sneaker line is suitable for mixed color assortment buying and bulk restocking.",
     specifications: [
@@ -139,8 +133,6 @@ export const mockProducts: Product[] = [
     moq: "24 sets",
     weight: "0.6 kg",
     badge: "New",
-    shortDescription:
-      "Retail-ready beauty bundle with gift-box style presentation and clean packaging.",
     description:
       "A wholesale beauty set designed for gift campaigns, beauty resellers, and social commerce shops. Packaging is tidy and presentable for both display and parcel resale.",
     specifications: [
@@ -172,8 +164,6 @@ export const mockProducts: Product[] = [
     priceFrom: 320,
     moq: "20 pcs",
     weight: "0.25 kg",
-    shortDescription:
-      "Compact electronics item for wholesale gadget stores and online resellers.",
     description:
       "This earbuds model focuses on value pricing, stable packaging, and broad mass-market demand. It works well for accessory stores, gadget pages, and mixed electronics containers.",
     specifications: [
@@ -206,8 +196,6 @@ export const mockProducts: Product[] = [
     moq: "6 pcs",
     weight: "1.1 kg",
     badge: "Best Value",
-    shortDescription:
-      "Decor-focused table lamp with clean design for home and gift retailers.",
     description:
       "A balanced home decor product for wholesale buyers who need modern styling with practical carton efficiency. The lamp suits showroom display, ecommerce, and gift resellers.",
     specifications: [
@@ -239,8 +227,6 @@ export const mockProducts: Product[] = [
     priceFrom: 95,
     moq: "30 pcs",
     weight: "0.4 kg",
-    shortDescription:
-      "Utility product with strong repeat-buy potential for accessories and lifestyle shops.",
     description:
       "A practical wholesale bottle product with simple branding potential and solid carton economics. Suitable for corporate gifting, ecommerce bundles, and daily essentials stores.",
     specifications: [
@@ -273,8 +259,6 @@ export const mockProducts: Product[] = [
     moq: "15 pcs",
     weight: "0.45 kg",
     badge: "Hot",
-    shortDescription:
-      "Colorful backpack line for kids stores, seasonal campaigns, and gift sellers.",
     description:
       "This backpack is designed for bulk retail demand with attractive character styling, stable fabric quality, and clean stitching. Good for school season sourcing and gift packs.",
     specifications: [
@@ -306,8 +290,6 @@ export const mockProducts: Product[] = [
     priceFrom: 70,
     moq: "50 pcs",
     weight: "0.1 kg",
-    shortDescription:
-      "Fast-moving fashion accessory suitable for low-weight wholesale import orders.",
     description:
       "A lightweight jewelry product that supports high margin resale and easy mixed sourcing. It is a popular pick for live sellers, small boutiques, and gift-focused accessory stores.",
     specifications: [
@@ -340,8 +322,6 @@ export const mockProducts: Product[] = [
     moq: "10 pcs",
     weight: "0.85 kg",
     badge: "New",
-    shortDescription:
-      "Compact blender cup with retail packaging for home gadget stores.",
     description:
       "A convenient home product aimed at gadget shops and kitchen resellers. It combines trending lifestyle appeal with manageable carton size for wholesale shipments.",
     specifications: [
@@ -373,8 +353,6 @@ export const mockProducts: Product[] = [
     priceFrom: 520,
     moq: "10 pcs",
     weight: "0.2 kg",
-    shortDescription:
-      "Value-focused smartwatch line with broad mass-market demand.",
     description:
       "Suitable for gadget resellers who need a competitive entry-level smartwatch with clean presentation and practical feature coverage. It fits both retail shelf and ecommerce channels.",
     specifications: [
@@ -407,8 +385,6 @@ export const mockProducts: Product[] = [
     moq: "8 sets",
     weight: "1.4 kg",
     badge: "Best Value",
-    shortDescription:
-      "Statement decor set for interior accessories and premium home retailers.",
     description:
       "A decorative mirror set intended for curated home decor assortment buying. This style works well for showroom display, online catalogs, and gift-oriented home collections.",
     specifications: [
@@ -441,8 +417,6 @@ export const mockProducts: Product[] = [
     moq: "20 sets",
     weight: "0.3 kg",
     badge: "New",
-    shortDescription:
-      "Compact organizer set for travel stores, gift shops, and ecommerce bundles.",
     description:
       "This organizer pouch set is a practical wholesale item for lifestyle retailers. It is lightweight, easy to combine with other travel goods, and suitable for repeat seasonal sourcing.",
     specifications: [
@@ -474,8 +448,6 @@ export const mockProducts: Product[] = [
     priceFrom: 210,
     moq: "15 pcs",
     weight: "0.55 kg",
-    shortDescription:
-      "Reliable shirt line for menswear stores, corporate supply, and uniform sourcing.",
     description:
       "This oxford shirt pack is built for wholesale orders requiring dependable stitching, size consistency, and practical color options. It suits boutiques and businesswear retailers.",
     specifications: [
@@ -508,8 +480,6 @@ export const mockProducts: Product[] = [
     moq: "18 pcs",
     weight: "0.35 kg",
     badge: "Hot",
-    shortDescription:
-      "Portable speaker line with broad retail demand and compact carton sizing.",
     description:
       "A lightweight electronics option for gadget sellers and gift stores. This speaker is suitable for mixed electronics sourcing and value-focused retail campaigns.",
     specifications: [
@@ -541,8 +511,6 @@ export const mockProducts: Product[] = [
     priceFrom: 165,
     moq: "16 sets",
     weight: "1.2 kg",
-    shortDescription:
-      "Giftable mug set with practical packaging for home and decor retailers.",
     description:
       "This ceramic mug set offers a simple but strong homeware wholesale option for retail stores, gifting campaigns, and decor-focused online sellers.",
     specifications: [
@@ -575,8 +543,6 @@ export const mockProducts: Product[] = [
     moq: "25 sets",
     weight: "0.28 kg",
     badge: "Best Value",
-    shortDescription:
-      "Beauty accessory kit for ecommerce bundles, gift boxes, and salon supply.",
     description:
       "This brush kit is a compact beauty item for wholesale buyers who want a practical and margin-friendly accessory line. It works well for cosmetics pages and resale bundles.",
     specifications: [
@@ -608,8 +574,6 @@ export const mockProducts: Product[] = [
     priceFrom: 240,
     moq: "10 pairs",
     weight: "0.8 kg",
-    shortDescription:
-      "Easy-selling footwear line for casual fashion stores and mixed shoe containers.",
     description:
       "These loafers are designed for buyers who need affordable casual footwear with reliable shape, practical sizing, and broad mass-market appeal.",
     specifications: [
@@ -641,8 +605,6 @@ export const mockProducts: Product[] = [
     priceFrom: 60,
     moq: "40 packs",
     weight: "0.12 kg",
-    shortDescription:
-      "Lightweight kids accessory line with strong retail pack appeal.",
     description:
       "A low-weight, high-volume kids accessory product that works well for gift shops, variety stores, and online bundle sellers focused on affordable retail pricing.",
     specifications: [
@@ -674,8 +636,6 @@ export const mockProducts: Product[] = [
     priceFrom: 85,
     moq: "30 pcs",
     weight: "0.18 kg",
-    shortDescription:
-      "Elegant scarf line for boutique, live selling, and gift accessory sourcing.",
     description:
       "This satin scarf pack supports affordable wholesale buying with a polished look and easy display value. It is suitable for boutiques, online resellers, and mixed accessory shipments.",
     specifications: [

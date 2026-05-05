@@ -1523,7 +1523,7 @@ function ProductForm({
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
-          <CardSection title="Basic Product Information" description="Set the core product details and media just like a WooCommerce-style product editor.">
+          <CardSection title="Basic Information" description="Set the core product identity, ownership, and marketplace shipping profile.">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <TextField
@@ -1608,7 +1608,7 @@ function ProductForm({
             </div>
           </CardSection>
 
-          <CardSection title="Product Type Selector" description="Choose whether this product uses one simple price or multiple generated variations.">
+          <CardSection title="Product Setup" description="Choose whether this product uses one simple price or multiple generated variations.">
             <div className="grid gap-3 md:grid-cols-2">
               {(["single", "variable"] as const).map((type) => {
                 const isSelected = values.product_type === type;
@@ -1648,7 +1648,7 @@ function ProductForm({
 
           <CardSection
             title="Product Pricing Tiers"
-            description="Create quantity-based pricing for this product."
+            description="Set pricing, fallback values, and MOQ without changing the existing pricing logic."
           >
             {values.product_type === "single" ? (
               <div className="space-y-4">
@@ -1924,7 +1924,7 @@ function ProductForm({
 
           {values.product_type === "variable" ? (
             <>
-              <CardSection title="Attributes Section" description="Add one or more attributes like Color or Size, then generate variations from them.">
+              <CardSection title="Attributes" description="Add one or more attributes like Color or Size, then generate variations from them.">
                 <div className="space-y-4">
                   {values.attributes.map((attribute, index) => (
                     <div key={attribute.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -1985,7 +1985,7 @@ function ProductForm({
                 </div>
               </CardSection>
 
-              <CardSection title="Variations Section" description="Create variations manually or generate them from the attributes above.">
+              <CardSection title="Variations" description="Create variations manually or generate them from the attributes above.">
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-slate-500">{totalVariationCount} variation(s) ready</p>
@@ -2099,7 +2099,7 @@ function ProductForm({
         </div>
 
         <aside className="space-y-6">
-          <CardSection title="Product Status" description="Control how the product appears in admin and how it should be treated for publishing.">
+          <CardSection title="Status" description="Control how the product appears in admin and how it should be treated for publishing.">
             <div className="space-y-3">
               {(["active", "disabled", "draft"] as const).map((status) => {
                 const selected = values.status === status;
@@ -2136,7 +2136,7 @@ function ProductForm({
             </div>
           </CardSection>
 
-          <CardSection title="Product Media" description="Manage category, main image, and gallery from a compact sidebar workflow.">
+          <CardSection title="Media" description="Manage category, main image, and gallery from a cleaner sidebar workflow.">
             <div className="space-y-5">
               <div>
                 <label htmlFor="product-category" className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -2278,7 +2278,7 @@ function ProductForm({
             </div>
           </CardSection>
 
-          <CardSection title="Product Specifications" description="Add simple key-value details for technical or marketplace reference information.">
+          <CardSection title="Specifications" description="Add simple key-value details for technical or marketplace reference information.">
             <div className="space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm text-slate-500">{values.specifications.length} specification row(s)</p>

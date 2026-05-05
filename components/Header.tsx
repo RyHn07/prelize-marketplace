@@ -274,15 +274,16 @@ export default function Header() {
               <ChevronDownIcon />
             </button>
 
-            <form className="flex-1" role="search">
+            <form className="flex-1" role="search" action="/products" method="GET">
               <label htmlFor="header-search" className="sr-only">
                 Search products
               </label>
               <div className="flex h-[3.2rem] items-center rounded-full border border-slate-200/90 bg-white pl-5 pr-2 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-all focus-within:border-[#615FFF]/50 focus-within:ring-4 focus-within:ring-[#615FFF]/10">
                 <input
                   id="header-search"
-                  type="text"
-                  placeholder="Search products, suppliers, categories, or brands"
+                  name="search"
+                  type="search"
+                  placeholder="Search product names"
                   className="w-full border-0 bg-transparent pr-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 <button

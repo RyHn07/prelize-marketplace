@@ -23,7 +23,8 @@ import {
 } from "@/lib/international-shipping/utils";
 import { calculateProductGroupPricing } from "@/lib/product-pricing";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
-import { getProductsByIds, getResolvedProductPricingMapByProducts } from "@/lib/products/queries";
+import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
+import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
@@ -292,13 +293,13 @@ export default function CheckoutPage() {
       }
 
       setProductRecords(result.data);
-      const pricingTierResult = await getResolvedProductPricingMapByProducts(result.data);
+      const pricingTierResult = await fetchResolvedProductPricingMap(result.data.map((product) => product.id));
 
       if (!isMounted) {
         return;
       }
 
-      setPricingConfigByProductId(Object.fromEntries(pricingTierResult.data.entries()));
+      setPricingConfigByProductId(pricingTierResult.data);
 
       const cndsProfileIds = Array.from(
         new Set(

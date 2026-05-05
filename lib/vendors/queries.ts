@@ -63,6 +63,23 @@ export async function getVendorById(id: string) {
   };
 }
 
+export async function getVendorBySlug(slug: string) {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: null as VendorRow | null,
+      error: null,
+    };
+  }
+
+  return {
+    data: data ? normalizeVendor(data as VendorRow) : null,
+    error,
+  };
+}
+
 export async function getVendorsByIds(ids: string[]) {
   const scopedIds = Array.from(new Set(ids.filter(Boolean)));
 

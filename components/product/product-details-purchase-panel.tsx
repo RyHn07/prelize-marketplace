@@ -482,8 +482,6 @@ export default function ProductDetailsPurchasePanel({
           {product.vendorName ? (
             <p className="text-sm font-medium text-slate-500">Vendor: {product.vendorName}</p>
           ) : null}
-          <p className="text-sm leading-7 text-slate-600">{product.shortDescription}</p>
-
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
             <StarRating />
             <span className="text-[#615FFF]">({reviewCount} Reviews)</span>

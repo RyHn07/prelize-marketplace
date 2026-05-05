@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import AdminPageHeader from "@/components/admin/admin-page-header";
 import ProductForm from "@/components/product/product-form";
+import { createAdminProductRecord, getAdminProductEditorRecord, updateAdminProductRecord } from "@/lib/admin-product-actions";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
-import { getProductEditorRecord, getProductEditorRecordForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductEditorRecord } from "@/types/product-db";
 
@@ -45,9 +46,7 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
         return;
       }
 
-      const { data, error } = access.hasPlatformAdminAccess
-        ? await getProductEditorRecord(resolvedParams.id)
-        : await getProductEditorRecordForVendors(resolvedParams.id, access.manageableVendorIds);
+      const { data, error } = await getAdminProductEditorRecord(resolvedParams.id);
 
       if (!isMounted) {
         return;
@@ -127,22 +126,34 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <section className="mx-auto max-w-7xl">
-        <div className="mb-6">
-          <Link
-            href="/admin/products"
-            className="inline-flex text-sm font-medium text-[#615FFF] transition-colors hover:text-[#5552e6]"
-          >
-            Back to Products
-          </Link>
-        </div>
-        <ProductForm
-          key={record.product.id}
-          mode="edit"
-          record={record}
-          allowedVendorIds={manageableVendorIds}
-          canAssignPlatformProducts={canAssignPlatformProducts}
+    <section className="mx-auto max-w-7xl space-y-6">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <AdminPageHeader
+          eyebrow="Product Editor"
+          title={`Edit ${record.product.name}`}
+          description="Update product presentation and pricing while keeping the current save logic intact."
+          actions={
+            <Link
+              href="/admin/products"
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+            >
+              Back to Products
+            </Link>
+          }
         />
-      </section>
+      </div>
+      <ProductForm
+        key={record.product.id}
+        mode="edit"
+        record={record}
+        allowedVendorIds={manageableVendorIds}
+        canAssignPlatformProducts={canAssignPlatformProducts}
+        onSave={(mode, payload, productId) =>
+          mode === "create"
+            ? createAdminProductRecord(payload)
+            : updateAdminProductRecord(productId ?? "", payload)
+        }
+      />
+    </section>
   );
 }

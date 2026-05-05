@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import AdminEmptyState from "@/components/admin/admin-empty-state";
+import AdminPageHeader from "@/components/admin/admin-page-header";
+import AdminStatCard from "@/components/admin/admin-stat-card";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { updateVendorApprovalStatus } from "@/lib/vendor-onboarding";
@@ -188,23 +191,19 @@ export default function VendorsContent() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl">
-      <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Dashboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Vendors</h1>
-          <p className="max-w-2xl text-sm text-slate-500">
-            Manage vendor records, onboarding status, and product ownership for multivendor operations.
-          </p>
-        </div>
-
-        <Link
-          href="/admin/vendors/new"
-          className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-        >
-          Add Vendor
-        </Link>
-      </div>
+    <section className="mx-auto max-w-7xl space-y-6">
+      <AdminPageHeader
+        title="Vendors"
+        description="Manage vendor records, onboarding status, and product ownership for multivendor operations."
+        actions={
+          <Link
+            href="/admin/vendors/new"
+            className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Add Vendor
+          </Link>
+        }
+      />
 
       {errorMessage ? (
         <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600">
@@ -218,23 +217,11 @@ export default function VendorsContent() {
         </div>
       ) : null}
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Vendors</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{vendors.length}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Active</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{activeCount}</p>
-        </div>
-        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-amber-500">Pending</p>
-          <p className="mt-2 text-2xl font-semibold text-amber-700">{pendingCount}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-100 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Assigned Products</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-700">{assignedProductsCount}</p>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <AdminStatCard label="Total Vendors" value={vendors.length} />
+        <AdminStatCard label="Active" value={activeCount} tone="success" />
+        <AdminStatCard label="Pending" value={pendingCount} tone="warning" />
+        <AdminStatCard label="Assigned Products" value={assignedProductsCount} tone="accent" />
       </div>
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -283,7 +270,7 @@ export default function VendorsContent() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">Directory</p>
@@ -293,25 +280,23 @@ export default function VendorsContent() {
         </div>
 
         {vendors.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center">
-            <h3 className="text-lg font-semibold text-slate-900">No vendors yet</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Create your first vendor to start assigning product ownership in the catalog.
-            </p>
-            <Link
-              href="/admin/vendors/new"
-              className="mt-5 inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            >
-              Add Vendor
-            </Link>
-          </div>
+          <AdminEmptyState
+            title="No vendors yet"
+            description="Create your first vendor to start assigning product ownership in the catalog."
+            action={
+              <Link
+                href="/admin/vendors/new"
+                className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Add Vendor
+              </Link>
+            }
+          />
         ) : filteredVendors.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center">
-            <h3 className="text-lg font-semibold text-slate-900">No matching vendors found</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Try a different search term or change the status filter.
-            </p>
-          </div>
+          <AdminEmptyState
+            title="No matching vendors found"
+            description="Try a different search term or change the status filter."
+          />
         ) : (
           <div className="space-y-3">
             {filteredVendors.map((vendor) => (

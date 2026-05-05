@@ -23,7 +23,8 @@ import {
   formatDeliveryWindow,
 } from "@/lib/international-shipping/utils";
 import { calculateProductGroupPricing } from "@/lib/product-pricing";
-import { getProductsByIds, getResolvedProductPricingMapByProducts } from "@/lib/products/queries";
+import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
+import { getProductsByIds } from "@/lib/products/queries";
 import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
@@ -60,7 +61,6 @@ type ProductGroup = {
   name: string;
   image: string;
   slug?: string;
-  shortDescription?: string | null;
   vendorName?: string | null;
   items: QuoteItem[];
 };
@@ -384,13 +384,13 @@ export default function CartPage() {
       }
 
       setProductRecords(result.data);
-      const pricingTierResult = await getResolvedProductPricingMapByProducts(result.data);
+      const pricingTierResult = await fetchResolvedProductPricingMap(result.data.map((product) => product.id));
 
       if (!isMounted) {
         return;
       }
 
-      setPricingConfigByProductId(Object.fromEntries(pricingTierResult.data.entries()));
+      setPricingConfigByProductId(pricingTierResult.data);
 
       const cndsProfileIds = Array.from(
         new Set(
@@ -498,7 +498,6 @@ export default function CartPage() {
         name: item.name,
         image: productMatch?.image_url ?? item.image,
         slug: productMatch?.slug,
-        shortDescription: productMatch?.short_description ?? productMatch?.description ?? null,
         vendorName: productMatch?.vendor_id ? vendorNamesById[productMatch.vendor_id] ?? null : null,
         items: [item],
       });
@@ -867,9 +866,6 @@ export default function CartPage() {
                           <h2 className="text-lg font-semibold text-slate-900">
                             Product: {group.name}
                           </h2>
-                          {group.shortDescription ? (
-                            <p className="text-sm leading-6 text-slate-500">{group.shortDescription}</p>
-                          ) : null}
                           <p className="text-sm text-slate-500">
                             {group.items.length} variation{group.items.length > 1 ? "s" : ""} in this
                             product group

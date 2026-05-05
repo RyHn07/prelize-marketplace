@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import AdminEmptyState from "@/components/admin/admin-empty-state";
+import AdminPageHeader from "@/components/admin/admin-page-header";
 import { getAdminAccessState } from "@/lib/admin-access";
 import {
   listProductMedia,
@@ -218,19 +220,16 @@ export default function MediaContent() {
 
   return (
     <section className="mx-auto max-w-7xl space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Media</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Image Storage Gallery</h1>
-            <p className="text-sm text-slate-500">
-              {selectMode
-                ? "Choose an image and send it back into the product editor."
-                : "Upload, search, copy, and reuse product images from one media library."}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
+      <AdminPageHeader
+        eyebrow="Admin Media"
+        title="Image Storage Gallery"
+        description={
+          selectMode
+            ? "Choose an image and send it back into the product editor."
+            : "Upload, search, copy, and reuse product images from one media library."
+        }
+        actions={
+          <>
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
@@ -246,9 +245,9 @@ export default function MediaContent() {
               className="hidden"
               onChange={handleUpload}
             />
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -283,11 +282,11 @@ export default function MediaContent() {
         ) : null}
 
         {filteredItems.length === 0 ? (
-          <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center">
-            <p className="text-lg font-semibold text-slate-900">No images found</p>
-            <p className="mt-2 text-sm text-slate-500">
-              Upload your first image to start building the product media library.
-            </p>
+          <div className="mt-5">
+            <AdminEmptyState
+              title="No images found"
+              description="Upload your first image to start building the product media library."
+            />
           </div>
         ) : (
           <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

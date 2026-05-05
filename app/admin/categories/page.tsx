@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 
+import AdminEmptyState from "@/components/admin/admin-empty-state";
+import AdminPageHeader from "@/components/admin/admin-page-header";
+import AdminStatCard from "@/components/admin/admin-stat-card";
 import { createCategory, deleteCategory, updateCategory } from "@/lib/categories/actions";
 import { getAdminCategories, getCategoryProductCounts, type AdminCategoryRow } from "@/lib/categories/queries";
 import { getAdminAccessState } from "@/lib/admin-access";
@@ -281,40 +284,24 @@ export default function AdminCategoriesPage() {
 
   return (
     <section className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Dashboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Categories</h1>
-          <p className="text-sm text-slate-500">Manage the shared catalog categories used across the marketplace.</p>
-        </div>
-
-        <Link
-          href="/admin/products"
-          className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-        >
-          View Products
-        </Link>
-      </div>
+      <AdminPageHeader
+        title="Categories"
+        description="Manage the shared catalog categories used across the marketplace."
+        actions={
+          <Link
+            href="/admin/products"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+          >
+            View Products
+          </Link>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Categories</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{categories.length}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Assigned</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{assignedCategoriesCount}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Unassigned</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-700">{unassignedCategoriesCount}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Attached Products</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {Object.values(productCounts).reduce((sum, count) => sum + count, 0)}
-          </p>
-        </div>
+        <AdminStatCard label="Total Categories" value={categories.length} />
+        <AdminStatCard label="Assigned" value={assignedCategoriesCount} tone="success" />
+        <AdminStatCard label="Unassigned" value={unassignedCategoriesCount} />
+        <AdminStatCard label="Attached Products" value={Object.values(productCounts).reduce((sum, count) => sum + count, 0)} tone="accent" />
       </div>
 
       {errorMessage ? (
@@ -450,15 +437,9 @@ export default function AdminCategoriesPage() {
           </div>
 
           {categories.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
-              <h3 className="text-lg font-semibold text-slate-900">No categories yet</h3>
-              <p className="mt-2 text-sm text-slate-500">Create your first category to organize the product catalog.</p>
-            </div>
+            <AdminEmptyState title="No categories yet" description="Create your first category to organize the product catalog." />
           ) : filteredCategories.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
-              <h3 className="text-lg font-semibold text-slate-900">No matching categories</h3>
-              <p className="mt-2 text-sm text-slate-500">Try another search term.</p>
-            </div>
+            <AdminEmptyState title="No matching categories" description="Try another search term." />
           ) : (
             <div className="space-y-3">
               {orderedCategories.filter((category) => filteredCategories.some((entry) => entry.id === category.id)).map((category) => {

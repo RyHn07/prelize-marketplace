@@ -64,25 +64,46 @@ const REMOVABLE_LEGACY_COLUMNS = new Set([
   "weight",
 ]);
 
+const REMOVABLE_VARIANT_COLUMNS = new Set([
+  "pricing_tier_set_id",
+]);
+
+const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
+  "price",
+  "moq",
+  "image_url",
+  "status",
+  "product_type",
+  "regular_price",
+  "discount_price",
+  "vendor_id",
+  "gallery_images",
+  "attributes",
+  "cdd_shipping_profile",
+  "cnds_profile_id",
+  "pricing_tier_profile_id",
+  "pricing_source",
+]);
+
 function buildSchemaErrorMessage(message: string) {
   const normalizedMessage = message.toLowerCase();
+  const missingProductColumn = getMissingProductsColumn(message);
+  const missingVariantColumn = getMissingVariantColumn(message);
+
+  if (normalizedMessage.includes("product_pricing_tier_sets") || normalizedMessage.includes("product_pricing_tier_set_rows")) {
+    return "Variable pricing tier set tables are missing. Run the latest variable pricing tier migration to enable per-variant tier sets.";
+  }
 
   if (
-    normalizedMessage.includes("image_url") ||
-    normalizedMessage.includes("price") ||
-    normalizedMessage.includes("moq") ||
-    normalizedMessage.includes("status") ||
-    normalizedMessage.includes("product_type") ||
-    normalizedMessage.includes("regular_price") ||
-    normalizedMessage.includes("discount_price") ||
-    normalizedMessage.includes("vendor_id") ||
-    normalizedMessage.includes("gallery_images") ||
-    normalizedMessage.includes("attributes") ||
-    normalizedMessage.includes("cdd_shipping_profile") ||
-    normalizedMessage.includes("cnds_profile_id") ||
-    normalizedMessage.includes("pricing_tier_profile_id") ||
-    normalizedMessage.includes("pricing_source") ||
-    normalizedMessage.includes("pricing_tier_set_id")
+    missingVariantColumn === "pricing_tier_set_id" ||
+    (normalizedMessage.includes("product_variants") && normalizedMessage.includes("pricing_tier_set_id"))
+  ) {
+    return "The product_variants table is missing the pricing_tier_set_id column. Run the latest variable pricing tier migration or save without per-variant tier set links.";
+  }
+
+  if (
+    (missingProductColumn && PRODUCT_EDITOR_SCHEMA_COLUMNS.has(missingProductColumn)) ||
+    (normalizedMessage.includes("products") && normalizedMessage.includes("schema cache"))
   ) {
     return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, cdd_shipping_profile, cnds_profile_id, pricing_tier_profile_id, pricing_source, and pricing_tier_set_id support before saving the full product editor data.";
   }
@@ -101,6 +122,17 @@ function isMissingRelationError(message: string) {
     normalizedMessage.includes("relation") ||
     normalizedMessage.includes("does not exist") ||
     normalizedMessage.includes("could not find")
+  );
+}
+
+function isMissingColumnError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("does not exist") ||
+    normalizedMessage.includes("could not find") ||
+    normalizedMessage.includes("schema cache") ||
+    normalizedMessage.includes("column")
   );
 }
 
@@ -138,6 +170,34 @@ function getMissingProductsColumn(message: string) {
   return null;
 }
 
+function getMissingVariantColumn(message: string) {
+  const quotedColumnMatch = message.match(/'([^']+)' column of 'product_variants'/i);
+
+  if (quotedColumnMatch?.[1]) {
+    return quotedColumnMatch[1];
+  }
+
+  const plainColumnMatch = message.match(/column\s+"?([a-z0-9_]+)"?\s+of relation\s+"product_variants"/i);
+
+  if (plainColumnMatch?.[1]) {
+    return plainColumnMatch[1];
+  }
+
+  const notExistMatch = message.match(/column\s+"?([a-z0-9_]+)"?\s+does not exist/i);
+
+  if (notExistMatch?.[1]) {
+    return notExistMatch[1];
+  }
+
+  const invalidColumnMatch = message.match(/Could not find the '?([a-z0-9_]+)'? column of '?product_variants'?/i);
+
+  if (invalidColumnMatch?.[1]) {
+    return invalidColumnMatch[1];
+  }
+
+  return null;
+}
+
 function normalizeProductSlug(value: string) {
   const normalized = value
     .trim()
@@ -153,6 +213,24 @@ function isSlugConstraintError(message: string) {
   const normalizedMessage = message.toLowerCase();
 
   return normalizedMessage.includes("products_slug_key") || normalizedMessage.includes("products_slug_unique_idx");
+}
+
+function isPricingSourceConstraintError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return normalizedMessage.includes("products_pricing_source_check");
+}
+
+function mapToLegacyPricingSource(value: unknown) {
+  if (value === "use_product_tier") {
+    return "use_pricing_tiers";
+  }
+
+  if (value === "use_fixed_price") {
+    return "use_variant_price";
+  }
+
+  return value;
 }
 
 async function resolveUniqueProductSlug(
@@ -225,6 +303,19 @@ async function insertProductWithFallback(
     }
 
     const errorMessage = result.error?.message ?? "";
+
+    if (isPricingSourceConstraintError(errorMessage) && "pricing_source" in nextPayload) {
+      const legacyPricingSource = mapToLegacyPricingSource(nextPayload.pricing_source);
+
+      if (legacyPricingSource !== nextPayload.pricing_source) {
+        nextPayload = {
+          ...nextPayload,
+          pricing_source: legacyPricingSource,
+        };
+        continue;
+      }
+    }
+
     const missingColumn = getMissingProductsColumn(errorMessage);
 
     if (missingColumn && REMOVABLE_LEGACY_COLUMNS.has(missingColumn) && missingColumn in nextPayload) {
@@ -232,6 +323,21 @@ async function insertProductWithFallback(
       delete restPayload[missingColumn];
       nextPayload = restPayload;
       continue;
+    }
+
+    if (!missingColumn && isMissingColumnError(errorMessage)) {
+      const removableKeys = Array.from(REMOVABLE_LEGACY_COLUMNS).filter((key) => key in nextPayload);
+
+      if (removableKeys.length > 0) {
+        const restPayload = { ...nextPayload };
+
+        removableKeys.forEach((key) => {
+          delete restPayload[key];
+        });
+
+        nextPayload = restPayload;
+        continue;
+      }
     }
 
     return result;
@@ -259,6 +365,19 @@ async function updateProductWithFallback(
     }
 
     const errorMessage = result.error?.message ?? "";
+
+    if (isPricingSourceConstraintError(errorMessage) && "pricing_source" in nextPayload) {
+      const legacyPricingSource = mapToLegacyPricingSource(nextPayload.pricing_source);
+
+      if (legacyPricingSource !== nextPayload.pricing_source) {
+        nextPayload = {
+          ...nextPayload,
+          pricing_source: legacyPricingSource,
+        };
+        continue;
+      }
+    }
+
     const missingColumn = getMissingProductsColumn(errorMessage);
 
     if (missingColumn && REMOVABLE_LEGACY_COLUMNS.has(missingColumn) && missingColumn in nextPayload) {
@@ -266,6 +385,21 @@ async function updateProductWithFallback(
       delete restPayload[missingColumn];
       nextPayload = restPayload;
       continue;
+    }
+
+    if (!missingColumn && isMissingColumnError(errorMessage)) {
+      const removableKeys = Array.from(REMOVABLE_LEGACY_COLUMNS).filter((key) => key in nextPayload);
+
+      if (removableKeys.length > 0) {
+        const restPayload = { ...nextPayload };
+
+        removableKeys.forEach((key) => {
+          delete restPayload[key];
+        });
+
+        nextPayload = restPayload;
+        continue;
+      }
     }
 
     return result;
@@ -510,6 +644,34 @@ async function syncProductPricingTierSets(
   };
 }
 
+async function insertProductVariantsWithFallback(
+  supabase: SupabaseClient,
+  variantsPayload: Array<Record<string, unknown>>,
+) {
+  let nextPayload = variantsPayload;
+
+  while (true) {
+    const result = await supabase.from("product_variants").insert(nextPayload as never);
+
+    if (!result.error) {
+      return result;
+    }
+
+    const missingColumn = getMissingVariantColumn(result.error.message ?? "");
+
+    if (missingColumn && REMOVABLE_VARIANT_COLUMNS.has(missingColumn)) {
+      nextPayload = nextPayload.map((variant) => {
+        const nextVariant = { ...variant };
+        delete nextVariant[missingColumn];
+        return nextVariant;
+      });
+      continue;
+    }
+
+    return result;
+  }
+}
+
 export async function createProductEditorRecordWithClient(
   supabase: SupabaseClient,
   payload: ProductEditorSavePayload,
@@ -592,7 +754,7 @@ export async function createProductEditorRecordWithClient(
       pricing_tier_set_id: variant.pricing_tier_set_id ? pricingTierSetIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
-    const { error: variantsError } = await supabase.from("product_variants").insert(variantsPayload as never);
+    const { error: variantsError } = await insertProductVariantsWithFallback(supabase, variantsPayload);
 
     if (variantsError) {
       await supabase.from("products").delete().eq("id", (data as ProductDbRow).id);
@@ -728,7 +890,7 @@ export async function updateProductEditorRecordWithClient(
       pricing_tier_set_id: variant.pricing_tier_set_id ? tierSetResult.setIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
-    const { error: variantsError } = await supabase.from("product_variants").insert(variantsPayload as never);
+    const { error: variantsError } = await insertProductVariantsWithFallback(supabase, variantsPayload);
 
     if (variantsError) {
       return {
