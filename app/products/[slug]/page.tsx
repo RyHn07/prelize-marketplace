@@ -14,6 +14,7 @@ import {
   getProductSpecsByProductId,
   getPublicProductDetailBySlug,
   getPublicProducts,
+  getResolvedProductPricingMapByProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getVendorOptions } from "@/lib/vendors/queries";
@@ -57,12 +58,20 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const [{ data: productImages }, { data: productSpecs }, { data: cndsProfile }, { data: internationalShippingMethods }] = await Promise.all([
+  const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }] = await Promise.all([
     getProductImagesByProductId(productRow.id),
     getProductSpecsByProductId(productRow.id),
+    getResolvedProductPricingMapByProducts([productRow]),
     getActiveCndsShippingProfileById(productRow.cnds_profile_id),
     getActiveInternationalShippingMethodsForServer(),
   ]);
+  const productPricingConfig = resolvedPricingMap.get(productRow.id) ?? {
+    source: null,
+    profile_id: null,
+    profile_name: null,
+    pricing_type: null,
+    tiers: [],
+  };
   const galleryFromTable = productImages.map((item) => item.image_url).filter(Boolean);
   const fallbackGallery =
     productRow.gallery_images && productRow.gallery_images.length > 0
@@ -157,12 +166,13 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
           </div>
 
           <ProductDetailsPurchasePanel
-            product={product}
-            productRecord={productRow}
-            variants={variants}
-            cndsProfile={cndsProfile}
-            internationalShippingMethods={internationalShippingMethods}
-          />
+          product={product}
+          productRecord={productRow}
+          variants={variants}
+          productPricingConfig={productPricingConfig}
+          cndsProfile={cndsProfile}
+          internationalShippingMethods={internationalShippingMethods}
+        />
         </div>
 
         <ProductDetailsTabs product={product} />

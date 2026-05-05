@@ -1,5 +1,8 @@
 // lib/shipping-utils.ts
 
+import { calculateProductGroupPricing } from "@/lib/product-pricing"
+import type { ProductPricingType, ResolvedProductPricingTier } from "@/types/product-db"
+
 type ShippingProfile = {
   id: string
   name: string
@@ -33,9 +36,24 @@ export type CartItem = {
   variantId?: string | null
   variantName?: string | null
   variantValue?: string | null
+  basePrice?: number
   price: number
   quantity: number
   weight?: number
+  productPricing?: {
+    pricingType: ProductPricingType | null
+    tiers: ResolvedProductPricingTier[]
+    source?: "profile" | "legacy" | null
+    profileId?: string | null
+    profileName?: string | null
+  } | null
+  variantPricing?: {
+    tierSetId: string | null
+    tierSetName?: string | null
+    fallbackPrice: number
+    pricingType: ProductPricingType
+    tiers: ResolvedProductPricingTier[]
+  } | null
   shippingProfile?: ShippingProfile
   cddTiers?: CDDTier[]
   cndsProfile?: CndsShippingProfile | null
@@ -266,12 +284,11 @@ export function calculateCartTotals(
 
   for (const productId in groupedItems) {
     const items = groupedItems[productId]
+    const pricing = calculateProductGroupPricing(items)
 
     // Quantity + price
-    for (const item of items) {
-      totalQuantity += item.quantity
-      productPrice += item.price * item.quantity
-    }
+    totalQuantity += pricing.totalQuantity
+    productPrice += pricing.totalPrice
 
     // Immediate charge: CNDS first, legacy CDD fallback for older products
     const immediateCharge = calculateImmediateCharge(items)

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/admin/vendors", label: "Vendors" },
   { href: "/admin/vendor-debug", label: "Vendor Debug" },
   { href: "/admin/media", label: "Media" },
+  { href: "/admin/pricing-tiers", label: "Pricing Tiers" },
   { href: "/admin/cnds", label: "CNDS" },
   { href: "/admin/international-shipping", label: "International Shipping" },
   { href: "/admin/categories", label: "Categories" },

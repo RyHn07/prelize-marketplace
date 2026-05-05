@@ -113,11 +113,11 @@ export function createEmptySummary(): OrderSummaryRow {
 }
 
 export function createVendorOrderSummary(
-  items: Array<{ price: number; quantity: number }>,
+  items: Array<{ price: number; quantity: number; totalPrice?: number }>,
   shippingMethods: ShippingMethodRow[],
 ) {
   const summary = createEmptySummary();
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.totalPrice ?? item.price * item.quantity), 0);
   const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
   summary.quantity = quantity;

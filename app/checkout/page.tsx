@@ -21,8 +21,9 @@ import {
   calculateTotalWeightKg,
   formatDeliveryWindow,
 } from "@/lib/international-shipping/utils";
+import { calculateProductGroupPricing } from "@/lib/product-pricing";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
-import { getProductsByIds } from "@/lib/products/queries";
+import { getProductsByIds, getResolvedProductPricingMapByProducts } from "@/lib/products/queries";
 import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
@@ -31,6 +32,7 @@ import type {
   InternationalShippingStatus,
   OrderSummaryRow,
   ProductDbRow,
+  ResolvedProductPricingConfig,
   ShippingMethodRow,
   VendorOrderRow,
 } from "@/types/product-db";
@@ -185,6 +187,7 @@ export default function CheckoutPage() {
   const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [pricingConfigByProductId, setPricingConfigByProductId] = useState<Record<string, ResolvedProductPricingConfig>>({});
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileRow>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
@@ -289,6 +292,13 @@ export default function CheckoutPage() {
       }
 
       setProductRecords(result.data);
+      const pricingTierResult = await getResolvedProductPricingMapByProducts(result.data);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setPricingConfigByProductId(Object.fromEntries(pricingTierResult.data.entries()));
 
       const cndsProfileIds = Array.from(
         new Set(
@@ -425,6 +435,17 @@ export default function CheckoutPage() {
       result[productId] = groupItems.map((item) => {
         const cndsProfileId = productMatch?.cnds_profile_id ?? null;
         const cndsProfile = cndsProfileId ? cndsProfilesById[cndsProfileId] ?? null : null;
+        const variantAssignmentMap = new Map(
+          (pricingConfigByProductId[productId]?.variant_assignments ?? []).map((assignment) => [
+            assignment.variant_id,
+            assignment.tier_set_id,
+          ]),
+        );
+        const variantTierSetMap = new Map(
+          (pricingConfigByProductId[productId]?.variant_tier_sets ?? []).map((tierSet) => [tierSet.id, tierSet]),
+        );
+        const assignedTierSetId = item.variantId ? variantAssignmentMap.get(item.variantId) ?? null : null;
+        const assignedTierSet = assignedTierSetId ? variantTierSetMap.get(assignedTierSetId) ?? null : null;
 
         return {
           productId: item.productId,
@@ -434,8 +455,25 @@ export default function CheckoutPage() {
           variantId: item.variantId,
           variantName: item.variantName ?? null,
           variantValue: item.variantValue ?? null,
+          basePrice: item.price,
           price: item.price,
           quantity: item.quantity,
+          productPricing: {
+            pricingType: pricingConfigByProductId[productId]?.pricing_type ?? null,
+            tiers: pricingConfigByProductId[productId]?.tiers ?? [],
+            source: pricingConfigByProductId[productId]?.source ?? null,
+            profileId: pricingConfigByProductId[productId]?.profile_id ?? null,
+            profileName: pricingConfigByProductId[productId]?.profile_name ?? null,
+          },
+          variantPricing: assignedTierSet
+            ? {
+                tierSetId: assignedTierSet.id,
+                tierSetName: assignedTierSet.name,
+                fallbackPrice: assignedTierSet.fallback_price,
+                pricingType: assignedTierSet.pricing_type,
+                tiers: assignedTierSet.tiers,
+              }
+            : null,
           weight: parseWeight(
             productMatch?.weight == null ? undefined : String(productMatch.weight)
           ),
@@ -462,9 +500,19 @@ export default function CheckoutPage() {
 
       return result;
     }, {});
-  }, [cndsProfilesById, itemAvailabilityIssues, items, productRecordMap, selectedKeySet, selectedShippingProfiles]);
+  }, [cndsProfilesById, itemAvailabilityIssues, items, pricingConfigByProductId, productRecordMap, selectedKeySet, selectedShippingProfiles]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
+  const pricingByProductId = useMemo(
+    () =>
+      new Map(
+        Object.entries(selectedGroupedItems).map(([productId, groupItems]) => [
+          productId,
+          calculateProductGroupPricing(groupItems),
+        ]),
+      ),
+    [selectedGroupedItems],
+  );
   const immediateChargeBreakdowns = useMemo(
     () =>
       new Map(
@@ -705,13 +753,27 @@ export default function CheckoutPage() {
         const vendorOrdersPayload = Array.from(vendorOrderGroups.values()).map((group) => {
           const vendorOrderId = crypto.randomUUID();
           vendorOrderIdByVendorId.set(group.vendorId, vendorOrderId);
+          const productPricingIndex = new Map<string, number>();
 
           return {
             id: vendorOrderId,
             order_id: createdOrder.id,
             vendor_id: group.vendorId,
             status: "Pending",
-            summary: createVendorOrderSummary(group.items, group.shippingMethods),
+            summary: createVendorOrderSummary(
+              group.items.map((item) => {
+                const pricing = pricingByProductId.get(item.productId) ?? null;
+                const itemIndex = productPricingIndex.get(item.productId) ?? 0;
+                productPricingIndex.set(item.productId, itemIndex + 1);
+
+                return {
+                  price: pricing?.itemUnitPrices[itemIndex] ?? item.price,
+                  quantity: item.quantity,
+                  totalPrice: pricing?.itemTotals[itemIndex] ?? item.price * item.quantity,
+                };
+              }),
+              group.shippingMethods,
+            ),
             shipping_method: group.shippingMethods,
             vendor_note: null,
             admin_note: null,
@@ -737,8 +799,11 @@ export default function CheckoutPage() {
       const orderItemsPayload = selectedCartItems.map((item) => {
         const vendorId = productRecordMap.get(item.productId)?.vendor_id ?? null;
         const costBreakdown = immediateChargeBreakdowns.get(item.productId);
+        const pricing = pricingByProductId.get(item.productId) ?? null;
         const itemIndex = productItemCostIndex.get(item.productId) ?? 0;
         const cndsCost = costBreakdown?.itemCosts[itemIndex] ?? 0;
+        const unitPrice = pricing?.itemUnitPrices[itemIndex] ?? item.price;
+        const totalPrice = pricing?.itemTotals[itemIndex] ?? item.price * item.quantity;
 
         productItemCostIndex.set(item.productId, itemIndex + 1);
 
@@ -751,9 +816,9 @@ export default function CheckoutPage() {
           variation: item.variation,
           variant_name: item.variantName ?? null,
           variant_value: item.variantValue ?? item.variation,
-          price: item.price,
-          unit_price: item.price,
-          total_price: item.price * item.quantity,
+          price: unitPrice,
+          unit_price: unitPrice,
+          total_price: totalPrice,
           quantity: item.quantity,
           weight: item.weight ?? null,
           weight_kg: item.weight ?? null,
@@ -970,7 +1035,10 @@ export default function CheckoutPage() {
               <h2 className="text-lg font-semibold text-slate-900">Selected Products</h2>
 
               <div className="mt-4 space-y-4">
-                {selectedProductGroups.map((group) => (
+                {selectedProductGroups.map((group) => {
+                  const groupPricing = pricingByProductId.get(group.productId) ?? null;
+
+                  return (
                   <article key={group.productId} className="rounded-xl border border-slate-200 p-4">
                     <div className="flex gap-4 border-b border-slate-200 pb-4">
                       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
@@ -991,28 +1059,33 @@ export default function CheckoutPage() {
                         <p className="mt-1 text-sm text-slate-500">
                           {group.items.length} variation{group.items.length > 1 ? "s" : ""} selected
                         </p>
+                        {groupPricing?.matchedTier ? (
+                          <p className="mt-1 text-xs font-medium text-[#615FFF]">
+                            Tier pricing active: {groupPricing.pricingType === "unit" ? "Per unit" : "Fixed total"}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="mt-4 space-y-2">
-                      {group.items.map((item) => (
+                      {group.items.map((item, index) => (
                         <div
                           key={getVariantKey(item)}
                           className="rounded-lg border border-slate-200 px-4 py-3"
                         >
                           <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-4">
-                            <p className="font-semibold text-slate-900">{item.variation}</p>
+                            <p className="font-semibold text-slate-900">{item.variantValue ?? item.variation}</p>
                             <p>Qty: {item.quantity}</p>
-                            <p>Unit: {formatBDT(item.price)}</p>
+                            <p>Unit: {formatBDT(groupPricing?.itemUnitPrices[index] ?? item.price)}</p>
                             <p className="font-medium text-slate-900">
-                              Total: {formatBDT(item.price * item.quantity)}
+                              Total: {formatBDT(groupPricing?.itemTotals[index] ?? item.price * item.quantity)}
                             </p>
                           </div>
                         </div>
                       ))}
                     </div>
                   </article>
-                ))}
+                )})}
               </div>
             </section>
           </div>

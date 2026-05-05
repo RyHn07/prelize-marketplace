@@ -4,6 +4,7 @@ import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
   ProductImageRow,
   ProductDbRow,
+  ProductPricingType,
   ProductSpecRow,
   ProductType,
   ProductUpsertPayload,
@@ -18,12 +19,32 @@ export type ProductVariantUpsertPayload = {
   moq: number;
   stock: number;
   image_url: string | null;
+  pricing_tier_set_id: string | null;
   attribute_values: Record<string, string>;
+};
+
+export type ProductPricingTierUpsertPayload = {
+  pricing_type: ProductPricingType;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order: number;
+};
+
+export type ProductPricingTierSetUpsertPayload = {
+  temp_id: string;
+  name: string;
+  fallback_price: number;
+  pricing_type: ProductPricingType;
+  sort_order: number;
+  rows: ProductPricingTierUpsertPayload[];
 };
 
 export type ProductEditorSavePayload = {
   product: ProductUpsertPayload;
   variants: ProductVariantUpsertPayload[];
+  pricing_tiers?: ProductPricingTierUpsertPayload[];
+  pricing_tier_sets?: ProductPricingTierSetUpsertPayload[];
 };
 
 const REMOVABLE_LEGACY_COLUMNS = new Set([
@@ -36,6 +57,8 @@ const REMOVABLE_LEGACY_COLUMNS = new Set([
   "discount_price",
   "gallery_images",
   "product_type",
+  "pricing_tier_profile_id",
+  "pricing_source",
   "regular_price",
   "vendor_id",
   "weight",
@@ -56,9 +79,12 @@ function buildSchemaErrorMessage(message: string) {
     normalizedMessage.includes("gallery_images") ||
     normalizedMessage.includes("attributes") ||
     normalizedMessage.includes("cdd_shipping_profile") ||
-    normalizedMessage.includes("cnds_profile_id")
+    normalizedMessage.includes("cnds_profile_id") ||
+    normalizedMessage.includes("pricing_tier_profile_id") ||
+    normalizedMessage.includes("pricing_source") ||
+    normalizedMessage.includes("pricing_tier_set_id")
   ) {
-    return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, cdd_shipping_profile, and cnds_profile_id before saving the full product editor data.";
+    return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, cdd_shipping_profile, cnds_profile_id, pricing_tier_profile_id, pricing_source, and pricing_tier_set_id support before saving the full product editor data.";
   }
 
   if (normalizedMessage.includes("product_variants")) {
@@ -256,6 +282,7 @@ function getBaseProductMetrics(
   productType: ProductType,
   product: ProductUpsertPayload,
   variants: ProductVariantUpsertPayload[],
+  pricingTierSets: ProductPricingTierSetUpsertPayload[] = [],
 ) {
   if (productType === "single") {
     const regularPrice = product.regular_price ?? product.price;
@@ -271,7 +298,10 @@ function getBaseProductMetrics(
 
   const effectivePrices = variants.map((variant) => variant.price);
   const moqs = variants.map((variant) => variant.moq);
-  const regularPrices = variants.map((variant) => variant.regular_price ?? variant.price);
+  const regularPrices =
+    pricingTierSets.length > 0
+      ? pricingTierSets.map((tierSet) => tierSet.fallback_price)
+      : variants.map((variant) => variant.regular_price ?? variant.price);
 
   return {
     price: effectivePrices.length > 0 ? Math.min(...effectivePrices) : 0,
@@ -329,11 +359,167 @@ async function syncProductRelationTables(
   return null;
 }
 
+async function syncProductPricingTiers(
+  supabase: SupabaseClient,
+  productId: string,
+  tiers: ProductPricingTierUpsertPayload[],
+) {
+  const { error: deleteTiersError } = await supabase.from("product_pricing_tiers").delete().eq("product_id", productId);
+
+  if (deleteTiersError && !isMissingRelationError(deleteTiersError.message)) {
+    return deleteTiersError;
+  }
+
+  const tierRows = tiers.map((tier) => ({
+    product_id: productId,
+    pricing_type: tier.pricing_type,
+    min_qty: tier.min_qty,
+    max_qty: tier.max_qty,
+    price: tier.price,
+    sort_order: tier.sort_order,
+  }));
+
+  if (tierRows.length === 0) {
+    return null;
+  }
+
+  const { error: insertTiersError } = await supabase.from("product_pricing_tiers").insert(tierRows as never);
+
+  if (insertTiersError && !isMissingRelationError(insertTiersError.message)) {
+    return insertTiersError;
+  }
+
+  return null;
+}
+
+async function syncProductPricingTierSets(
+  supabase: SupabaseClient,
+  productId: string,
+  tierSets: ProductPricingTierSetUpsertPayload[],
+) {
+  const { data: existingSets, error: existingSetsError } = await supabase
+    .from("product_pricing_tier_sets")
+    .select("id")
+    .eq("product_id", productId);
+
+  if (existingSetsError && !isMissingRelationError(existingSetsError.message)) {
+    return {
+      error: existingSetsError,
+      setIdMap: new Map<string, string>(),
+    };
+  }
+
+  const existingSetIds = ((existingSets ?? []) as Array<{ id: string }>).map((row) => row.id);
+
+  if (existingSetIds.length > 0) {
+    const { error: deleteRowsError } = await supabase
+      .from("product_pricing_tier_set_rows")
+      .delete()
+      .in("tier_set_id", existingSetIds);
+
+    if (deleteRowsError && !isMissingRelationError(deleteRowsError.message)) {
+      return {
+        error: deleteRowsError,
+        setIdMap: new Map<string, string>(),
+      };
+    }
+  }
+
+  const { error: deleteSetsError } = await supabase.from("product_pricing_tier_sets").delete().eq("product_id", productId);
+
+  if (deleteSetsError && !isMissingRelationError(deleteSetsError.message)) {
+    return {
+      error: deleteSetsError,
+      setIdMap: new Map<string, string>(),
+    };
+  }
+
+  if (tierSets.length === 0) {
+    return {
+      error: null,
+      setIdMap: new Map<string, string>(),
+    };
+  }
+
+  const insertPayload = tierSets.map((tierSet) => ({
+    product_id: productId,
+    name: tierSet.name,
+    fallback_price: tierSet.fallback_price,
+    pricing_type: tierSet.pricing_type,
+    sort_order: tierSet.sort_order,
+  }));
+
+  const { data: insertedSets, error: insertSetsError } = await supabase
+    .from("product_pricing_tier_sets")
+    .insert(insertPayload as never)
+    .select("id, sort_order");
+
+  if (insertSetsError && !isMissingRelationError(insertSetsError.message)) {
+    return {
+      error: insertSetsError,
+      setIdMap: new Map<string, string>(),
+    };
+  }
+
+  const sortOrderToId = new Map<number, string>();
+  ((insertedSets ?? []) as Array<{ id: string; sort_order: number | null }>).forEach((row) => {
+    if (typeof row.sort_order === "number") {
+      sortOrderToId.set(row.sort_order, row.id);
+    }
+  });
+
+  const setIdMap = new Map<string, string>();
+  tierSets.forEach((tierSet) => {
+    const persistedId = sortOrderToId.get(tierSet.sort_order);
+
+    if (persistedId) {
+      setIdMap.set(tierSet.temp_id, persistedId);
+    }
+  });
+
+  const rowPayload = tierSets.flatMap((tierSet) => {
+    const persistedId = setIdMap.get(tierSet.temp_id);
+
+    if (!persistedId) {
+      return [];
+    }
+
+    return tierSet.rows.map((row) => ({
+      tier_set_id: persistedId,
+      min_qty: row.min_qty,
+      max_qty: row.max_qty,
+      price: row.price,
+      sort_order: row.sort_order,
+    }));
+  });
+
+  if (rowPayload.length > 0) {
+    const { error: insertRowsError } = await supabase.from("product_pricing_tier_set_rows").insert(rowPayload as never);
+
+    if (insertRowsError && !isMissingRelationError(insertRowsError.message)) {
+      return {
+        error: insertRowsError,
+        setIdMap: new Map<string, string>(),
+      };
+    }
+  }
+
+  return {
+    error: null,
+    setIdMap,
+  };
+}
+
 export async function createProductEditorRecordWithClient(
   supabase: SupabaseClient,
   payload: ProductEditorSavePayload,
 ) {
-  const baseMetrics = getBaseProductMetrics(payload.product.product_type, payload.product, payload.variants);
+  const baseMetrics = getBaseProductMetrics(
+    payload.product.product_type,
+    payload.product,
+    payload.variants,
+    payload.pricing_tier_sets ?? [],
+  );
   const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug);
 
   if (slugResult.error) {
@@ -375,10 +561,35 @@ export async function createProductEditorRecordWithClient(
     };
   }
 
+  let pricingTierSetIdMap = new Map<string, string>();
+
+  if (payload.product.product_type === "variable" && payload.pricing_tier_sets) {
+    const tierSetResult = await syncProductPricingTierSets(
+      supabase,
+      (data as ProductDbRow).id,
+      payload.pricing_tier_sets,
+    );
+
+    if (tierSetResult.error) {
+      await supabase.from("products").delete().eq("id", (data as ProductDbRow).id);
+
+      return {
+        data: null as ProductDbRow | null,
+        error: {
+          ...tierSetResult.error,
+          message: buildSchemaErrorMessage(tierSetResult.error.message),
+        },
+      };
+    }
+
+    pricingTierSetIdMap = tierSetResult.setIdMap;
+  }
+
   if (payload.product.product_type === "variable") {
     const variantsPayload = payload.variants.map((variant) => ({
       product_id: (data as ProductDbRow).id,
       ...variant,
+      pricing_tier_set_id: variant.pricing_tier_set_id ? pricingTierSetIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
     const { error: variantsError } = await supabase.from("product_variants").insert(variantsPayload as never);
@@ -396,7 +607,28 @@ export async function createProductEditorRecordWithClient(
     }
   }
 
-  await syncProductRelationTables(supabase, (data as ProductDbRow).id, payload.product);
+  const relationError = await syncProductRelationTables(supabase, (data as ProductDbRow).id, payload.product);
+  if (relationError) {
+    return {
+      data: null as ProductDbRow | null,
+      error: relationError,
+    };
+  }
+
+  const pricingTierError = await syncProductPricingTiers(
+    supabase,
+    (data as ProductDbRow).id,
+    payload.product.product_type === "single" ? payload.pricing_tiers ?? [] : [],
+  );
+  if (payload.pricing_tiers && pricingTierError) {
+    return {
+      data: null as ProductDbRow | null,
+      error: {
+        ...pricingTierError,
+        message: buildSchemaErrorMessage(pricingTierError.message),
+      },
+    };
+  }
 
   return {
     data: data as ProductDbRow,
@@ -414,7 +646,12 @@ export async function updateProductEditorRecordWithClient(
   id: string,
   payload: ProductEditorSavePayload,
 ) {
-  const baseMetrics = getBaseProductMetrics(payload.product.product_type, payload.product, payload.variants);
+  const baseMetrics = getBaseProductMetrics(
+    payload.product.product_type,
+    payload.product,
+    payload.variants,
+    payload.pricing_tier_sets ?? [],
+  );
   const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug, id);
 
   if (slugResult.error) {
@@ -468,10 +705,27 @@ export async function updateProductEditorRecordWithClient(
     };
   }
 
+  const tierSetResult = await syncProductPricingTierSets(
+    supabase,
+    id,
+    payload.product.product_type === "variable" ? payload.pricing_tier_sets ?? [] : [],
+  );
+
+  if (tierSetResult.error) {
+    return {
+      data: null as ProductDbRow | null,
+      error: {
+        ...tierSetResult.error,
+        message: buildSchemaErrorMessage(tierSetResult.error.message),
+      },
+    };
+  }
+
   if (payload.product.product_type === "variable") {
     const variantsPayload = payload.variants.map((variant) => ({
       product_id: id,
       ...variant,
+      pricing_tier_set_id: variant.pricing_tier_set_id ? tierSetResult.setIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
     const { error: variantsError } = await supabase.from("product_variants").insert(variantsPayload as never);
@@ -487,7 +741,26 @@ export async function updateProductEditorRecordWithClient(
     }
   }
 
-  await syncProductRelationTables(supabase, id, payload.product);
+  const relationError = await syncProductRelationTables(supabase, id, payload.product);
+  if (relationError) {
+    return {
+      data: null as ProductDbRow | null,
+      error: relationError,
+    };
+  }
+
+  const pricingTierError = payload.pricing_tiers
+    ? await syncProductPricingTiers(supabase, id, payload.product.product_type === "single" ? payload.pricing_tiers : [])
+    : null;
+  if (pricingTierError) {
+    return {
+      data: null as ProductDbRow | null,
+      error: {
+        ...pricingTierError,
+        message: buildSchemaErrorMessage(pricingTierError.message),
+      },
+    };
+  }
 
   return {
     data: data as ProductDbRow,

@@ -9,6 +9,8 @@ import {
   getEffectivePrice,
   updateProductEditorRecord,
   type ProductEditorSavePayload,
+  type ProductPricingTierSetUpsertPayload,
+  type ProductPricingTierUpsertPayload,
   type ProductVariantUpsertPayload,
 } from "@/lib/products/actions";
 import { getCndsShippingProfilesForVendor } from "@/lib/cnds/queries";
@@ -21,6 +23,10 @@ import type {
   ProductCategoryOption,
   ProductEditorRecord,
   ProductFormValues,
+  ProductPricingSource,
+  ProductPricingTierFormValue,
+  ProductPricingTierSetFormValue,
+  ProductPricingType,
   ProductSpecification,
   ProductSpecificationFormValue,
   ProductStatus,
@@ -55,6 +61,15 @@ function createEmptyAttribute(): ProductAttributeFormValue {
   };
 }
 
+function createEmptyPricingTier(): ProductPricingTierFormValue {
+  return {
+    id: createId("pricing-tier"),
+    min_qty: "1",
+    max_qty: "",
+    price: "",
+  };
+}
+
 function createEmptyVariation(): ProductVariationFormValue {
   return {
     id: createId("variation"),
@@ -64,7 +79,18 @@ function createEmptyVariation(): ProductVariationFormValue {
     moq: "1",
     stock: "0",
     image_url: "",
+    pricing_tier_set_id: "",
     attribute_values: {},
+  };
+}
+
+function createEmptyPricingTierSet(): ProductPricingTierSetFormValue {
+  return {
+    id: createId("pricing-tier-set"),
+    name: "",
+    fallback_price: "",
+    pricing_type: "unit",
+    tiers: [createEmptyPricingTier()],
   };
 }
 
@@ -132,6 +158,50 @@ function inferAttributesFromVariants(record?: ProductEditorRecord | null) {
   }));
 }
 
+function getInitialPricingTierSets(record?: ProductEditorRecord | null) {
+  if (record?.pricing_tier_sets && record.pricing_tier_sets.length > 0) {
+    return record.pricing_tier_sets.map(({ set, rows }) => ({
+      id: set.id,
+      name: set.name,
+      fallback_price: String(set.fallback_price),
+      pricing_type: set.pricing_type,
+      tiers:
+        rows.length > 0
+          ? rows.map((row) => ({
+              id: row.id,
+              min_qty: String(row.min_qty),
+              max_qty: row.max_qty !== null ? String(row.max_qty) : "",
+              price: String(row.price),
+            }))
+          : [createEmptyPricingTier()],
+    }));
+  }
+
+  if (record?.pricing_tiers && record.pricing_tiers.length > 0) {
+    const defaultTierSetId = createId("pricing-tier-set");
+
+    return [
+      {
+        id: defaultTierSetId,
+        name: "Default Pricing",
+        fallback_price:
+          record.product.regular_price !== null && record.product.regular_price !== undefined
+            ? String(record.product.regular_price)
+            : String(record.product.price ?? 0),
+        pricing_type: record.pricing_tiers[0]?.pricing_type ?? "unit",
+        tiers: record.pricing_tiers.map((tier) => ({
+          id: tier.id,
+          min_qty: String(tier.min_qty),
+          max_qty: tier.max_qty !== null ? String(tier.max_qty) : "",
+          price: String(tier.price),
+        })),
+      },
+    ];
+  }
+
+  return [createEmptyPricingTierSet()];
+}
+
 function getInitialValues(
   record?: ProductEditorRecord | null,
   allowedVendorIds: string[] = [],
@@ -140,6 +210,8 @@ function getInitialValues(
 ): ProductFormValues {
   const product = record?.product;
   const isVariable = (product?.product_type ?? (record?.variants.length ? "variable" : "single")) === "variable";
+  const initialPricingTierSets = getInitialPricingTierSets(record);
+  const defaultTierSetId = initialPricingTierSets[0]?.id ?? "";
   const initialStatus = product
     ? ((product.status ?? (product.is_active ? "active" : "disabled")) as ProductStatus)
     : "active";
@@ -185,6 +257,17 @@ function getInitialValues(
         : [createEmptySpecification()],
     cdd_shipping_profile: product?.cdd_shipping_profile ?? "standard",
     cnds_profile_id: product?.cnds_profile_id ?? "",
+    pricing_source: "use_product_tier",
+    pricing_type: record?.pricing_tiers[0]?.pricing_type ?? "unit",
+    pricing_tiers:
+      record?.pricing_tiers.map((tier) => ({
+        id: tier.id,
+        min_qty: String(tier.min_qty),
+        max_qty: tier.max_qty !== null ? String(tier.max_qty) : "",
+        price: String(tier.price),
+      })) ?? [],
+    pricing_tier_sets: initialPricingTierSets,
+    pricing_tier_profile_id: "",
     variations:
       record?.variants.map((variant) => ({
         id: variant.id,
@@ -194,6 +277,7 @@ function getInitialValues(
         moq: String(variant.moq),
         stock: String(variant.stock ?? 0),
         image_url: variant.image_url ?? "",
+        pricing_tier_set_id: variant.pricing_tier_set_id ?? defaultTierSetId,
         attribute_values: variant.attribute_values ?? {},
       })) ?? [],
   };
@@ -218,6 +302,10 @@ function normalizeVendorId(value: string) {
 }
 
 function normalizeCndsProfileId(value: string) {
+  return normalizeOptionalUuid(value);
+}
+
+function normalizePricingTierProfileId(value: string) {
   return normalizeOptionalUuid(value);
 }
 
@@ -279,6 +367,8 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
       .filter((specification) => specification.label.length > 0 || specification.value.length > 0),
     cdd_shipping_profile: values.cdd_shipping_profile,
     cnds_profile_id: normalizeCndsProfileId(values.cnds_profile_id),
+    pricing_tier_profile_id: normalizePricingTierProfileId(values.pricing_tier_profile_id),
+    pricing_source: "use_product_tier",
   };
 }
 
@@ -294,9 +384,15 @@ function applyForcedVendorId(payload: ProductUpsertPayload, forcedVendorId?: str
 }
 
 function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPayload[] {
+  const tierSetFallbackById = new Map(
+    values.pricing_tier_sets.map((tierSet) => [tierSet.id, Math.max(0, parseNumber(tierSet.fallback_price) ?? 0)]),
+  );
+
   return values.variations.map((variation) => {
-    const regularPrice = parseNumber(variation.regular_price) ?? 0;
-    const discountPrice = parseNumber(variation.discount_price);
+    const fallbackRegularPrice =
+      tierSetFallbackById.get(variation.pricing_tier_set_id) ?? parseNumber(values.regular_price) ?? 0;
+    const regularPrice = parseNumber(variation.regular_price) ?? fallbackRegularPrice;
+    const discountPrice = parseNumber(variation.discount_price) ?? parseNumber(values.discount_price);
     const moq = parseNumber(variation.moq) ?? 1;
     const stock = Math.max(0, Math.floor(parseNumber(variation.stock) ?? 0));
     const derivedValue = Object.values(variation.attribute_values)
@@ -313,9 +409,61 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
       moq,
       stock,
       image_url: normalizeOptionalText(variation.image_url),
+      pricing_tier_set_id: variation.pricing_tier_set_id || null,
       attribute_values: variation.attribute_values,
     };
   });
+}
+
+function buildPricingTierPayloads(values: ProductFormValues): ProductPricingTierUpsertPayload[] {
+  return values.pricing_tiers
+    .filter((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim())
+    .map((tier, index) => {
+      const minQty = Math.max(1, Math.floor(parseNumber(tier.min_qty) ?? 1));
+      const maxQtyValue = parseNumber(tier.max_qty);
+      const maxQty = maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null;
+      const price = Math.max(0, parseNumber(tier.price) ?? 0);
+
+      return {
+        pricing_type: values.pricing_type,
+        min_qty: minQty,
+        max_qty: maxQty,
+        price,
+        sort_order: index,
+      };
+    });
+}
+
+function buildPricingTierSetPayloads(values: ProductFormValues): ProductPricingTierSetUpsertPayload[] {
+  return values.pricing_tier_sets
+    .filter(
+      (tierSet) =>
+        tierSet.name.trim() ||
+        tierSet.fallback_price.trim() ||
+        tierSet.tiers.some((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim()),
+    )
+    .map((tierSet, index) => ({
+      temp_id: tierSet.id,
+      name: tierSet.name.trim() || `Tier Set ${index + 1}`,
+      fallback_price: Math.max(0, parseNumber(tierSet.fallback_price) ?? 0),
+      pricing_type: tierSet.pricing_type,
+      sort_order: index,
+      rows: tierSet.tiers
+        .filter((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim())
+        .map((tier, tierIndex) => {
+          const minQty = Math.max(1, Math.floor(parseNumber(tier.min_qty) ?? 1));
+          const maxQtyValue = parseNumber(tier.max_qty);
+          const maxQty = maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null;
+
+          return {
+            pricing_type: tierSet.pricing_type,
+            min_qty: minQty,
+            max_qty: maxQty,
+            price: Math.max(0, parseNumber(tier.price) ?? 0),
+            sort_order: tierIndex,
+          };
+        }),
+    }));
 }
 
 function cartesianProduct<T>(values: T[][]): T[][] {
@@ -331,6 +479,10 @@ function buildVariationSignature(attributeValues: ProductVariantAttributeValues)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, value]) => `${key}:${value}`)
     .join("|");
+}
+
+function formatTierPricingTypeLabel(value: ProductPricingType) {
+  return value === "unit" ? "Unit Pricing" : "Fixed Range Pricing";
 }
 
 function ProductStatusBadge({ status }: { status: ProductStatus }) {
@@ -790,6 +942,15 @@ function ProductForm({
       : "Update the product details without affecting storefront checkout or order flows.";
 
   const totalVariationCount = values.variations.length;
+  const totalPricingTierCount = values.pricing_tiers.filter(
+    (tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim(),
+  ).length;
+  const totalTierSetCount = values.pricing_tier_sets.filter(
+    (tierSet) =>
+      tierSet.name.trim() ||
+      tierSet.fallback_price.trim() ||
+      tierSet.tiers.some((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim()),
+  ).length;
   const orderedCategories = useMemo(() => {
     const topLevel = categories
       .filter((category) => !category.parent_id)
@@ -884,6 +1045,17 @@ function ProductForm({
     }));
   };
 
+  const handlePricingTierChange = (
+    id: string,
+    field: keyof Omit<ProductPricingTierFormValue, "id">,
+    value: string,
+  ) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tiers: current.pricing_tiers.map((tier) => (tier.id === id ? { ...tier, [field]: value } : tier)),
+    }));
+  };
+
   const addAttribute = () => {
     setValues((current) => ({
       ...current,
@@ -904,7 +1076,13 @@ function ProductForm({
   const addVariation = () => {
     setValues((current) => ({
       ...current,
-      variations: [...current.variations, createEmptyVariation()],
+      variations: [
+        ...current.variations,
+        {
+          ...createEmptyVariation(),
+          pricing_tier_set_id: current.pricing_tier_sets[0]?.id ?? "",
+        },
+      ],
     }));
   };
 
@@ -929,6 +1107,117 @@ function ProductForm({
         current.specifications.length > 1
           ? current.specifications.filter((specification) => specification.id !== id)
           : [createEmptySpecification()],
+    }));
+  };
+
+  const addPricingTier = () => {
+    setValues((current) => ({
+      ...current,
+      pricing_tiers: [...current.pricing_tiers, createEmptyPricingTier()],
+    }));
+  };
+
+  const removePricingTier = (id: string) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tiers: current.pricing_tiers.filter((tier) => tier.id !== id),
+    }));
+  };
+
+  const handlePricingTierSetChange = (
+    id: string,
+    field: keyof Omit<ProductPricingTierSetFormValue, "id" | "tiers">,
+    value: string,
+  ) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tier_sets: current.pricing_tier_sets.map((tierSet) =>
+        tierSet.id === id ? { ...tierSet, [field]: value } : tierSet,
+      ),
+    }));
+  };
+
+  const handlePricingTierSetTierChange = (
+    tierSetId: string,
+    tierId: string,
+    field: keyof Omit<ProductPricingTierFormValue, "id">,
+    value: string,
+  ) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tier_sets: current.pricing_tier_sets.map((tierSet) =>
+        tierSet.id === tierSetId
+          ? {
+              ...tierSet,
+              tiers: tierSet.tiers.map((tier) => (tier.id === tierId ? { ...tier, [field]: value } : tier)),
+            }
+          : tierSet,
+      ),
+    }));
+  };
+
+  const addPricingTierSet = () => {
+    const nextTierSet = createEmptyPricingTierSet();
+
+    setValues((current) => ({
+      ...current,
+      pricing_tier_sets: [...current.pricing_tier_sets, nextTierSet],
+      variations: current.variations.map((variation) =>
+        variation.pricing_tier_set_id ? variation : { ...variation, pricing_tier_set_id: nextTierSet.id },
+      ),
+    }));
+  };
+
+  const removePricingTierSet = (id: string) => {
+    setValues((current) => {
+      const nextTierSets =
+        current.pricing_tier_sets.length > 1
+          ? current.pricing_tier_sets.filter((tierSet) => tierSet.id !== id)
+          : [createEmptyPricingTierSet()];
+      const fallbackTierSetId = nextTierSets[0]?.id ?? "";
+
+      return {
+        ...current,
+        pricing_tier_sets: nextTierSets,
+        variations: current.variations.map((variation) => ({
+          ...variation,
+          pricing_tier_set_id:
+            variation.pricing_tier_set_id === id
+              ? fallbackTierSetId
+              : variation.pricing_tier_set_id || fallbackTierSetId,
+        })),
+      };
+    });
+  };
+
+  const addPricingTierToSet = (tierSetId: string) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tier_sets: current.pricing_tier_sets.map((tierSet) =>
+        tierSet.id === tierSetId
+          ? {
+              ...tierSet,
+              tiers: [...tierSet.tiers, createEmptyPricingTier()],
+            }
+          : tierSet,
+      ),
+    }));
+  };
+
+  const removePricingTierFromSet = (tierSetId: string, tierId: string) => {
+    setValues((current) => ({
+      ...current,
+      pricing_tier_sets: current.pricing_tier_sets.map((tierSet) =>
+        tierSet.id === tierSetId
+          ? {
+              ...tierSet,
+              tiers:
+                tierSet.tiers.length > 1
+                  ? tierSet.tiers.filter((tier) => tier.id !== tierId)
+                  : [createEmptyPricingTier()],
+            }
+          : tierSet,
+      ),
     }));
   };
 
@@ -961,6 +1250,7 @@ function ProductForm({
         moq: values.moq || "1",
         stock: "0",
         image_url: "",
+        pricing_tier_set_id: values.pricing_tier_sets[0]?.id ?? "",
         attribute_values: attributeValues,
       };
     });
@@ -1016,13 +1306,75 @@ function ProductForm({
         return "At least one variation is required for a variable product.";
       }
 
+      if (values.pricing_tier_sets.length === 0) {
+        return "Add at least one pricing tier set for a variable product.";
+      }
+
       for (const variation of values.variations) {
         if (!variation.name.trim()) {
           return "Each variation must have a name.";
         }
 
-        if (parseNumber(variation.regular_price) === null || (parseNumber(variation.regular_price) ?? 0) <= 0) {
-          return "Each variation must have a valid regular price.";
+        if (!variation.pricing_tier_set_id.trim()) {
+          return "Each variation must select a pricing tier set.";
+        }
+      }
+
+      for (const tierSet of values.pricing_tier_sets) {
+        if (!tierSet.name.trim()) {
+          return "Each pricing tier set needs a name.";
+        }
+
+        if ((parseNumber(tierSet.fallback_price) ?? -1) < 0) {
+          return "Each pricing tier set needs a valid fallback price.";
+        }
+
+        for (const tier of tierSet.tiers) {
+          const isEmpty = !tier.min_qty.trim() && !tier.max_qty.trim() && !tier.price.trim();
+
+          if (isEmpty) {
+            continue;
+          }
+
+          const minQty = parseNumber(tier.min_qty);
+          const maxQty = parseNumber(tier.max_qty);
+          const price = parseNumber(tier.price);
+
+          if (minQty === null || minQty < 1) {
+            return "Each pricing tier needs a minimum quantity of at least 1.";
+          }
+
+          if (maxQty !== null && maxQty < minQty) {
+            return "Pricing tier maximum quantity must be greater than or equal to the minimum quantity.";
+          }
+
+          if (price === null || price < 0) {
+            return "Each pricing tier needs a valid price.";
+          }
+        }
+      }
+    } else {
+      for (const tier of values.pricing_tiers) {
+        const isEmpty = !tier.min_qty.trim() && !tier.max_qty.trim() && !tier.price.trim();
+
+        if (isEmpty) {
+          continue;
+        }
+
+        const minQty = parseNumber(tier.min_qty);
+        const maxQty = parseNumber(tier.max_qty);
+        const price = parseNumber(tier.price);
+
+        if (minQty === null || minQty < 1) {
+          return "Each pricing tier needs a minimum quantity of at least 1.";
+        }
+
+        if (maxQty !== null && maxQty < minQty) {
+          return "Pricing tier maximum quantity must be greater than or equal to the minimum quantity.";
+        }
+
+        if (price === null || price < 0) {
+          return "Each pricing tier needs a valid price.";
         }
       }
     }
@@ -1044,6 +1396,8 @@ function ProductForm({
     const savePayload: ProductEditorSavePayload = {
       product: applyForcedVendorId(buildProductPayload(values), forcedVendorId),
       variants: values.product_type === "variable" ? buildVariantPayloads(values) : [],
+      pricing_tiers: values.product_type === "single" ? buildPricingTierPayloads(values) : [],
+      pricing_tier_sets: values.product_type === "variable" ? buildPricingTierSetPayloads(values) : [],
     };
 
     setIsSubmitting(true);
@@ -1250,6 +1604,7 @@ function ProductForm({
                   change checkout calculations yet.
                 </p>
               </div>
+
             </div>
           </CardSection>
 
@@ -1291,41 +1646,281 @@ function ProductForm({
             </div>
           </CardSection>
 
-          {values.product_type === "single" ? (
-            <CardSection title="Single Product Pricing" description="Set the pricing rules for a simple product.">
-              <div className="grid gap-4 md:grid-cols-3">
-                <NumberField
-                  id="single-regular-price"
-                  label="Regular Price"
-                  value={values.regular_price}
-                  onChange={(value) => updateField("regular_price", value)}
-                  placeholder="0.00"
-                  min="0"
-                  step="0.01"
-                  required
-                />
-                <NumberField
-                  id="single-discount-price"
-                  label="Discount Price"
-                  value={values.discount_price}
-                  onChange={(value) => updateField("discount_price", value)}
-                  placeholder="Optional"
-                  min="0"
-                  step="0.01"
-                />
-                <NumberField
-                  id="single-moq"
-                  label="MOQ"
-                  value={values.moq}
-                  onChange={(value) => updateField("moq", value)}
-                  placeholder="10"
-                  min="1"
-                  step="1"
-                  required
-                />
+          <CardSection
+            title="Product Pricing Tiers"
+            description="Create quantity-based pricing for this product."
+          >
+            {values.product_type === "single" ? (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <NumberField
+                    id="product-regular-price"
+                    label="Regular Price / Fallback Price"
+                    value={values.regular_price}
+                    onChange={(value) => updateField("regular_price", value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                  <NumberField
+                    id="product-discount-price"
+                    label="Discount Price"
+                    value={values.discount_price}
+                    onChange={(value) => updateField("discount_price", value)}
+                    placeholder="Optional"
+                    min="0"
+                    step="0.01"
+                  />
+                  <NumberField
+                    id="product-moq"
+                    label="MOQ"
+                    value={values.moq}
+                    onChange={(value) => updateField("moq", value)}
+                    placeholder="10"
+                    min="1"
+                    step="1"
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_auto] md:items-end">
+                  <div>
+                    <label htmlFor="product-pricing-type" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Pricing Type
+                    </label>
+                    <select
+                      id="product-pricing-type"
+                      value={values.pricing_type}
+                      onChange={(event) => updateField("pricing_type", event.target.value as ProductPricingType)}
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                    >
+                      <option value="unit">Unit Pricing</option>
+                      <option value="fixed">Fixed Range Pricing</option>
+                    </select>
+                  </div>
+
+                  <div className="flex justify-start md:justify-end">
+                    <button
+                      type="button"
+                      onClick={addPricingTier}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                    >
+                      Add Tier
+                    </button>
+                  </div>
+                </div>
+
+                {values.pricing_tiers.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    No pricing tiers yet. Add a tier to apply quantity-based pricing for this product.
+                  </div>
+                ) : (
+                  values.pricing_tiers.map((tier, index) => (
+                    <div key={tier.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {values.pricing_type === "fixed"
+                              ? "Fixed total applies when this product quantity matches the tier."
+                              : "Unit price applies when this product quantity matches the tier."}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePricingTier(tier.id)}
+                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                        >
+                          Remove Tier
+                        </button>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <NumberField
+                          id={`pricing-tier-min-${tier.id}`}
+                          label="Min Qty"
+                          value={tier.min_qty}
+                          onChange={(value) => handlePricingTierChange(tier.id, "min_qty", value)}
+                          placeholder="1"
+                          min="1"
+                          step="1"
+                          required
+                        />
+                        <NumberField
+                          id={`pricing-tier-max-${tier.id}`}
+                          label="Max Qty"
+                          value={tier.max_qty}
+                          onChange={(value) => handlePricingTierChange(tier.id, "max_qty", value)}
+                          placeholder="Optional"
+                          min="1"
+                          step="1"
+                        />
+                        <NumberField
+                          id={`pricing-tier-price-${tier.id}`}
+                          label="Price"
+                          value={tier.price}
+                          onChange={(value) => handlePricingTierChange(tier.id, "price", value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          required
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
-            </CardSection>
-          ) : null}
+            ) : (
+              <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto] md:items-end">
+                    <NumberField
+                      id="product-moq"
+                      label="MOQ"
+                      value={values.moq}
+                      onChange={(value) => updateField("moq", value)}
+                      placeholder="10"
+                      min="1"
+                      step="1"
+                      required
+                    />
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                      Variation prices come from the selected tier set. No extra fallback input is needed on the variation row.
+                    </div>
+                    <div className="flex justify-start md:justify-end">
+                      <button
+                        type="button"
+                        onClick={addPricingTierSet}
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                      >
+                        Add Tier Set
+                      </button>
+                    </div>
+                  </div>
+
+                  {values.pricing_tier_sets.map((tierSet, tierSetIndex) => (
+                    <div key={tierSet.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">Tier Set {tierSetIndex + 1}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Assign this set to one or more variations that share the same quantity pricing rules.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePricingTierSet(tierSet.id)}
+                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                        >
+                          Remove Tier Set
+                        </button>
+                      </div>
+
+                      <div className="grid gap-4 md:grid-cols-3">
+                        <TextField
+                          id={`tier-set-name-${tierSet.id}`}
+                          label="Tier Set Name"
+                          value={tierSet.name}
+                          onChange={(value) => handlePricingTierSetChange(tierSet.id, "name", value)}
+                          placeholder="Standard Flower Pricing"
+                        />
+                        <NumberField
+                          id={`tier-set-fallback-${tierSet.id}`}
+                          label="Fallback Price"
+                          value={tierSet.fallback_price}
+                          onChange={(value) => handlePricingTierSetChange(tierSet.id, "fallback_price", value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                        />
+                        <div>
+                          <label htmlFor={`tier-set-type-${tierSet.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Pricing Type
+                          </label>
+                          <select
+                            id={`tier-set-type-${tierSet.id}`}
+                            value={tierSet.pricing_type}
+                            onChange={(event) =>
+                              handlePricingTierSetChange(tierSet.id, "pricing_type", event.target.value as ProductPricingType)
+                            }
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                          >
+                            <option value="unit">Unit Pricing</option>
+                            <option value="fixed">Fixed Range Pricing</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => addPricingTierToSet(tierSet.id)}
+                          className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                        >
+                          Add Tier
+                        </button>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {tierSet.tiers.map((tier, index) => (
+                          <div key={tier.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {tierSet.pricing_type === "fixed"
+                                    ? "Fixed total applies when this variation quantity matches the tier."
+                                    : "Unit price applies when this variation quantity matches the tier."}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removePricingTierFromSet(tierSet.id, tier.id)}
+                                className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                              >
+                                Remove Tier
+                              </button>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-3">
+                              <NumberField
+                                id={`tier-set-${tierSet.id}-min-${tier.id}`}
+                                label="Min Qty"
+                                value={tier.min_qty}
+                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "min_qty", value)}
+                                placeholder="1"
+                                min="1"
+                                step="1"
+                                required
+                              />
+                              <NumberField
+                                id={`tier-set-${tierSet.id}-max-${tier.id}`}
+                                label="Max Qty"
+                                value={tier.max_qty}
+                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "max_qty", value)}
+                                placeholder="Optional"
+                                min="1"
+                                step="1"
+                              />
+                              <NumberField
+                                id={`tier-set-${tierSet.id}-price-${tier.id}`}
+                                label="Price"
+                                value={tier.price}
+                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "price", value)}
+                                placeholder="0.00"
+                                min="0"
+                                step="0.01"
+                                required
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </CardSection>
 
           {values.product_type === "variable" ? (
             <>
@@ -1439,26 +2034,28 @@ function ProductForm({
                             placeholder="Red / M"
                             required
                           />
+                          <div>
+                            <label htmlFor={`variation-tier-set-${variation.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Pricing Tier Set
+                            </label>
+                            <select
+                              id={`variation-tier-set-${variation.id}`}
+                              value={variation.pricing_tier_set_id}
+                              onChange={(event) => handleVariationChange(variation.id, "pricing_tier_set_id", event.target.value)}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            >
+                              <option value="">Select tier set</option>
+                              {values.pricing_tier_sets.map((tierSet) => (
+                                <option key={tierSet.id} value={tierSet.id}>
+                                  {tierSet.name.trim() || "Untitled Tier Set"}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="mt-2 text-xs leading-5 text-slate-500">
+                              This variation will use the selected tier set and its own fallback price.
+                            </p>
+                          </div>
                           <div className="grid gap-4 sm:grid-cols-3">
-                            <NumberField
-                              id={`variation-price-${variation.id}`}
-                              label="Regular Price"
-                              value={variation.regular_price}
-                              onChange={(value) => handleVariationChange(variation.id, "regular_price", value)}
-                              placeholder="0.00"
-                              min="0"
-                              step="0.01"
-                              required
-                            />
-                            <NumberField
-                              id={`variation-discount-${variation.id}`}
-                              label="Discount Price"
-                              value={variation.discount_price}
-                              onChange={(value) => handleVariationChange(variation.id, "discount_price", value)}
-                              placeholder="Optional"
-                              min="0"
-                              step="0.01"
-                            />
                             <NumberField
                               id={`variation-moq-${variation.id}`}
                               label="MOQ"
@@ -1496,9 +2093,9 @@ function ProductForm({
                   )}
                 </div>
               </CardSection>
+
             </>
           ) : null}
-
         </div>
 
         <aside className="space-y-6">
@@ -1774,6 +2371,18 @@ function ProductForm({
                 <span>Variations</span>
                 <span className="font-semibold text-slate-900">{totalVariationCount}</span>
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <span>{values.product_type === "single" ? "Pricing Tiers" : "Tier Sets"}</span>
+                <span className="font-semibold text-slate-900">
+                  {values.product_type === "single" ? totalPricingTierCount : totalTierSetCount}
+                </span>
+              </div>
+              {values.product_type === "single" ? (
+                <div className="flex items-center justify-between gap-3">
+                  <span>Pricing Type</span>
+                  <span className="font-semibold capitalize text-slate-900">{values.pricing_type}</span>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between gap-3">
                 <span>CNDS Shipping Profile</span>
                 <span className="font-semibold text-slate-900">

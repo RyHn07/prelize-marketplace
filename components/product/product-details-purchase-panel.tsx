@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import { addToQuote } from "@/components/quote/quote-utils";
 import { calculateInternationalShippingEstimate, calculateTotalWeightKg, formatDeliveryWindow } from "@/lib/international-shipping/utils";
+import { calculateProductGroupPricing } from "@/lib/product-pricing";
 import type { Product } from "@/types/product";
 import type {
   CndsShippingProfileRow,
   InternationalShippingMethodRow,
   ProductAttribute,
   ProductDbRow,
+  ResolvedProductPricingConfig,
   ProductDbVariantRow,
 } from "@/types/product-db";
 import {
@@ -88,28 +90,40 @@ function buildProductOptions(
   product: Product,
   productRecord: ProductDbRow,
   variants: ProductDbVariantRow[],
+  productPricingConfig: ResolvedProductPricingConfig,
 ): ProductOption[] {
+  const tierSetById = new Map(
+    (productPricingConfig.variant_tier_sets ?? []).map((tierSet) => [tierSet.id, tierSet]),
+  );
+
   if (productRecord.product_type === "variable" && variants.length > 0) {
-    return variants.map((variant) => ({
-      id: variant.id,
-      image: variant.image_url ?? productRecord.image_url ?? product.image,
-      label: variant.name,
-      variantName:
-        Object.keys(variant.attribute_values ?? {}).join(" / ").trim() || (variant.name.trim().length > 0 ? "Variant" : null),
-      variantValue: (
-        variant.value ??
-        Object.values(variant.attribute_values ?? {})
-          .map((value) => String(value).trim())
-          .filter(Boolean)
-          .join(" / ")
-      ) || variant.name,
-      price: getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
-      moq: variant.moq,
-      stock: Math.max(0, variant.stock ?? 0),
-      attributeValues: Object.fromEntries(
-        Object.entries(variant.attribute_values ?? {}).map(([key, value]) => [key, String(value)]),
-      ),
-    }));
+    return variants.map((variant) => {
+      const assignedTierSet =
+        variant.pricing_tier_set_id ? tierSetById.get(variant.pricing_tier_set_id) ?? null : null;
+
+      return {
+        id: variant.id,
+        image: variant.image_url ?? productRecord.image_url ?? product.image,
+        label: variant.name,
+        variantName:
+          Object.keys(variant.attribute_values ?? {}).join(" / ").trim() || (variant.name.trim().length > 0 ? "Variant" : null),
+        variantValue: (
+          variant.value ??
+          Object.values(variant.attribute_values ?? {})
+            .map((value) => String(value).trim())
+            .filter(Boolean)
+            .join(" / ")
+        ) || variant.name,
+        price:
+          assignedTierSet?.fallback_price ??
+          getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
+        moq: variant.moq,
+        stock: Math.max(0, variant.stock ?? 0),
+        attributeValues: Object.fromEntries(
+          Object.entries(variant.attribute_values ?? {}).map(([key, value]) => [key, String(value)]),
+        ),
+      };
+    });
   }
 
   return [
@@ -270,12 +284,14 @@ export default function ProductDetailsPurchasePanel({
   product,
   productRecord,
   variants,
+  productPricingConfig,
   cndsProfile,
   internationalShippingMethods,
 }: {
   product: Product;
   productRecord: ProductDbRow;
   variants: ProductDbVariantRow[];
+  productPricingConfig: ResolvedProductPricingConfig;
   cndsProfile: CndsShippingProfileRow | null;
   internationalShippingMethods: InternationalShippingMethodRow[];
 }) {
@@ -291,8 +307,8 @@ export default function ProductDetailsPurchasePanel({
     [productRecord, variants],
   );
   const productOptions = useMemo(
-    () => buildProductOptions(product, productRecord, variants),
-    [product, productRecord, variants],
+    () => buildProductOptions(product, productRecord, variants, productPricingConfig),
+    [product, productPricingConfig, productRecord, variants],
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
@@ -338,10 +354,49 @@ export default function ProductDetailsPurchasePanel({
 
   const totals = useMemo(() => {
     const quantity = productOptions.reduce((sum, option) => sum + (quantities[option.id] ?? 0), 0);
-    const productPrice = productOptions.reduce(
-      (sum, option) => sum + option.price * (quantities[option.id] ?? 0),
-      0,
+    const variantAssignmentMap = new Map(
+      (productPricingConfig.variant_assignments ?? []).map((assignment) => [assignment.variant_id, assignment.tier_set_id]),
     );
+    const variantTierSetMap = new Map(
+      (productPricingConfig.variant_tier_sets ?? []).map((tierSet) => [tierSet.id, tierSet]),
+    );
+    const pricing = calculateProductGroupPricing(
+      productOptions.map((option) => {
+        const assignedTierSetId = option.id !== product.id ? variantAssignmentMap.get(option.id) ?? null : null;
+        const assignedTierSet = assignedTierSetId ? variantTierSetMap.get(assignedTierSetId) ?? null : null;
+
+        return {
+          productId: productRecord.id,
+          name: product.name,
+          image: option.image,
+          variation: option.label,
+          variantId: option.id !== product.id ? option.id : null,
+          variantName: option.variantName,
+          variantValue: option.variantValue,
+          basePrice: option.price,
+          price: option.price,
+          quantity: quantities[option.id] ?? 0,
+          productPricing: {
+            pricingType: productPricingConfig.pricing_type,
+            tiers: productPricingConfig.tiers,
+            source: productPricingConfig.source,
+            profileId: productPricingConfig.profile_id,
+            profileName: productPricingConfig.profile_name,
+          },
+          variantPricing:
+            productRecord.product_type === "variable" && assignedTierSet
+              ? {
+                  tierSetId: assignedTierSet.id,
+                  tierSetName: assignedTierSet.name,
+                  fallbackPrice: assignedTierSet.fallback_price,
+                  pricingType: assignedTierSet.pricing_type,
+                  tiers: assignedTierSet.tiers,
+                }
+              : null,
+        };
+      }),
+    );
+    const productPrice = pricing.totalPrice;
     const cndsCost = calculateCndsCost(quantity, cndsProfile);
     const payNow = productPrice + cndsCost;
     const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg([
@@ -363,13 +418,24 @@ export default function ProductDetailsPurchasePanel({
 
     return {
       quantity,
+      pricing,
       productPrice,
       cndsCost,
       payNow,
       totalWeightKg,
       internationalShipping,
     };
-  }, [cndsProfile, productOptions, productRecord.weight, quantities, selectedShippingMethod]);
+  }, [cndsProfile, product.id, product.name, productOptions, productPricingConfig, productRecord.id, productRecord.weight, quantities, selectedShippingMethod]);
+  const unitPriceByOptionId = useMemo(
+    () =>
+      new Map(
+        productOptions.map((option, index) => [
+          option.id,
+          totals.pricing.itemUnitPrices[index] ?? option.price,
+        ]),
+      ),
+    [productOptions, totals.pricing.itemUnitPrices],
+  );
 
   const updateQuantity = (optionId: string, nextQuantity: number) => {
     const option = productOptions.find((item) => item.id === optionId);
@@ -502,7 +568,7 @@ export default function ProductDetailsPurchasePanel({
                       </span>
                     </div>
                     <span className="self-center font-semibold text-[#615FFF]">
-                      {formatCurrency(option.price)}
+                      {formatCurrency(unitPriceByOptionId.get(option.id) ?? option.price)}
                     </span>
                     <QuantityControl
                       quantity={quantities[option.id] ?? 0}
@@ -575,7 +641,10 @@ export default function ProductDetailsPurchasePanel({
 
         <div className="space-y-0">
           <SummaryRow label="Quantity" value={String(totals.quantity)} />
-          <SummaryRow label="Product Price" value={formatCurrency(totals.productPrice)} />
+          <SummaryRow
+            label="Product Price"
+            value={formatCurrency(totals.productPrice)}
+          />
           <SummaryRow label="CNDS Cost" value={formatCurrency(totals.cndsCost)} />
           <SummaryRow label="Pay Now" value={formatCurrency(totals.payNow)} strong />
         </div>

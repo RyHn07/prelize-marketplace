@@ -22,11 +22,12 @@ import {
   calculateTotalWeightKg,
   formatDeliveryWindow,
 } from "@/lib/international-shipping/utils";
-import { getProductsByIds } from "@/lib/products/queries";
+import { calculateProductGroupPricing } from "@/lib/product-pricing";
+import { getProductsByIds, getResolvedProductPricingMapByProducts } from "@/lib/products/queries";
 import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
-import type { CndsShippingProfileOption, InternationalShippingMethodRow, ProductDbRow } from "@/types/product-db";
+import type { CndsShippingProfileOption, InternationalShippingMethodRow, ProductDbRow, ResolvedProductPricingConfig } from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
 const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
@@ -264,6 +265,7 @@ export default function CartPage() {
   const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [pricingConfigByProductId, setPricingConfigByProductId] = useState<Record<string, ResolvedProductPricingConfig>>({});
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileOption>>({});
   const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
@@ -382,6 +384,13 @@ export default function CartPage() {
       }
 
       setProductRecords(result.data);
+      const pricingTierResult = await getResolvedProductPricingMapByProducts(result.data);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setPricingConfigByProductId(Object.fromEntries(pricingTierResult.data.entries()));
 
       const cndsProfileIds = Array.from(
         new Set(
@@ -541,6 +550,17 @@ export default function CartPage() {
       result[group.productId] = selectedItemsForGroup.map((item) => {
         const cndsProfileId = productMatch?.cnds_profile_id ?? null;
         const cndsProfile = cndsProfileId ? cndsProfilesById[cndsProfileId] ?? null : null;
+        const variantAssignmentMap = new Map(
+          (pricingConfigByProductId[group.productId]?.variant_assignments ?? []).map((assignment) => [
+            assignment.variant_id,
+            assignment.tier_set_id,
+          ]),
+        );
+        const variantTierSetMap = new Map(
+          (pricingConfigByProductId[group.productId]?.variant_tier_sets ?? []).map((tierSet) => [tierSet.id, tierSet]),
+        );
+        const assignedTierSetId = item.variantId ? variantAssignmentMap.get(item.variantId) ?? null : null;
+        const assignedTierSet = assignedTierSetId ? variantTierSetMap.get(assignedTierSetId) ?? null : null;
 
         return {
           productId: item.productId,
@@ -550,8 +570,25 @@ export default function CartPage() {
           variantId: item.variantId,
           variantName: item.variantName ?? null,
           variantValue: item.variantValue ?? null,
+          basePrice: item.price,
           price: item.price,
           quantity: item.quantity,
+          productPricing: {
+            pricingType: pricingConfigByProductId[group.productId]?.pricing_type ?? null,
+            tiers: pricingConfigByProductId[group.productId]?.tiers ?? [],
+            source: pricingConfigByProductId[group.productId]?.source ?? null,
+            profileId: pricingConfigByProductId[group.productId]?.profile_id ?? null,
+            profileName: pricingConfigByProductId[group.productId]?.profile_name ?? null,
+          },
+          variantPricing: assignedTierSet
+            ? {
+                tierSetId: assignedTierSet.id,
+                tierSetName: assignedTierSet.name,
+                fallbackPrice: assignedTierSet.fallback_price,
+                pricingType: assignedTierSet.pricing_type,
+                tiers: assignedTierSet.tiers,
+              }
+            : null,
           weight: parseWeight(
             productMatch?.weight == null ? undefined : String(productMatch.weight)
           ),
@@ -578,9 +615,19 @@ export default function CartPage() {
 
       return result;
     }, {});
-  }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, productGroups, productRecordMap, selectedKeySet]);
+  }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, pricingConfigByProductId, productGroups, productRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
+  const pricingByProductId = useMemo(
+    () =>
+      new Map(
+        Object.entries(selectedGroupedItems).map(([productId, groupItems]) => [
+          productId,
+          calculateProductGroupPricing(groupItems),
+        ]),
+      ),
+    [selectedGroupedItems],
+  );
   const selectedCartItems = useMemo(() => Object.values(selectedGroupedItems).flat(), [selectedGroupedItems]);
   const selectedInternationalShippingMethod = useMemo(
     () =>
@@ -776,6 +823,7 @@ export default function CartPage() {
                 const isGroupSelected = groupKeys.every((key) => selectedKeySet.has(key));
                 const groupHasUnavailableItems = group.items.some((item) => itemAvailabilityIssues.has(getVariantKey(item)));
                 const selectedGroupItems = selectedGroupedItems[group.productId] ?? [];
+                const selectedGroupPricing = pricingByProductId.get(group.productId) ?? null;
                 const selectedGroupDisplayTotals = calculateCartDisplayTotals(
                   selectedGroupItems.length > 0 ? { [group.productId]: selectedGroupItems } : {},
                 );
@@ -826,6 +874,11 @@ export default function CartPage() {
                             {group.items.length} variation{group.items.length > 1 ? "s" : ""} in this
                             product group
                           </p>
+                          {selectedGroupPricing?.matchedTier ? (
+                            <p className="text-xs font-medium text-[#615FFF]">
+                              Tier pricing active: {selectedGroupPricing.pricingType === "unit" ? "Per unit" : "Fixed total"}
+                            </p>
+                          ) : null}
                           {visibleSpecifications.length > 0 ? (
                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                               {visibleSpecifications.map((specification) => (
@@ -852,6 +905,17 @@ export default function CartPage() {
                       {group.items.map((item) => {
                         const variantKey = getVariantKey(item);
                         const isSelected = selectedKeySet.has(variantKey);
+                        const selectedIndex = selectedGroupItems.findIndex(
+                          (groupItem) => getVariantKey(groupItem as QuoteItem) === variantKey,
+                        );
+                        const appliedUnitPrice =
+                          selectedIndex >= 0 && selectedGroupPricing
+                            ? selectedGroupPricing.itemUnitPrices[selectedIndex] ?? item.price
+                            : item.price;
+                        const appliedRowTotal =
+                          selectedIndex >= 0 && selectedGroupPricing
+                            ? selectedGroupPricing.itemTotals[selectedIndex] ?? item.price * item.quantity
+                            : item.price * item.quantity;
                         const productMatch = productRecordMap.get(item.productId);
                         const availabilityIssue = itemAvailabilityIssues.get(variantKey);
                         const parsedWeight = parseWeight(
@@ -880,10 +944,11 @@ export default function CartPage() {
 
                                 <div className="min-w-0 space-y-1">
                                   <p className="text-sm font-semibold text-slate-900">
-                                    Variation: {item.variation}
+                                    Variation: {item.variantValue ?? item.variation}
                                   </p>
+                                  {item.variantName ? <p className="text-xs text-slate-400">Type: {item.variantName}</p> : null}
                                   <p className="text-sm text-slate-500">
-                                    Unit price: {formatBDT(item.price)}
+                                    Unit price: {formatBDT(appliedUnitPrice)}
                                   </p>
                                   <p className="text-xs text-slate-400">
                                     Weight basis: {parsedWeight ? `${parsedWeight} kg per unit` : "Unknown"}
@@ -907,7 +972,7 @@ export default function CartPage() {
                                     Row Total
                                   </p>
                                   <p className="mt-1 text-base font-semibold text-slate-900">
-                                    {formatBDT(item.price * item.quantity)}
+                                    {formatBDT(appliedRowTotal)}
                                   </p>
                                 </div>
 

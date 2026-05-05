@@ -6,6 +6,8 @@ export type ProductStatus = "active" | "disabled" | "draft";
 export type ProductType = "single" | "variable";
 export type ProductCddShippingProfile = "standard" | "express" | "fragile" | "bulk";
 export type CndsShippingPricingType = "unit" | "fixed";
+export type ProductPricingType = "unit" | "fixed";
+export type ProductPricingSource = "use_product_tier" | "use_fixed_price";
 export type InternationalShippingStatus = "pending_review" | "calculated";
 export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
@@ -110,6 +112,91 @@ export type ProductReview = {
   [key: string]: JsonValue | undefined;
 };
 
+export type ProductPricingTierRow = {
+  id: string;
+  product_id: string;
+  pricing_type: ProductPricingType;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order?: number | null;
+  created_at?: string | null;
+};
+
+export type ProductPricingTierSetRow = {
+  id: string;
+  product_id: string;
+  name: string;
+  fallback_price: number;
+  pricing_type: ProductPricingType;
+  sort_order?: number | null;
+  created_at?: string | null;
+};
+
+export type ProductPricingTierSetTierRow = {
+  id: string;
+  tier_set_id: string;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order?: number | null;
+  created_at?: string | null;
+};
+
+export type PricingTierProfileRowRecord = {
+  id: string;
+  profile_id: string;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order: number;
+  created_at?: string | null;
+};
+
+export type PricingTierProfileRow = {
+  id: string;
+  vendor_id: string | null;
+  name: string;
+  pricing_type: ProductPricingType;
+  is_active: boolean;
+  created_at?: string | null;
+  rows: PricingTierProfileRowRecord[];
+};
+
+export type PricingTierProfileOption = PricingTierProfileRow;
+
+export type ResolvedProductPricingTier = {
+  id: string;
+  min_qty: number;
+  max_qty: number | null;
+  price: number;
+  sort_order?: number | null;
+};
+
+export type ResolvedProductPricingConfig = {
+  source: "profile" | "legacy" | null;
+  profile_id: string | null;
+  profile_name: string | null;
+  pricing_type: ProductPricingType | null;
+  tiers: ResolvedProductPricingTier[];
+  variant_tier_sets?: ResolvedVariantPricingTierSet[];
+  variant_assignments?: ResolvedVariantPricingAssignment[];
+};
+
+export type ResolvedVariantPricingTierSet = {
+  id: string;
+  name: string;
+  fallback_price: number;
+  pricing_type: ProductPricingType;
+  tiers: ResolvedProductPricingTier[];
+  sort_order?: number | null;
+};
+
+export type ResolvedVariantPricingAssignment = {
+  variant_id: string;
+  tier_set_id: string | null;
+};
+
 export type ProductVariantAttributeValues = Record<string, string>;
 
 export type ProductDbVariantRow = {
@@ -128,6 +215,7 @@ export type ProductDbVariantRow = {
   min_order_quantity?: number | null;
   is_active?: boolean;
   sort_order?: number | null;
+  pricing_tier_set_id?: string | null;
   attribute_values: ProductVariantAttributeValues | null;
   created_at?: string;
 };
@@ -157,6 +245,8 @@ export type ProductDbRow = {
   specifications?: ProductSpecification[] | JsonValue | null;
   reviews?: ProductReview[] | JsonValue | null;
   cnds_profile_id?: string | null;
+  pricing_tier_profile_id?: string | null;
+  pricing_source?: ProductPricingSource | null;
 };
 
 export type ProductUpsertPayload = {
@@ -180,6 +270,8 @@ export type ProductUpsertPayload = {
   specifications: ProductSpecification[];
   cdd_shipping_profile: ProductCddShippingProfile;
   cnds_profile_id: string | null;
+  pricing_tier_profile_id: string | null;
+  pricing_source: ProductPricingSource;
 };
 
 export type ProductAttributeFormValue = {
@@ -196,7 +288,23 @@ export type ProductVariationFormValue = {
   moq: string;
   stock: string;
   image_url: string;
+  pricing_tier_set_id: string;
   attribute_values: ProductVariantAttributeValues;
+};
+
+export type ProductPricingTierFormValue = {
+  id: string;
+  min_qty: string;
+  max_qty: string;
+  price: string;
+};
+
+export type ProductPricingTierSetFormValue = {
+  id: string;
+  name: string;
+  fallback_price: string;
+  pricing_type: ProductPricingType;
+  tiers: ProductPricingTierFormValue[];
 };
 
 export type ProductFormValues = {
@@ -217,8 +325,13 @@ export type ProductFormValues = {
   attributes: ProductAttributeFormValue[];
   specifications: ProductSpecificationFormValue[];
   variations: ProductVariationFormValue[];
+  pricing_type: ProductPricingType;
+  pricing_tiers: ProductPricingTierFormValue[];
+  pricing_tier_sets: ProductPricingTierSetFormValue[];
   cdd_shipping_profile: ProductCddShippingProfile;
   cnds_profile_id: string;
+  pricing_tier_profile_id: string;
+  pricing_source: ProductPricingSource;
 };
 
 export type ProductSpecificationFormValue = {
@@ -353,4 +466,9 @@ export type OrderItemRow = {
 export type ProductEditorRecord = {
   product: ProductDbRow;
   variants: ProductDbVariantRow[];
+  pricing_tiers: ProductPricingTierRow[];
+  pricing_tier_sets: Array<{
+    set: ProductPricingTierSetRow;
+    rows: ProductPricingTierSetTierRow[];
+  }>;
 };
