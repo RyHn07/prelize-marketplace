@@ -1,6 +1,14 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+import {
+  isProductInWishlist,
+  toggleWishlistProduct,
+  WISHLIST_UPDATED_EVENT,
+} from "@/components/wishlist/wishlist-utils";
 import type { Product } from "@/types/product";
 
 interface ProductCardProps {
@@ -22,6 +30,25 @@ function DeliveryIcon() {
       <path d="M14 10h3l3 3v2h-6" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx="7.5" cy="17.5" r="1.5" />
       <circle cx="17.5" cy="17.5" r="1.5" />
+    </svg>
+  );
+}
+
+function WishlistIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4.5 w-4.5"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M12 20.5s-6.5-4.3-8.6-8C1.8 9.7 3 6.5 6.3 5.5c2-.6 4 .1 5.7 2 1.7-1.9 3.7-2.6 5.7-2 3.3 1 4.5 4.2 2.9 7-2.1 3.7-8.6 8-8.6 8Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -57,6 +84,20 @@ function getCardMeta(productId: string) {
 export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   const meta = getCardMeta(product.id);
   const isListView = viewMode === "list";
+  const [isWishlisted, setIsWishlisted] = useState(false);
+
+  useEffect(() => {
+    const syncWishlistState = () => {
+      setIsWishlisted(isProductInWishlist(product.id));
+    };
+
+    syncWishlistState();
+    window.addEventListener(WISHLIST_UPDATED_EVENT, syncWishlistState);
+
+    return () => {
+      window.removeEventListener(WISHLIST_UPDATED_EVENT, syncWishlistState);
+    };
+  }, [product.id]);
 
   return (
     <Link
@@ -87,6 +128,25 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
             <Badge label={product.badge} />
           </div>
         ) : null}
+
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nextIds = toggleWishlistProduct(product.id);
+            setIsWishlisted(nextIds.includes(product.id));
+          }}
+          className={`absolute left-auto right-2.5 top-2.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-colors ${
+            isWishlisted
+              ? "border-rose-200 bg-white text-rose-500 hover:bg-rose-50"
+              : "border-white/80 bg-white/95 text-slate-500 hover:text-rose-500"
+          }`}
+          aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          aria-pressed={isWishlisted}
+        >
+          <WishlistIcon filled={isWishlisted} />
+        </button>
       </div>
 
       <div className={`flex flex-1 flex-col gap-2.5 ${isListView ? "py-1 pr-1" : "p-3"}`}>

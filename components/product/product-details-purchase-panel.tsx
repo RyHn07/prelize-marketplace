@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { addToQuote } from "@/components/quote/quote-utils";
 import { calculateInternationalShippingEstimate, calculateTotalWeightKg, formatDeliveryWindow } from "@/lib/international-shipping/utils";
@@ -249,12 +250,12 @@ function QuantityControl({
   const isDecrementDisabled = quantity === 0;
 
   return (
-    <div className="inline-flex h-11 items-center overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+    <div className="inline-flex h-11 shrink-0 items-center overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
       <button
         type="button"
         onClick={onDecrease}
         disabled={isDecrementDisabled}
-        className="inline-flex h-full aspect-square items-center justify-center text-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white"
+        className="inline-flex h-full w-10 shrink-0 items-center justify-center text-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white"
         aria-label="Decrease quantity"
       >
         <span className="-mt-0.5">-</span>
@@ -265,13 +266,13 @@ function QuantityControl({
         max={MAX_QUANTITY}
         value={quantity}
         onChange={(event) => onInputChange(Number(event.target.value) || 0)}
-        className="h-full min-w-12 border-x border-slate-300 px-2 text-center text-sm font-semibold text-slate-800 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-full w-14 min-w-0 border-x border-slate-300 px-2 text-center text-sm font-semibold text-slate-800 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         aria-label="Quantity input"
       />
       <button
         type="button"
         onClick={onIncrease}
-        className="inline-flex h-full aspect-square items-center justify-center text-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
+        className="inline-flex h-full w-10 shrink-0 items-center justify-center text-lg text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-700"
         aria-label="Increase quantity"
       >
         <span className="-mt-0.5">+</span>
@@ -295,6 +296,7 @@ export default function ProductDetailsPurchasePanel({
   cndsProfile: CndsShippingProfileRow | null;
   internationalShippingMethods: InternationalShippingMethodRow[];
 }) {
+  const router = useRouter();
   const reviewCount = product.reviews?.length ?? 0;
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
@@ -471,7 +473,7 @@ export default function ProductDetailsPurchasePanel({
     });
 
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
-    // window.alert("Added to cart");
+    router.push("/cart");
   };
 
   return (
@@ -541,7 +543,7 @@ export default function ProductDetailsPurchasePanel({
           ) : null}
 
           <div className="space-y-4">
-            <div className="grid grid-cols-[1.2fr_0.8fr_1fr] items-center gap-4 text-base font-semibold text-slate-900">
+            <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] items-center gap-4 text-base font-semibold text-slate-900">
               <span className="self-center">Option</span>
               <span className="self-center">Price</span>
               <span className="self-center">Quantity</span>
@@ -556,7 +558,7 @@ export default function ProductDetailsPurchasePanel({
                 {visibleOptions.map((option) => (
                   <div
                     key={option.id}
-                    className="grid grid-cols-[1.2fr_0.8fr_1fr] items-center gap-4 text-sm"
+                    className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] items-center gap-4 text-sm"
                   >
                     <div className="self-center">
                       <span className="block text-slate-900">{option.label}</span>
