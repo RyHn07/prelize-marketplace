@@ -9,8 +9,16 @@ export type ProductMediaItem = {
   name: string;
   path: string;
   publicUrl: string;
+  altText: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+};
+
+type ProductMediaMetadataRow = {
+  path: string;
+  alt_text: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 function getStorageClient() {
@@ -29,6 +37,14 @@ export function getProductMediaPublicUrl(path: string) {
   return getStorageClient().getPublicUrl(path).data.publicUrl;
 }
 
+function isMissingRelationError(message: string | undefined) {
+  if (!message) {
+    return false;
+  }
+
+  return message.includes("product_media_metadata") && message.toLowerCase().includes("does not exist");
+}
+
 export async function listProductMedia(options?: { vendorId?: string | null }) {
   const { data, error } = await getStorageClient().list(PRODUCT_MEDIA_FOLDER, {
     limit: 200,
@@ -42,8 +58,8 @@ export async function listProductMedia(options?: { vendorId?: string | null }) {
     };
   }
 
-  return {
-    data: (data ?? [])
+  const files =
+    (data ?? [])
       .filter((file) => file.name)
       .filter((file) => {
         if (!options?.vendorId) {
@@ -51,14 +67,39 @@ export async function listProductMedia(options?: { vendorId?: string | null }) {
         }
 
         return file.name.startsWith(getVendorMediaPrefix(options.vendorId));
-      })
-      .map((file) => {
+      }) ?? [];
+
+  const paths = files.map((file) => `${PRODUCT_MEDIA_FOLDER}/${file.name}`);
+  const metadataMap = new Map<string, ProductMediaMetadataRow>();
+
+  if (paths.length > 0) {
+    const metadataResult = await getSupabaseClient()
+      .from("product_media_metadata")
+      .select("path, alt_text, created_at, updated_at")
+      .in("path", paths);
+
+    if (!metadataResult.error) {
+      (metadataResult.data as ProductMediaMetadataRow[] | null)?.forEach((row) => {
+        metadataMap.set(row.path, row);
+      });
+    } else if (!isMissingRelationError(metadataResult.error.message)) {
+      return {
+        data: [] as ProductMediaItem[],
+        error: metadataResult.error,
+      };
+    }
+  }
+
+  return {
+    data: files.map((file) => {
         const path = `${PRODUCT_MEDIA_FOLDER}/${file.name}`;
+        const metadata = metadataMap.get(path);
 
         return {
           name: file.name,
           path,
           publicUrl: getProductMediaPublicUrl(path),
+          altText: metadata?.alt_text ?? null,
           createdAt: file.created_at ?? null,
           updatedAt: file.updated_at ?? null,
         };
@@ -90,6 +131,7 @@ export async function uploadProductMedia(file: File, options?: { vendorId?: stri
       name: filePath.split("/").pop() ?? safeFileName,
       path: filePath,
       publicUrl: getProductMediaPublicUrl(filePath),
+      altText: null,
       createdAt: null,
       updatedAt: null,
     },
@@ -120,6 +162,7 @@ export async function uploadVendorOnboardingMedia(
       name: filePath.split("/").pop() ?? safeFileName,
       path: filePath,
       publicUrl: getProductMediaPublicUrl(filePath),
+      altText: null,
       createdAt: null,
       updatedAt: null,
     },
@@ -127,8 +170,59 @@ export async function uploadVendorOnboardingMedia(
   };
 }
 
+export async function upsertProductMediaAltText(path: string, altText: string | null) {
+  const normalizedAltText = altText?.trim() ? altText.trim() : null;
+  const supabase = getSupabaseClient() as unknown as {
+    from: (table: string) => {
+      upsert: (values: Record<string, unknown>, options?: { onConflict?: string }) => {
+        select: (columns: string) => {
+          maybeSingle: () => Promise<{ data: unknown; error: { message: string } | null }>;
+        };
+      };
+    };
+  };
+
+  const { data, error } = await supabase
+    .from("product_media_metadata")
+    .upsert(
+      {
+        path,
+        alt_text: normalizedAltText,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "path" },
+    )
+    .select("path, alt_text, created_at, updated_at")
+    .maybeSingle();
+
+  if (error) {
+    return {
+      data: null as ProductMediaMetadataRow | null,
+      error,
+    };
+  }
+
+  return {
+    data: (data as ProductMediaMetadataRow | null) ?? null,
+    error: null,
+  };
+}
+
 export async function removeProductMedia(path: string) {
   const { error } = await getStorageClient().remove([path]);
+
+  if (!error) {
+    const metadataDeleteResult = await getSupabaseClient()
+      .from("product_media_metadata")
+      .delete()
+      .eq("path", path);
+
+    if (metadataDeleteResult.error && !isMissingRelationError(metadataDeleteResult.error.message)) {
+      return {
+        error: metadataDeleteResult.error,
+      };
+    }
+  }
 
   return {
     error,

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import AdminPageHeader from "@/components/admin/admin-page-header";
-import AdminStatCard from "@/components/admin/admin-stat-card";
+import { AdminDropdown } from "@/components/admin/admin-dropdown";
+import { AdminDropdownItem } from "@/components/admin/admin-dropdown-item";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
 import { getProductCategoryOptions, getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -49,6 +49,54 @@ function ProductTypeBadge({ type }: { type: ProductType }) {
   );
 }
 
+function formatCreatedAt(value: string | null | undefined) {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-BD", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function SortIcon() {
+  return (
+    <svg width="10" height="12" viewBox="0 0 10 12" fill="none" aria-hidden="true" className="text-slate-300">
+      <path d="M5 1 8 4H2L5 1Z" fill="currentColor" />
+      <path d="M5 11 2 8h6l-3 3Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function MoreDotIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <path d="M3.75 9A.75.75 0 1 1 2.25 9a.75.75 0 0 1 1.5 0ZM9.75 9A.75.75 0 1 1 8.25 9a.75.75 0 0 1 1.5 0ZM15.75 9a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export default function ProductsContent() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -61,6 +109,7 @@ export default function ProductsContent() {
   const [errorMessage, setErrorMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -203,128 +252,154 @@ export default function ProductsContent() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6">
-      <AdminPageHeader
-        title={canAssignPlatformProducts ? "All Products" : "Your Vendor Products"}
-        description="Search, filter, and manage product records from one clean catalog workspace."
-        actions={
-          <Link
-            href="/admin/products/new"
-            className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-          >
-            Add Product
-          </Link>
-        }
-      />
+    <section className="w-full space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white">
+        <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800">Products List</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Review catalog records, vendor assignments, pricing, and publishing status from one workspace.
+            </p>
+          </div>
 
-      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg bg-[#615FFF]/8 px-3 py-2 text-sm font-medium text-[#615FFF]">
+              {filteredProducts.length} visible
+            </div>
+            <Link
+              href="/admin/products/new"
+              className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Add Product
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full max-w-[380px]">
             <label htmlFor="product-search" className="sr-only">
               Search products
             </label>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+              <SearchIcon />
+            </span>
             <input
               id="product-search"
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by product name, slug, category id, or product type"
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+              className="h-11 w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10"
             />
           </div>
 
-          <div className="w-full lg:w-56">
-            <label htmlFor="status-filter" className="sr-only">
-              Filter by status
-            </label>
-            <select
-              id="status-filter"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "all" | ProductStatus)}
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-56">
+              <label htmlFor="status-filter" className="sr-only">
+                Filter by status
+              </label>
+              <select
+                id="status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | ProductStatus)}
+                className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10"
+              >
+                <option value="all">All Status</option>
+                <option value="active">Published</option>
+                <option value="disabled">Archived</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("all");
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
             >
-              <option value="all">All Status</option>
-              <option value="active">Published</option>
-              <option value="disabled">Archived</option>
-              <option value="draft">Draft</option>
-            </select>
+              Clear
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setSearchQuery("");
-              setStatusFilter("all");
-            }}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-          >
-            Clear
-          </button>
         </div>
-      </div>
 
-      {successMessage ? (
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
-          {successMessage}
-        </div>
-      ) : null}
+        {successMessage ? (
+          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 sm:px-6">{successMessage}</div>
+        ) : null}
 
-      {errorMessage ? (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600">
-          {errorMessage}
-        </div>
-      ) : null}
+        {errorMessage ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600 sm:px-6">{errorMessage}</div>
+        ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <AdminStatCard label="Total Products" value={products.length} />
-        <AdminStatCard label="Published" value={activeCount} tone="success" />
-        <AdminStatCard label="Draft" value={draftCount} tone="warning" />
-        <AdminStatCard label="Archived" value={disabledCount} />
-      </div>
-
-      {products.length === 0 ? (
-        <AdminEmptyState
-          title="No products found"
-          description="Add your first product to start building the admin catalog. If you just saved one and it is still missing, the product may not have been written to the database or your read policy may be blocking the query."
-          action={
-            <Link
-              href="/admin/products/new"
-              className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            >
-              Add Product
-            </Link>
-          }
-        />
-      ) : filteredProducts.length === 0 ? (
-        <AdminEmptyState
-          title="No matching products found"
-          description="Try another search term or change the product status filter."
-        />
+        {products.length === 0 ? (
+          <div className="p-6">
+            <AdminEmptyState
+              title="No products found"
+              description="Add your first product to start building the admin catalog. If you just saved one and it is still missing, the product may not have been written to the database or your read policy may be blocking the query."
+              action={
+                <Link
+                  href="/admin/products/new"
+                  className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  Add Product
+                </Link>
+              }
+            />
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="p-6">
+            <AdminEmptyState title="No matching products found" description="Try another search term or change the product status filter." />
+          </div>
         ) : (
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr className="text-left text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    <th className="px-5 py-4">Product</th>
-                    <th className="px-5 py-4">Category</th>
-                    <th className="px-5 py-4">Price</th>
-                    <th className="px-5 py-4">MOQ</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4">Vendor</th>
-                    <th className="px-5 py-4 text-right">Actions</th>
+          <div className="max-w-full overflow-x-auto">
+            <div className="min-w-[1180px]">
+              <table className="min-w-full">
+                <thead className="border-b border-gray-100">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 sm:px-6">
+                      <div className="flex items-center gap-2">
+                        <span>Products</span>
+                        <SortIcon />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>Category</span>
+                        <SortIcon />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>Vendor</span>
+                        <SortIcon />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                      <div className="flex items-center gap-2">
+                        <span>Price</span>
+                        <SortIcon />
+                      </div>
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">MOQ</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Created At</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-gray-100">
                   {filteredProducts.map((product) => {
                     const status = getProductStatus(product);
                     const type = getProductType(product);
 
                     return (
-                      <tr key={product.id} className="align-top">
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-0 items-start gap-3">
-                            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                      <tr key={product.id}>
+                        <td className="px-5 py-5 text-left sm:px-6">
+                          <div className="flex min-w-0 items-center gap-4">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-gray-200 bg-slate-50">
                               {product.image_url ? (
                                 <div
                                   role="img"
@@ -337,31 +412,56 @@ export default function ProductsContent() {
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-slate-900">{product.name}</p>
-                              <p className="mt-1 truncate text-xs text-slate-500">{product.slug}</p>
-                              <div className="mt-2">
-                                <ProductTypeBadge type={type} />
-                              </div>
+                              <p className="truncate text-sm font-medium text-gray-800">{product.name}</p>
+                              <span className="mt-1 block truncate text-xs text-gray-500">{product.slug}</span>
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-slate-600">{categoryNameById.get(product.category_id ?? "") ?? "Uncategorized"}</td>
-                        <td className="px-5 py-4 font-semibold text-[#615FFF]">{formatPrice(product.price)}</td>
-                        <td className="px-5 py-4 text-slate-700">{product.moq}</td>
-                        <td className="px-5 py-4">
-                          <StatusBadge status={status} />
-                        </td>
-                        <td className="px-5 py-4 text-slate-600">
+                        <td className="px-4 py-5 text-sm text-gray-500">{categoryNameById.get(product.category_id ?? "") ?? "Uncategorized"}</td>
+                        <td className="px-4 py-5 text-sm text-gray-500">
                           {product.vendor_id ? vendorNameById.get(product.vendor_id) ?? "Assigned Vendor" : "Platform"}
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end">
-                            <Link
-                              href={`/admin/products/${product.id}/edit`}
-                              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                        <td className="px-4 py-5 text-sm font-semibold text-[#615FFF]">{formatPrice(product.price)}</td>
+                        <td className="px-4 py-5 text-sm text-gray-500">{product.moq}</td>
+                        <td className="px-4 py-5">
+                          <ProductTypeBadge type={type} />
+                        </td>
+                        <td className="px-4 py-5">
+                          <StatusBadge status={status} />
+                        </td>
+                        <td className="px-4 py-5 text-sm text-gray-500">{formatCreatedAt(product.created_at)}</td>
+                        <td className="px-4 py-5 text-right">
+                          <div className="relative inline-flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setOpenActionMenuId((current) => (current === product.id ? null : product.id))}
+                              className="dropdown-toggle inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                              aria-label={`Open actions for ${product.name}`}
                             >
-                              Edit Product
-                            </Link>
+                              <MoreDotIcon />
+                            </button>
+                            <AdminDropdown
+                              isOpen={openActionMenuId === product.id}
+                              onClose={() => setOpenActionMenuId(null)}
+                              className="right-full mr-2 w-44 p-2"
+                            >
+                              <AdminDropdownItem
+                                tag="a"
+                                href={`/admin/products/${product.id}/edit`}
+                                onItemClick={() => setOpenActionMenuId(null)}
+                                className="flex rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                              >
+                                Edit Product
+                              </AdminDropdownItem>
+                              <AdminDropdownItem
+                                tag="a"
+                                href={`/products/${product.slug}`}
+                                onItemClick={() => setOpenActionMenuId(null)}
+                                className="flex rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                              >
+                                View Storefront
+                              </AdminDropdownItem>
+                            </AdminDropdown>
                           </div>
                         </td>
                       </tr>
@@ -372,6 +472,7 @@ export default function ProductsContent() {
             </div>
           </div>
         )}
+      </div>
     </section>
   );
 }

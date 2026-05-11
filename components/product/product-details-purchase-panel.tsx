@@ -510,6 +510,18 @@ export default function ProductDetailsPurchasePanel({
       ),
     [productOptions, totals.pricing.itemUnitPrices],
   );
+  const displayPriceByOptionId = useMemo(
+    () =>
+      new Map(
+        productOptions.map((option) => {
+          const selectedQuantity = quantities[option.id] ?? 0;
+          const calculatedUnitPrice = unitPriceByOptionId.get(option.id) ?? option.price;
+
+          return [option.id, selectedQuantity > 0 ? calculatedUnitPrice : option.price];
+        }),
+      ),
+    [productOptions, quantities, unitPriceByOptionId],
+  );
 
   const updateQuantity = (optionId: string, nextQuantity: number) => {
     const option = productOptions.find((item) => item.id === optionId);
@@ -629,10 +641,10 @@ export default function ProductDetailsPurchasePanel({
           ) : null}
 
           <div className="space-y-4">
-            <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] items-center gap-4 text-base font-semibold text-slate-900">
-              <span className="self-center">{optionColumnLabel}</span>
-              <span className="self-center">Price</span>
-              <span className="self-center">Quantity</span>
+            <div className="flex items-center gap-4 text-base font-semibold text-slate-900">
+              <div className="min-w-0 flex-1">{optionColumnLabel}</div>
+              <div className="w-20 text-left">Price</div>
+              <div className="w-[140px] text-left">Quantity</div>
             </div>
 
             {filteredOptions.length === 0 ? (
@@ -642,26 +654,29 @@ export default function ProductDetailsPurchasePanel({
             ) : (
               <div className="space-y-4">
                 {visibleOptions.map((option) => (
-                  <div
-                    key={option.id}
-                    className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] items-center gap-4 text-sm"
-                  >
-                    <div className="self-center">
-                      <span className="block text-slate-900">{option.label}</span>
+                  <div key={option.id} className="flex items-center gap-4 text-sm">
+                    <div className="min-w-0 flex-1 self-center">
+                      <span className="block text-slate-900">
+                        {option.attributeValues[optionColumnLabel] ?? option.label}
+                      </span>
                       <span className="mt-1 block text-xs text-slate-500">
                         MOQ: {option.moq}
                         {option.stock > 0 ? ` | Stock: ${option.stock}` : ""}
                       </span>
                     </div>
-                    <span className="self-center font-semibold text-[#615FFF]">
-                      {formatCurrency(unitPriceByOptionId.get(option.id) ?? option.price)}
-                    </span>
-                    <QuantityControl
-                      quantity={quantities[option.id] ?? 0}
-                      onDecrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) - 1)}
-                      onIncrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) + 1)}
-                      onInputChange={(value) => updateQuantity(option.id, value)}
-                    />
+                    <div className="w-20 self-center text-left">
+                      <span className="font-semibold text-[#615FFF]">
+                      {formatCurrency(displayPriceByOptionId.get(option.id) ?? option.price)}
+                      </span>
+                    </div>
+                    <div className="w-[140px] self-center">
+                      <QuantityControl
+                        quantity={quantities[option.id] ?? 0}
+                        onDecrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) - 1)}
+                        onIncrease={() => updateQuantity(option.id, (quantities[option.id] ?? 0) + 1)}
+                        onInputChange={(value) => updateQuantity(option.id, value)}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -49,6 +49,37 @@ type ProductFormProps = {
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
+type PricingBridgeTier = {
+  id: string;
+  min_qty: string;
+  max_qty: string;
+  price: string;
+};
+
+type PricingBridgeTierSet = {
+  id: string;
+  name: string;
+  fallback_price: string;
+  pricing_type: ProductPricingType;
+  tiers: PricingBridgeTier[];
+};
+
+type AttributeBridgeAttribute = {
+  id: string;
+  name: string;
+  values: string;
+};
+
+type VariationBridgeVariation = {
+  id: string;
+  name: string;
+  pricing_tier_set_id: string;
+  moq: string;
+  stock: string;
+  summary: string;
+  image_url: string;
+};
+
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -104,7 +135,7 @@ function createEmptySpecification(): ProductSpecificationFormValue {
 
 function splitAttributeValues(value: string) {
   return value
-    .split(/[\n,]/)
+    .split(/[\n,|]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -120,6 +151,57 @@ function parseAttributesForGeneration(attributes: ProductAttributeFormValue[]) {
       values: Array.from(new Set(splitAttributeValues(attribute.values))),
     }))
     .filter((attribute) => attribute.name && attribute.values.length > 0);
+}
+
+function buildGeneratedVariationsFromAttributes(
+  attributes: ProductAttributeFormValue[],
+  existingVariations: ProductVariationFormValue[],
+  pricingTierSets: ProductPricingTierSetFormValue[],
+  moq: string,
+) {
+  const nextParsedAttributes = parseAttributesForGeneration(attributes);
+
+  if (nextParsedAttributes.length === 0) {
+    return {
+      error: "Add at least one attribute with values before generating variations.",
+      variations: existingVariations,
+    };
+  }
+
+  const combinations = cartesianProduct(nextParsedAttributes.map((attribute) => attribute.values));
+  const existingBySignature = new Map(
+    existingVariations.map((variation) => [buildVariationSignature(variation.attribute_values), variation]),
+  );
+
+  const generatedVariations = combinations.map((combination) => {
+    const attributeValues = nextParsedAttributes.reduce<ProductVariantAttributeValues>((result, attribute, index) => {
+      result[attribute.name] = combination[index];
+      return result;
+    }, {});
+    const signature = buildVariationSignature(attributeValues);
+    const existingVariation = existingBySignature.get(signature);
+
+    return existingVariation ?? {
+      id: createId("variation"),
+      name: combination.join(" / "),
+      regular_price: "",
+      discount_price: "",
+      moq: moq || "1",
+      stock: "0",
+      image_url: "",
+      pricing_tier_set_id: pricingTierSets[0]?.id ?? "",
+      attribute_values: attributeValues,
+    };
+  });
+
+  const manualVariations = existingVariations.filter(
+    (variation) => Object.keys(variation.attribute_values).length === 0 && variation.name.trim().length > 0,
+  );
+
+  return {
+    error: null,
+    variations: [...generatedVariations, ...manualVariations],
+  };
 }
 
 function inferAttributesFromVariants(record?: ProductEditorRecord | null) {
@@ -225,6 +307,7 @@ function getInitialValues(
     category_id: product?.category_id ?? "",
     name: product?.name ?? "",
     slug: product?.slug ?? "",
+    sku: product?.sku ?? "",
     description: product?.description ?? "",
     image_url: product?.image_url ?? "",
     gallery_images: Array.isArray(product?.gallery_images) ? product.gallery_images : [],
@@ -238,7 +321,10 @@ function getInitialValues(
     regular_price: product?.regular_price ? String(product.regular_price) : product?.price ? String(product.price) : "",
     discount_price: product?.discount_price ? String(product.discount_price) : "",
     moq: product?.moq ? String(product.moq) : "1",
-    attributes: inferAttributesFromVariants(record),
+    attributes: (() => {
+      const inferredAttributes = inferAttributesFromVariants(record);
+      return inferredAttributes.length > 0 ? inferredAttributes : [createEmptyAttribute()];
+    })(),
     specifications:
       Array.isArray(product?.specifications) && product.specifications.length > 0
         ? product.specifications
@@ -339,6 +425,7 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
     category_id: normalizeCategoryId(values.category_id),
     name: trimmedName,
     slug: fallbackSlug,
+    sku: normalizeOptionalText(values.sku),
     description: normalizeOptionalText(values.description),
     image_url: normalizeOptionalText(values.image_url),
     price: getEffectivePrice(regularPrice, discountPrice),
@@ -485,6 +572,28 @@ function formatTierPricingTypeLabel(value: ProductPricingType) {
   return value === "unit" ? "Unit Pricing" : "Fixed Range Pricing";
 }
 
+function buildVariationBridgeState(variations: ProductVariationFormValue[]): VariationBridgeVariation[] {
+  return variations.map((variation) => ({
+    id: variation.id,
+    name: variation.name,
+    pricing_tier_set_id: variation.pricing_tier_set_id,
+    moq: variation.moq,
+    stock: variation.stock,
+    summary: Object.entries(variation.attribute_values)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(" | "),
+    image_url: variation.image_url,
+  }));
+}
+
+function buildAttributeBridgeState(attributes: ProductAttributeFormValue[]): AttributeBridgeAttribute[] {
+  return attributes.map((attribute) => ({
+    id: attribute.id,
+    name: attribute.name,
+    values: attribute.values,
+  }));
+}
+
 function ProductStatusBadge({ status }: { status: ProductStatus }) {
   const styles =
     status === "active"
@@ -597,6 +706,7 @@ function MediaField({
   helperText,
   libraryHref,
   vendorId,
+  pickerButtonId,
   allowManualUrl = false,
 }: {
   label: string;
@@ -605,6 +715,7 @@ function MediaField({
   helperText?: string;
   libraryHref?: string;
   vendorId?: string | null;
+  pickerButtonId?: string;
   allowManualUrl?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -720,11 +831,12 @@ function MediaField({
                   Open Full Media Library
                 </Link>
               ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  clearLocalPreview();
-                  setPickerOpen((current) => !current);
+                <button
+                  id={pickerButtonId}
+                  type="button"
+                  onClick={() => {
+                    clearLocalPreview();
+                    setPickerOpen((current) => !current);
                   if (!pickerOpen) {
                     void loadLibrary();
                   }
@@ -1014,6 +1126,366 @@ function ProductForm({
     }));
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleAddGalleryImages = (event: Event) => {
+      const customEvent = event as CustomEvent<{ images?: string[] }>;
+      const nextImages = (customEvent.detail?.images ?? []).filter((image) => image.trim().length > 0);
+
+      if (nextImages.length === 0) {
+        return;
+      }
+
+      setValues((current) => ({
+        ...current,
+        gallery_images: [
+          ...current.gallery_images,
+          ...nextImages.filter((image) => !current.gallery_images.includes(image)),
+        ],
+      }));
+    };
+
+    const handleRemoveGalleryImage = (event: Event) => {
+      const customEvent = event as CustomEvent<{ imageUrl?: string }>;
+      const imageUrl = customEvent.detail?.imageUrl?.trim();
+
+      if (!imageUrl) {
+        return;
+      }
+
+      setValues((current) => ({
+        ...current,
+        gallery_images: current.gallery_images.filter((currentImage) => currentImage !== imageUrl),
+      }));
+    };
+
+      const handleSetMainImage = (event: Event) => {
+        const customEvent = event as CustomEvent<{ imageUrl?: string | null }>;
+        const imageUrl = customEvent.detail?.imageUrl?.trim() ?? "";
+
+        setValues((current) => ({
+          ...current,
+          image_url: imageUrl,
+        }));
+      };
+
+      const handleSetPricingState = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          pricingType?: ProductPricingType;
+          regularPrice?: string;
+          discountPrice?: string;
+          moq?: string;
+          pricingTiers?: PricingBridgeTier[];
+          pricingTierSets?: PricingBridgeTierSet[];
+        }>;
+
+        setValues((current) => ({
+          ...current,
+          pricing_type: customEvent.detail?.pricingType ?? current.pricing_type,
+          regular_price: customEvent.detail?.regularPrice ?? current.regular_price,
+          discount_price: customEvent.detail?.discountPrice ?? current.discount_price,
+          moq: customEvent.detail?.moq ?? current.moq,
+          pricing_tiers:
+            customEvent.detail?.pricingTiers?.map((tier) => ({
+              id: tier.id,
+              min_qty: tier.min_qty,
+              max_qty: tier.max_qty,
+              price: tier.price,
+            })) ?? current.pricing_tiers,
+          pricing_tier_sets:
+            customEvent.detail?.pricingTierSets?.map((tierSet) => ({
+              id: tierSet.id,
+              name: tierSet.name,
+              fallback_price: tierSet.fallback_price,
+              pricing_type: tierSet.pricing_type,
+              tiers: tierSet.tiers.map((tier) => ({
+                id: tier.id,
+                min_qty: tier.min_qty,
+                max_qty: tier.max_qty,
+                price: tier.price,
+              })),
+            })) ?? current.pricing_tier_sets,
+        }));
+      };
+
+      const handleSetAttributesState = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          attributes?: AttributeBridgeAttribute[];
+        }>;
+
+        const nextAttributes =
+          customEvent.detail?.attributes?.map((attribute) => ({
+            id: attribute.id,
+            name: attribute.name,
+            values: attribute.values,
+          })) ?? null;
+
+        if (!nextAttributes) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          attributes: nextAttributes,
+        }));
+        setErrorMessage("");
+      };
+
+      const handleSetProductTypeFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          productType?: "single" | "variable";
+        }>;
+
+        const nextProductType = customEvent.detail?.productType;
+
+        if (!nextProductType) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          product_type: nextProductType,
+        }));
+        setErrorMessage("");
+      };
+
+      const handleSetStatusFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          status?: ProductStatus;
+        }>;
+
+        const nextStatus = customEvent.detail?.status;
+
+        if (!nextStatus) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          status: nextStatus,
+        }));
+        setErrorMessage("");
+      };
+
+      const handleSetProductNameFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          name?: string;
+        }>;
+
+        if (typeof customEvent.detail?.name !== "string") {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          name: customEvent.detail?.name ?? "",
+        }));
+        setErrorMessage("");
+      };
+
+      const handleAddAttributeFromBridge = () => {
+        setValues((current) => ({
+          ...current,
+          attributes:
+            current.product_type === "single"
+              ? current.attributes.length > 0
+                ? current.attributes
+                : [createEmptyAttribute()]
+              : [...current.attributes, createEmptyAttribute()],
+        }));
+        setErrorMessage("");
+      };
+
+      const handleGenerateVariationsFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          attributes?: AttributeBridgeAttribute[];
+        }>;
+
+        const nextAttributes =
+          customEvent.detail?.attributes?.map((attribute) => ({
+            id: attribute.id,
+            name: attribute.name,
+            values: attribute.values,
+          })) ?? [];
+
+        const result = buildGeneratedVariationsFromAttributes(
+          nextAttributes,
+          values.variations,
+          values.pricing_tier_sets,
+          values.moq,
+        );
+
+        if (result.error) {
+          setErrorMessage(result.error);
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          attributes: nextAttributes,
+          variations: result.variations,
+        }));
+        setErrorMessage("");
+      };
+
+      const handleRemoveVariationFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          variationId?: string;
+        }>;
+
+        const variationId = customEvent.detail?.variationId?.trim();
+
+        if (!variationId) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          variations: current.variations.filter((variation) => variation.id !== variationId),
+        }));
+        setErrorMessage("");
+      };
+
+      const handleSetVariationImageFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          variationId?: string;
+          imageUrl?: string;
+        }>;
+
+        const variationId = customEvent.detail?.variationId?.trim();
+
+        if (!variationId) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          variations: current.variations.map((variation) =>
+            variation.id === variationId
+              ? { ...variation, image_url: customEvent.detail?.imageUrl?.trim() ?? "" }
+              : variation,
+          ),
+        }));
+        setErrorMessage("");
+      };
+
+      window.addEventListener("prelize:add-gallery-images", handleAddGalleryImages as EventListener);
+      window.addEventListener("prelize:remove-gallery-image", handleRemoveGalleryImage as EventListener);
+      window.addEventListener("prelize:set-main-image", handleSetMainImage as EventListener);
+      window.addEventListener("prelize:set-pricing-state", handleSetPricingState as EventListener);
+      window.addEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
+      window.addEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
+      window.addEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
+      window.addEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+      window.addEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
+      window.addEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
+      window.addEventListener("prelize:remove-variation", handleRemoveVariationFromBridge as EventListener);
+      window.addEventListener("prelize:set-variation-image", handleSetVariationImageFromBridge as EventListener);
+
+      return () => {
+        window.removeEventListener("prelize:add-gallery-images", handleAddGalleryImages as EventListener);
+        window.removeEventListener("prelize:remove-gallery-image", handleRemoveGalleryImage as EventListener);
+        window.removeEventListener("prelize:set-main-image", handleSetMainImage as EventListener);
+        window.removeEventListener("prelize:set-pricing-state", handleSetPricingState as EventListener);
+        window.removeEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
+        window.removeEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
+        window.removeEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
+        window.removeEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+        window.removeEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
+        window.removeEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
+        window.removeEventListener("prelize:remove-variation", handleRemoveVariationFromBridge as EventListener);
+        window.removeEventListener("prelize:set-variation-image", handleSetVariationImageFromBridge as EventListener);
+      };
+  }, [values.moq, values.pricing_tier_sets, values.variations]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:media-state-updated", {
+        detail: {
+          mainImage: values.image_url,
+          galleryImages: values.gallery_images,
+        },
+      }),
+    );
+  }, [values.gallery_images, values.image_url]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:pricing-state-updated", {
+        detail: {
+          pricingType: values.pricing_type,
+          regularPrice: values.regular_price,
+          discountPrice: values.discount_price,
+          moq: values.moq,
+          pricingTiers: values.pricing_tiers.map((tier) => ({
+            id: tier.id,
+            min_qty: tier.min_qty,
+            max_qty: tier.max_qty,
+            price: tier.price,
+          })),
+          pricingTierSets: values.pricing_tier_sets.map((tierSet) => ({
+            id: tierSet.id,
+            name: tierSet.name,
+            fallback_price: tierSet.fallback_price,
+            pricing_type: tierSet.pricing_type,
+            tiers: tierSet.tiers.map((tier) => ({
+              id: tier.id,
+              min_qty: tier.min_qty,
+              max_qty: tier.max_qty,
+              price: tier.price,
+            })),
+          })),
+        },
+      }),
+    );
+  }, [
+    values.discount_price,
+    values.moq,
+    values.pricing_tier_sets,
+    values.pricing_tiers,
+    values.pricing_type,
+    values.regular_price,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:variations-state-updated", {
+        detail: {
+          variations: buildVariationBridgeState(values.variations),
+        },
+      }),
+    );
+  }, [values.product_type, values.variations]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:attributes-state-updated", {
+        detail: {
+          attributes: buildAttributeBridgeState(values.attributes),
+        },
+      }),
+    );
+  }, [values.attributes]);
+
   const handleAttributeChange = (id: string, field: keyof ProductAttributeFormValue, value: string) => {
     setValues((current) => ({
       ...current,
@@ -1059,7 +1531,12 @@ function ProductForm({
   const addAttribute = () => {
     setValues((current) => ({
       ...current,
-      attributes: [...current.attributes, createEmptyAttribute()],
+      attributes:
+        current.product_type === "single"
+          ? current.attributes.length > 0
+            ? current.attributes
+            : [createEmptyAttribute()]
+          : [...current.attributes, createEmptyAttribute()],
     }));
   };
 
@@ -1222,46 +1699,21 @@ function ProductForm({
   };
 
   const generateVariations = () => {
-    const nextParsedAttributes = parseAttributesForGeneration(values.attributes);
+    const result = buildGeneratedVariationsFromAttributes(
+      values.attributes,
+      values.variations,
+      values.pricing_tier_sets,
+      values.moq,
+    );
 
-    if (nextParsedAttributes.length === 0) {
-      setErrorMessage("Add at least one attribute with values before generating variations.");
+    if (result.error) {
+      setErrorMessage(result.error);
       return;
     }
 
-    const combinations = cartesianProduct(nextParsedAttributes.map((attribute) => attribute.values));
-    const existingBySignature = new Map(
-      values.variations.map((variation) => [buildVariationSignature(variation.attribute_values), variation]),
-    );
-
-    const generatedVariations = combinations.map((combination) => {
-      const attributeValues = nextParsedAttributes.reduce<ProductVariantAttributeValues>((result, attribute, index) => {
-        result[attribute.name] = combination[index];
-        return result;
-      }, {});
-      const signature = buildVariationSignature(attributeValues);
-      const existingVariation = existingBySignature.get(signature);
-
-      return existingVariation ?? {
-        id: createId("variation"),
-        name: combination.join(" / "),
-        regular_price: "",
-        discount_price: "",
-        moq: values.moq || "1",
-        stock: "0",
-        image_url: "",
-        pricing_tier_set_id: values.pricing_tier_sets[0]?.id ?? "",
-        attribute_values: attributeValues,
-      };
-    });
-
-    const manualVariations = values.variations.filter(
-      (variation) => Object.keys(variation.attribute_values).length === 0 && variation.name.trim().length > 0,
-    );
-
     setValues((current) => ({
       ...current,
-      variations: [...generatedVariations, ...manualVariations],
+      variations: result.variations,
     }));
     setErrorMessage("");
   };
@@ -1475,7 +1927,7 @@ function ProductForm({
   }, [pathname, router, searchParams, searchParamsString]);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form id="product-editor-form" noValidate onSubmit={handleSubmit} className="space-y-6">
       {errorMessage ? (
         <div
           ref={messageRef}
@@ -1485,295 +1937,157 @@ function ProductForm({
         </div>
       ) : null}
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Product Editor</p>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
-            <p className="text-sm text-slate-500">{pageDescription}</p>
-          </div>
+      <div hidden className="hidden" aria-hidden="true">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Product Editor</p>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{pageTitle}</h1>
+              <p className="text-sm text-slate-500">{pageDescription}</p>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <ProductStatusBadge status={values.status} />
-            <button
-              type="button"
-              onClick={() => router.push(productsIndexHref)}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex items-center justify-center rounded-2xl bg-[#615FFF] px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            <div className="flex flex-wrap items-center gap-3">
+              <ProductStatusBadge status={values.status} />
+              <button
+                type="button"
+                onClick={() => router.push(productsIndexHref)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
               >
-                {isSubmitting
-                  ? "Saving Product..."
-                  : mode === "create"
-                    ? values.status === "draft"
-                      ? "Save Draft"
-                      : values.status === "disabled"
-                        ? "Archive Product"
-                        : "Publish Product"
-                    : "Update Product"}
+                Cancel
               </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
-          <CardSection title="Basic Information" description="Set the core product identity, ownership, and marketplace shipping profile.">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <TextField
-                  id="product-name"
-                  label="Product Name"
-                  value={values.name}
-                  onChange={(value) => updateField("name", value)}
-                  placeholder="Premium wholesale product name"
-                  required
-                />
-              </div>
+          <div hidden className="hidden" aria-hidden="true">
+            <CardSection title="Basic Information" description="Set the core product identity, ownership, and marketplace shipping profile.">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <TextField
+                    id="product-name"
+                    label="Product Name"
+                    value={values.name}
+                    onChange={(value) => updateField("name", value)}
+                    placeholder="Premium wholesale product name"
+                    required
+                  />
+                </div>
 
-              <div>
-                <label htmlFor="product-vendor" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Assign Vendor
-                </label>
-                <select
-                  id="product-vendor"
-                  value={values.vendor_id}
-                  onChange={(event) => updateField("vendor_id", event.target.value)}
-                  disabled={!canAssignPlatformProducts}
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                >
-                  {canAssignPlatformProducts ? (
-                    <option value="">{vendorsLoading ? "Loading vendors..." : "Platform-managed product"}</option>
-                  ) : null}
-                  {vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>
-                      {vendor.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  {canAssignPlatformProducts
-                    ? "Leave this empty for marketplace-managed products, or assign ownership to a vendor now."
-                    : "This product is locked to your current vendor account."}
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="product-weight" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Weight (Optional)
-                </label>
-                <input
-                  id="product-weight"
-                  type="text"
-                  value={values.weight}
-                  onChange={(event) => updateField("weight", event.target.value)}
-                  placeholder="0.5"
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label
-                  htmlFor="product-cnds-shipping-profile"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
-                >
-                  CNDS Shipping Profile
-                </label>
-                <select
-                  id="product-cnds-shipping-profile"
-                  value={values.cnds_profile_id}
-                  onChange={(event) => updateField("cnds_profile_id", event.target.value)}
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                >
-                  <option value="">
-                    {cndsProfilesLoading ? "Loading CNDS profiles..." : "No CNDS profile selected"}
-                  </option>
-                  {availableCndsProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name} ({profile.pricing_type === "unit" ? "Per Unit" : "Fixed"})
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  Assign an active CNDS shipping profile now. This only stores the profile on the product and does not
-                  change checkout calculations yet.
-                </p>
-              </div>
-
-            </div>
-          </CardSection>
-
-          <CardSection title="Product Setup" description="Choose whether this product uses one simple price or multiple generated variations.">
-            <div className="grid gap-3 md:grid-cols-2">
-              {(["single", "variable"] as const).map((type) => {
-                const isSelected = values.product_type === type;
-                const label = type === "single" ? "Single Product" : "Variable Product";
-                const description =
-                  type === "single"
-                    ? "Use one regular price, discount price, and MOQ."
-                    : "Use attributes and multiple generated variations.";
-
-                return (
-                  <label
-                    key={type}
-                    className={`cursor-pointer rounded-2xl border p-4 transition-colors ${
-                      isSelected
-                        ? "border-[#615FFF]/40 bg-[#615FFF]/5"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="radio"
-                        name="product_type"
-                        checked={isSelected}
-                        onChange={() => updateField("product_type", type)}
-                        className="mt-1 h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
-                      />
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{label}</p>
-                        <p className="mt-1 text-sm text-slate-500">{description}</p>
-                      </div>
-                    </div>
+                <div>
+                  <label htmlFor="product-vendor" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Assign Vendor
                   </label>
-                );
-              })}
-            </div>
-          </CardSection>
+                  <select
+                    id="product-vendor"
+                    value={values.vendor_id}
+                    onChange={(event) => updateField("vendor_id", event.target.value)}
+                    disabled={!canAssignPlatformProducts}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  >
+                    {canAssignPlatformProducts ? (
+                      <option value="">{vendorsLoading ? "Loading vendors..." : "Platform-managed product"}</option>
+                    ) : null}
+                    {vendors.map((vendor) => (
+                      <option key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {canAssignPlatformProducts
+                      ? "Leave this empty for marketplace-managed products, or assign ownership to a vendor now."
+                      : "This product is locked to your current vendor account."}
+                  </p>
+                </div>
 
-          <CardSection
-            title="Product Pricing Tiers"
-            description="Set pricing, fallback values, and MOQ without changing the existing pricing logic."
-          >
-            {values.product_type === "single" ? (
-              <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <NumberField
-                    id="product-regular-price"
-                    label="Regular Price / Fallback Price"
-                    value={values.regular_price}
-                    onChange={(value) => updateField("regular_price", value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    required
-                  />
-                  <NumberField
-                    id="product-discount-price"
-                    label="Discount Price"
-                    value={values.discount_price}
-                    onChange={(value) => updateField("discount_price", value)}
-                    placeholder="Optional"
-                    min="0"
-                    step="0.01"
-                  />
-                  <NumberField
-                    id="product-moq"
-                    label="MOQ"
-                    value={values.moq}
-                    onChange={(value) => updateField("moq", value)}
-                    placeholder="10"
-                    min="1"
-                    step="1"
-                    required
+                <div>
+                  <label htmlFor="product-weight" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Weight (Optional)
+                  </label>
+                  <input
+                    id="product-weight"
+                    type="text"
+                    value={values.weight}
+                    onChange={(event) => updateField("weight", event.target.value)}
+                    placeholder="0.5"
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_auto] md:items-end">
-                  <div>
-                    <label htmlFor="product-pricing-type" className="mb-1.5 block text-sm font-medium text-slate-700">
-                      Pricing Type
-                    </label>
-                    <select
-                      id="product-pricing-type"
-                      value={values.pricing_type}
-                      onChange={(event) => updateField("pricing_type", event.target.value as ProductPricingType)}
-                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                    >
-                      <option value="unit">Unit Pricing</option>
-                      <option value="fixed">Fixed Range Pricing</option>
-                    </select>
-                  </div>
-
-                  <div className="flex justify-start md:justify-end">
-                    <button
-                      type="button"
-                      onClick={addPricingTier}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                    >
-                      Add Tier
-                    </button>
-                  </div>
-                </div>
-
-                {values.pricing_tiers.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                    No pricing tiers yet. Add a tier to apply quantity-based pricing for this product.
-                  </div>
-                ) : (
-                  values.pricing_tiers.map((tier, index) => (
-                    <div key={tier.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {values.pricing_type === "fixed"
-                              ? "Fixed total applies when this product quantity matches the tier."
-                              : "Unit price applies when this product quantity matches the tier."}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removePricingTier(tier.id)}
-                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                        >
-                          Remove Tier
-                        </button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <NumberField
-                          id={`pricing-tier-min-${tier.id}`}
-                          label="Min Qty"
-                          value={tier.min_qty}
-                          onChange={(value) => handlePricingTierChange(tier.id, "min_qty", value)}
-                          placeholder="1"
-                          min="1"
-                          step="1"
-                          required
-                        />
-                        <NumberField
-                          id={`pricing-tier-max-${tier.id}`}
-                          label="Max Qty"
-                          value={tier.max_qty}
-                          onChange={(value) => handlePricingTierChange(tier.id, "max_qty", value)}
-                          placeholder="Optional"
-                          min="1"
-                          step="1"
-                        />
-                        <NumberField
-                          id={`pricing-tier-price-${tier.id}`}
-                          label="Price"
-                          value={tier.price}
-                          onChange={(value) => handlePricingTierChange(tier.id, "price", value)}
-                          placeholder="0.00"
-                          min="0"
-                          step="0.01"
-                          required
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
               </div>
-            ) : (
-              <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto] md:items-end">
+            </CardSection>
+          </div>
+
+          <div hidden className="hidden" aria-hidden="true">
+            <CardSection title="Product Setup" description="Choose whether this product uses one simple price or multiple generated variations.">
+              <div className="grid gap-3 md:grid-cols-2">
+                {(["single", "variable"] as const).map((type) => {
+                  const isSelected = values.product_type === type;
+                  const label = type === "single" ? "Single Product" : "Variable Product";
+                  const description =
+                    type === "single"
+                      ? "Use one regular price, discount price, and MOQ."
+                      : "Use attributes and multiple generated variations.";
+
+                  return (
+                    <label
+                      key={type}
+                      className={`cursor-pointer rounded-2xl border p-4 transition-colors ${
+                        isSelected
+                          ? "border-[#615FFF]/40 bg-[#615FFF]/5"
+                          : "border-slate-200 bg-white hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="radio"
+                          name="product_type"
+                          checked={isSelected}
+                          onChange={() => updateField("product_type", type)}
+                          className="mt-1 h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{label}</p>
+                          <p className="mt-1 text-sm text-slate-500">{description}</p>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </CardSection>
+          </div>
+
+          <div hidden className="hidden" aria-hidden="true">
+            <CardSection
+              title="Product Pricing Tiers"
+              description="Set pricing, fallback values, and MOQ without changing the existing pricing logic."
+            >
+              {values.product_type === "single" ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <NumberField
+                      id="product-regular-price"
+                      label="Regular Price / Fallback Price"
+                      value={values.regular_price}
+                      onChange={(value) => updateField("regular_price", value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
+                    <NumberField
+                      id="product-discount-price"
+                      label="Discount Price"
+                      value={values.discount_price}
+                      onChange={(value) => updateField("discount_price", value)}
+                      placeholder="Optional"
+                      min="0"
+                      step="0.01"
+                    />
                     <NumberField
                       id="product-moq"
                       label="MOQ"
@@ -1784,526 +2098,573 @@ function ProductForm({
                       step="1"
                       required
                     />
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                      Variation prices come from the selected tier set. No extra fallback input is needed on the variation row.
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_auto] md:items-end">
+                    <div>
+                      <label htmlFor="product-pricing-type" className="mb-1.5 block text-sm font-medium text-slate-700">
+                        Pricing Type
+                      </label>
+                      <select
+                        id="product-pricing-type"
+                        value={values.pricing_type}
+                        onChange={(event) => updateField("pricing_type", event.target.value as ProductPricingType)}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                      >
+                        <option value="unit">Unit Pricing</option>
+                        <option value="fixed">Fixed Range Pricing</option>
+                      </select>
                     </div>
+
                     <div className="flex justify-start md:justify-end">
                       <button
                         type="button"
-                        onClick={addPricingTierSet}
+                        onClick={addPricingTier}
                         className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
                       >
-                        Add Tier Set
+                        Add Tier
                       </button>
                     </div>
                   </div>
 
-                  {values.pricing_tier_sets.map((tierSet, tierSetIndex) => (
-                    <div key={tierSet.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                      <div className="mb-4 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">Tier Set {tierSetIndex + 1}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            Assign this set to one or more variations that share the same quantity pricing rules.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removePricingTierSet(tierSet.id)}
-                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                        >
-                          Remove Tier Set
-                        </button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-3">
-                        <TextField
-                          id={`tier-set-name-${tierSet.id}`}
-                          label="Tier Set Name"
-                          value={tierSet.name}
-                          onChange={(value) => handlePricingTierSetChange(tierSet.id, "name", value)}
-                          placeholder="Standard Flower Pricing"
-                        />
-                        <NumberField
-                          id={`tier-set-fallback-${tierSet.id}`}
-                          label="Fallback Price"
-                          value={tierSet.fallback_price}
-                          onChange={(value) => handlePricingTierSetChange(tierSet.id, "fallback_price", value)}
-                          placeholder="0.00"
-                          min="0"
-                          step="0.01"
-                        />
-                        <div>
-                          <label htmlFor={`tier-set-type-${tierSet.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
-                            Pricing Type
-                          </label>
-                          <select
-                            id={`tier-set-type-${tierSet.id}`}
-                            value={tierSet.pricing_type}
-                            onChange={(event) =>
-                              handlePricingTierSetChange(tierSet.id, "pricing_type", event.target.value as ProductPricingType)
-                            }
-                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  {values.pricing_tiers.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                      No pricing tiers yet. Add a tier to apply quantity-based pricing for this product.
+                    </div>
+                  ) : (
+                    values.pricing_tiers.map((tier, index) => (
+                      <div key={tier.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {values.pricing_type === "fixed"
+                                ? "Fixed total applies when this product quantity matches the tier."
+                                : "Unit price applies when this product quantity matches the tier."}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePricingTier(tier.id)}
+                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
                           >
-                            <option value="unit">Unit Pricing</option>
-                            <option value="fixed">Fixed Range Pricing</option>
-                          </select>
+                            Remove Tier
+                          </button>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <NumberField
+                            id={`pricing-tier-min-${tier.id}`}
+                            label="Min Qty"
+                            value={tier.min_qty}
+                            onChange={(value) => handlePricingTierChange(tier.id, "min_qty", value)}
+                            placeholder="1"
+                            min="1"
+                            step="1"
+                            required
+                          />
+                          <NumberField
+                            id={`pricing-tier-max-${tier.id}`}
+                            label="Max Qty"
+                            value={tier.max_qty}
+                            onChange={(value) => handlePricingTierChange(tier.id, "max_qty", value)}
+                            placeholder="Optional"
+                            min="1"
+                            step="1"
+                          />
+                          <NumberField
+                            id={`pricing-tier-price-${tier.id}`}
+                            label="Price"
+                            value={tier.price}
+                            onChange={(value) => handlePricingTierChange(tier.id, "price", value)}
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            required
+                          />
                         </div>
                       </div>
-
-                      <div className="mt-4 flex justify-end">
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_minmax(0,220px)_auto] md:items-end">
+                      <NumberField
+                        id="product-moq"
+                        label="MOQ"
+                        value={values.moq}
+                        onChange={(value) => updateField("moq", value)}
+                        placeholder="10"
+                        min="1"
+                        step="1"
+                        required
+                      />
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                        Variation prices come from the selected tier set. No extra fallback input is needed on the variation row.
+                      </div>
+                      <div className="flex justify-start md:justify-end">
                         <button
                           type="button"
-                          onClick={() => addPricingTierToSet(tierSet.id)}
+                          onClick={addPricingTierSet}
                           className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
                         >
-                          Add Tier
+                          Add Tier Set
                         </button>
                       </div>
+                    </div>
 
-                      <div className="mt-4 space-y-3">
-                        {tierSet.tiers.map((tier, index) => (
-                          <div key={tier.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                            <div className="mb-4 flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {tierSet.pricing_type === "fixed"
-                                    ? "Fixed total applies when this variation quantity matches the tier."
-                                    : "Unit price applies when this variation quantity matches the tier."}
-                                </p>
+                    {values.pricing_tier_sets.map((tierSet, tierSetIndex) => (
+                      <div key={tierSet.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">Tier Set {tierSetIndex + 1}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              Assign this set to one or more variations that share the same quantity pricing rules.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removePricingTierSet(tierSet.id)}
+                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                          >
+                            Remove Tier Set
+                          </button>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-3">
+                          <TextField
+                            id={`tier-set-name-${tierSet.id}`}
+                            label="Tier Set Name"
+                            value={tierSet.name}
+                            onChange={(value) => handlePricingTierSetChange(tierSet.id, "name", value)}
+                            placeholder="Standard Flower Pricing"
+                          />
+                          <NumberField
+                            id={`tier-set-fallback-${tierSet.id}`}
+                            label="Fallback Price"
+                            value={tierSet.fallback_price}
+                            onChange={(value) => handlePricingTierSetChange(tierSet.id, "fallback_price", value)}
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                          />
+                          <div>
+                            <label htmlFor={`tier-set-type-${tierSet.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
+                              Pricing Type
+                            </label>
+                            <select
+                              id={`tier-set-type-${tierSet.id}`}
+                              value={tierSet.pricing_type}
+                              onChange={(event) =>
+                                handlePricingTierSetChange(tierSet.id, "pricing_type", event.target.value as ProductPricingType)
+                              }
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            >
+                              <option value="unit">Unit Pricing</option>
+                              <option value="fixed">Fixed Range Pricing</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => addPricingTierToSet(tierSet.id)}
+                            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                          >
+                            Add Tier
+                          </button>
+                        </div>
+
+                        <div className="mt-4 space-y-3">
+                          {tierSet.tiers.map((tier, index) => (
+                            <div key={tier.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                              <div className="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    {tierSet.pricing_type === "fixed"
+                                      ? "Fixed total applies when this variation quantity matches the tier."
+                                      : "Unit price applies when this variation quantity matches the tier."}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removePricingTierFromSet(tierSet.id, tier.id)}
+                                  className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                                >
+                                  Remove Tier
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => removePricingTierFromSet(tierSet.id, tier.id)}
-                                className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                              >
-                                Remove Tier
-                              </button>
-                            </div>
 
-                            <div className="grid gap-4 md:grid-cols-3">
+                              <div className="grid gap-4 md:grid-cols-3">
+                                <NumberField
+                                  id={`tier-set-${tierSet.id}-min-${tier.id}`}
+                                  label="Min Qty"
+                                  value={tier.min_qty}
+                                  onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "min_qty", value)}
+                                  placeholder="1"
+                                  min="1"
+                                  step="1"
+                                  required
+                                />
+                                <NumberField
+                                  id={`tier-set-${tierSet.id}-max-${tier.id}`}
+                                  label="Max Qty"
+                                  value={tier.max_qty}
+                                  onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "max_qty", value)}
+                                  placeholder="Optional"
+                                  min="1"
+                                  step="1"
+                                />
+                                <NumberField
+                                  id={`tier-set-${tierSet.id}-price-${tier.id}`}
+                                  label="Price"
+                                  value={tier.price}
+                                  onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "price", value)}
+                                  placeholder="0.00"
+                                  min="0"
+                                  step="0.01"
+                                  required
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </CardSection>
+          </div>
+
+          <div hidden className="hidden" aria-hidden="true">
+                <CardSection title="Attributes" description="Add one or more attributes like Color or Size, then generate variations from them.">
+                  <div id="product-attributes-section" className="space-y-4">
+                    {values.attributes.map((attribute, index) => (
+                      <div
+                        key={attribute.id}
+                        data-product-attribute-row="true"
+                        data-product-attribute-id={attribute.id}
+                        data-product-attribute-index={index}
+                        className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-900">Attribute {index + 1}</p>
+                          <button
+                            data-product-attribute-remove="true"
+                            data-product-attribute-remove-id={attribute.id}
+                            type="button"
+                            onClick={() => removeAttribute(attribute.id)}
+                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                          >
+                            Remove Attribute
+                          </button>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <TextField
+                            id={`attribute-name-${attribute.id}`}
+                            label="Attribute Name"
+                            value={attribute.name}
+                            onChange={(value) => handleAttributeChange(attribute.id, "name", value)}
+                            placeholder="Color, Size"
+                          />
+                          <div>
+                            <label
+                              htmlFor={`attribute-values-${attribute.id}`}
+                              className="mb-1.5 block text-sm font-medium text-slate-700"
+                            >
+                              Attribute Values
+                            </label>
+                            <textarea
+                              id={`attribute-values-${attribute.id}`}
+                              value={attribute.values}
+                              onChange={(event) => handleAttributeChange(attribute.id, "values", event.target.value)}
+                              placeholder="Red, Blue, Black"
+                              className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        id="product-attributes-add"
+                        data-product-attributes-add="true"
+                        type="button"
+                        onClick={addAttribute}
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                      >
+                        Add Attribute
+                      </button>
+                      <button
+                        id="product-attributes-generate"
+                        data-product-attributes-generate="true"
+                        type="button"
+                        onClick={generateVariations}
+                        className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                      >
+                        Generate Variations Automatically
+                      </button>
+                    </div>
+                  </div>
+                </CardSection>
+          </div>
+
+          <div hidden className="hidden" aria-hidden="true">
+            {values.product_type === "variable" ? (
+              <>
+                <CardSection title="Variations" description="Create variations manually or generate them from the attributes above.">
+                  <div id="product-variations-section" className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-slate-500">{totalVariationCount} variation(s) ready</p>
+                      <button
+                        id="product-variations-add"
+                        type="button"
+                        onClick={addVariation}
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                      >
+                        Add Variation Manually
+                      </button>
+                    </div>
+
+                    {values.variations.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                        No variations yet. Add one manually or generate them from attributes.
+                      </div>
+                    ) : (
+                      values.variations.map((variation, index) => (
+                        <div
+                          key={variation.id}
+                          data-product-variation-row="true"
+                          data-product-variation-id={variation.id}
+                          data-product-variation-index={index}
+                          data-product-variation-image={variation.image_url}
+                          data-product-variation-summary={
+                            Object.entries(variation.attribute_values)
+                              .map(([key, value]) => `${key}: ${value}`)
+                              .join(" | ")
+                          }
+                          className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                        >
+                          <div className="mb-4 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">Variation {index + 1}</p>
+                              {Object.keys(variation.attribute_values).length > 0 ? (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {Object.entries(variation.attribute_values)
+                                    .map(([key, value]) => `${key}: ${value}`)
+                                    .join(" | ")}
+                                </p>
+                              ) : null}
+                            </div>
+                            <button
+                              data-product-variation-remove="true"
+                              data-product-variation-remove-id={variation.id}
+                              type="button"
+                              onClick={() => removeVariation(variation.id)}
+                              className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                            >
+                              Remove Variation
+                            </button>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <TextField
+                              id={`variation-name-${variation.id}`}
+                              label="Variation Name"
+                              value={variation.name}
+                              onChange={(value) => handleVariationChange(variation.id, "name", value)}
+                              placeholder="Red / M"
+                              required
+                            />
+                            <div>
+                              <label htmlFor={`variation-tier-set-${variation.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
+                                Pricing Tier Set
+                              </label>
+                              <select
+                                id={`variation-tier-set-${variation.id}`}
+                                value={variation.pricing_tier_set_id}
+                                onChange={(event) => handleVariationChange(variation.id, "pricing_tier_set_id", event.target.value)}
+                                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                              >
+                                <option value="">Select tier set</option>
+                                {values.pricing_tier_sets.map((tierSet) => (
+                                  <option key={tierSet.id} value={tierSet.id}>
+                                    {tierSet.name.trim() || "Untitled Tier Set"}
+                                  </option>
+                                ))}
+                              </select>
+                              <p className="mt-2 text-xs leading-5 text-slate-500">
+                                This variation will use the selected tier set and its own fallback price.
+                              </p>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-3">
                               <NumberField
-                                id={`tier-set-${tierSet.id}-min-${tier.id}`}
-                                label="Min Qty"
-                                value={tier.min_qty}
-                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "min_qty", value)}
+                                id={`variation-moq-${variation.id}`}
+                                label="MOQ"
+                                value={variation.moq}
+                                onChange={(value) => handleVariationChange(variation.id, "moq", value)}
                                 placeholder="1"
                                 min="1"
                                 step="1"
                                 required
                               />
                               <NumberField
-                                id={`tier-set-${tierSet.id}-max-${tier.id}`}
-                                label="Max Qty"
-                                value={tier.max_qty}
-                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "max_qty", value)}
-                                placeholder="Optional"
-                                min="1"
+                                id={`variation-stock-${variation.id}`}
+                                label="Stock"
+                                value={variation.stock}
+                                onChange={(value) => handleVariationChange(variation.id, "stock", value)}
+                                placeholder="0"
+                                min="0"
                                 step="1"
                               />
-                              <NumberField
-                                id={`tier-set-${tierSet.id}-price-${tier.id}`}
-                                label="Price"
-                                value={tier.price}
-                                onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "price", value)}
-                                placeholder="0.00"
-                                min="0"
-                                step="0.01"
-                                required
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <MediaField
+                                label="Variation Image"
+                                value={variation.image_url}
+                                onChange={(value) => handleVariationChange(variation.id, "image_url", value)}
+                                helperText="Select from file gallery or upload from computer."
+                                libraryHref={createMediaLibraryHref(`variation:${variation.id}`)}
+                                vendorId={forcedVendorId}
                               />
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </CardSection>
-
-          {values.product_type === "variable" ? (
-            <>
-              <CardSection title="Attributes" description="Add one or more attributes like Color or Size, then generate variations from them.">
-                <div className="space-y-4">
-                  {values.attributes.map((attribute, index) => (
-                    <div key={attribute.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-slate-900">Attribute {index + 1}</p>
-                        <button
-                          type="button"
-                          onClick={() => removeAttribute(attribute.id)}
-                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                        >
-                          Remove Attribute
-                        </button>
-                      </div>
-
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <TextField
-                          id={`attribute-name-${attribute.id}`}
-                          label="Attribute Name"
-                          value={attribute.name}
-                          onChange={(value) => handleAttributeChange(attribute.id, "name", value)}
-                          placeholder="Color, Size"
-                        />
-                        <div>
-                          <label
-                            htmlFor={`attribute-values-${attribute.id}`}
-                            className="mb-1.5 block text-sm font-medium text-slate-700"
-                          >
-                            Attribute Values
-                          </label>
-                          <textarea
-                            id={`attribute-values-${attribute.id}`}
-                            value={attribute.values}
-                            onChange={(event) => handleAttributeChange(attribute.id, "values", event.target.value)}
-                            placeholder="Red, Blue, Black"
-                            className="min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                          />
                         </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={addAttribute}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                    >
-                      Add Attribute
-                    </button>
-                    <button
-                      type="button"
-                      onClick={generateVariations}
-                      className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-                    >
-                      Generate Variations Automatically
-                    </button>
+                      ))
+                    )}
                   </div>
-                </div>
-              </CardSection>
+                </CardSection>
 
-              <CardSection title="Variations" description="Create variations manually or generate them from the attributes above.">
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-slate-500">{totalVariationCount} variation(s) ready</p>
-                    <button
-                      type="button"
-                      onClick={addVariation}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                    >
-                      Add Variation Manually
-                    </button>
-                  </div>
-
-                  {values.variations.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                      No variations yet. Add one manually or generate them from attributes.
-                    </div>
-                  ) : (
-                    values.variations.map((variation, index) => (
-                      <div key={variation.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">Variation {index + 1}</p>
-                            {Object.keys(variation.attribute_values).length > 0 ? (
-                              <p className="mt-1 text-xs text-slate-500">
-                                {Object.entries(variation.attribute_values)
-                                  .map(([key, value]) => `${key}: ${value}`)
-                                  .join(" | ")}
-                              </p>
-                            ) : null}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeVariation(variation.id)}
-                            className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                          >
-                            Remove Variation
-                          </button>
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <TextField
-                            id={`variation-name-${variation.id}`}
-                            label="Variation Name"
-                            value={variation.name}
-                            onChange={(value) => handleVariationChange(variation.id, "name", value)}
-                            placeholder="Red / M"
-                            required
-                          />
-                          <div>
-                            <label htmlFor={`variation-tier-set-${variation.id}`} className="mb-1.5 block text-sm font-medium text-slate-700">
-                              Pricing Tier Set
-                            </label>
-                            <select
-                              id={`variation-tier-set-${variation.id}`}
-                              value={variation.pricing_tier_set_id}
-                              onChange={(event) => handleVariationChange(variation.id, "pricing_tier_set_id", event.target.value)}
-                              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                            >
-                              <option value="">Select tier set</option>
-                              {values.pricing_tier_sets.map((tierSet) => (
-                                <option key={tierSet.id} value={tierSet.id}>
-                                  {tierSet.name.trim() || "Untitled Tier Set"}
-                                </option>
-                              ))}
-                            </select>
-                            <p className="mt-2 text-xs leading-5 text-slate-500">
-                              This variation will use the selected tier set and its own fallback price.
-                            </p>
-                          </div>
-                          <div className="grid gap-4 sm:grid-cols-3">
-                            <NumberField
-                              id={`variation-moq-${variation.id}`}
-                              label="MOQ"
-                              value={variation.moq}
-                              onChange={(value) => handleVariationChange(variation.id, "moq", value)}
-                              placeholder="1"
-                              min="1"
-                              step="1"
-                              required
-                            />
-                            <NumberField
-                              id={`variation-stock-${variation.id}`}
-                              label="Stock"
-                              value={variation.stock}
-                              onChange={(value) => handleVariationChange(variation.id, "stock", value)}
-                              placeholder="0"
-                              min="0"
-                              step="1"
-                            />
-                          </div>
-
-                          <div className="md:col-span-2">
-                <MediaField
-                  label="Variation Image"
-                  value={variation.image_url}
-                  onChange={(value) => handleVariationChange(variation.id, "image_url", value)}
-                  helperText="Select from file gallery or upload from computer."
-                  libraryHref={createMediaLibraryHref(`variation:${variation.id}`)}
-                  vendorId={forcedVendorId}
-                />
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </CardSection>
-
-            </>
-          ) : null}
+              </>
+            ) : null}
+          </div>
         </div>
 
         <aside className="space-y-6">
-          <CardSection title="Status" description="Control how the product appears in admin and how it should be treated for publishing.">
-            <div className="space-y-3">
+          <div hidden className="hidden" aria-hidden="true">
+            <div id="product-status-section" className="space-y-3">
               {(["active", "disabled", "draft"] as const).map((status) => {
                 const selected = values.status === status;
-                const label =
-                  status === "active" ? "Published" : status === "disabled" ? "Archived" : "Draft";
 
                 return (
-                  <label
-                    key={status}
-                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 transition-colors ${
-                      selected ? "border-[#615FFF]/40 bg-[#615FFF]/5" : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
+                  <label key={status}>
                     <input
                       type="radio"
                       name="status"
+                      data-product-status-option={status}
                       checked={selected}
                       onChange={() => updateField("status", status)}
-                      className="h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
                     />
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{label}</p>
-                      <p className="text-xs text-slate-500">
-                        {status === "active"
-                          ? "Published and ready for storefront or marketplace use."
-                          : status === "draft"
-                            ? "Saved as draft for later completion."
-                            : "Archived and hidden from normal active product workflows."}
-                      </p>
-                    </div>
                   </label>
                 );
               })}
             </div>
-          </CardSection>
+          </div>
 
-          <CardSection title="Media" description="Manage category, main image, and gallery from a cleaner sidebar workflow.">
-            <div className="space-y-5">
-              <div>
-                <label htmlFor="product-category" className="mb-1.5 block text-sm font-medium text-slate-700">
-                  Select Category
-                </label>
+          <div hidden className="hidden" aria-hidden="true">
+              <div className="space-y-5">
+                <input
+                  id="product-sku"
+                  type="text"
+                  value={values.sku}
+                  onChange={(event) => updateField("sku", event.target.value)}
+                  className="hidden"
+                />
+
+                <div>
+                  <label htmlFor="product-category" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Select Category
+                  </label>
+                  <select
+                    id="product-category"
+                    value={values.category_id}
+                    onChange={(event) => updateField("category_id", event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  >
+                    <option value="">{categoriesLoading ? "Loading categories..." : "Select category"}</option>
+                    {orderedCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.parent_id ? `- ${category.name}` : category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div
+                  id="product-main-image-section"
+                  data-product-main-image={values.image_url}
+                  className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
+                />
+
                 <select
-                  id="product-category"
-                  value={values.category_id}
-                  onChange={(event) => updateField("category_id", event.target.value)}
-                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  id="product-cnds-shipping-profile"
+                  value={values.cnds_profile_id}
+                  onChange={(event) => updateField("cnds_profile_id", event.target.value)}
+                  className="hidden"
                 >
-                  <option value="">{categoriesLoading ? "Loading categories..." : "Select category"}</option>
-                  {orderedCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.parent_id ? `- ${category.name}` : category.name}
+                  <option value="">
+                    {cndsProfilesLoading ? "Loading CNDS profiles..." : "No CNDS profile selected"}
+                  </option>
+                  {availableCndsProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name} ({profile.pricing_type === "unit" ? "Per Unit" : "Fixed"})
                     </option>
                   ))}
                 </select>
-              </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Main Image</p>
-                    <p className="text-xs text-slate-500">Primary 1:1 image for the product.</p>
-                  </div>
-                  {values.image_url ? (
+                <div id="product-gallery-section" className="space-y-2">
+                  {values.gallery_images.map((image, index) => (
                     <div
-                      role="img"
-                      aria-label="Main product image preview"
-                      className="h-14 w-14 shrink-0 rounded-2xl border border-slate-200 bg-slate-100 bg-cover bg-center"
-                      style={{ backgroundImage: `url("${values.image_url}")` }}
+                      key={`gallery-image-bridge-${index}`}
+                      data-product-gallery-row="true"
+                      data-product-gallery-index={index}
+                      data-product-gallery-image={image}
                     />
-                  ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white text-[10px] font-medium text-slate-400">
-                      Empty
-                    </div>
-                  )}
+                  ))}
                 </div>
-
-                <MediaField
-                  label="Main Image Upload"
-                  value={values.image_url}
-                  onChange={(value) => updateField("image_url", value)}
-                  helperText="Select from file gallery or upload from computer."
-                  libraryHref={createMediaLibraryHref("main-image")}
-                  vendorId={forcedVendorId}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Gallery Images</p>
-                    <p className="text-xs text-slate-500">
-                      {values.gallery_images.filter(Boolean).length} image(s) added
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => updateField("gallery_images", [...values.gallery_images, ""])}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                  >
-                    Add Image
-                  </button>
-                </div>
-
-                {values.gallery_images.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
-                    No gallery images added yet.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {values.gallery_images.map((image, index) => (
-                      <details
-                        key={`gallery-image-${index}`}
-                        className="overflow-hidden rounded-2xl border border-slate-200 bg-white"
-                        open={index === values.gallery_images.length - 1}
-                      >
-                        <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3">
-                          {image ? (
-                            <div
-                              role="img"
-                              aria-label={`Gallery image ${index + 1}`}
-                              className="h-12 w-12 shrink-0 rounded-xl border border-slate-200 bg-slate-100 bg-cover bg-center"
-                              style={{ backgroundImage: `url("${image}")` }}
-                            />
-                          ) : (
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 text-[10px] font-medium text-slate-400">
-                              Empty
-                            </div>
-                          )}
-
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-slate-800">Gallery Image {index + 1}</p>
-                            <p className="truncate text-xs text-slate-500">
-                              {image ? "Image selected" : "No image selected yet"}
-                            </p>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              updateField(
-                                "gallery_images",
-                                values.gallery_images.filter((_, imageIndex) => imageIndex !== index),
-                              );
-                            }}
-                            className="inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50 hover:text-rose-700"
-                          >
-                            Remove
-                          </button>
-                        </summary>
-
-                        <div className="border-t border-slate-200 p-3">
-                          <MediaField
-                            label={`Gallery Image ${index + 1}`}
-                            value={image}
-                            onChange={(nextValue) =>
-                              updateField(
-                                "gallery_images",
-                                values.gallery_images.map((currentImage, imageIndex) =>
-                                  imageIndex === index ? nextValue : currentImage,
-                                ),
-                              )
-                            }
-                            helperText="Select from file gallery or upload from computer."
-                            libraryHref={createMediaLibraryHref("gallery")}
-                            vendorId={forcedVendorId}
-                          />
-                        </div>
-                      </details>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
-          </CardSection>
 
-          <CardSection title="Specifications" description="Add simple key-value details for technical or marketplace reference information.">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-500">{values.specifications.length} specification row(s)</p>
-                <button
-                  type="button"
-                  onClick={addSpecification}
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-                >
+          <div hidden className="hidden" aria-hidden="true">
+            <CardSection title="Specifications" description="Add simple key-value details for technical or marketplace reference information.">
+              <div id="product-specifications-section" className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-500">{values.specifications.length} specification row(s)</p>
+                  <button
+                    id="product-specifications-add"
+                    data-product-spec-add="true"
+                    type="button"
+                    onClick={addSpecification}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                  >
                   Add Spec
                 </button>
               </div>
 
               <div className="space-y-3">
-                {values.specifications.map((specification, index) => (
-                  <div
-                    key={specification.id}
-                    className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
-                  >
+                  {values.specifications.map((specification, index) => (
+                    <div
+                      key={specification.id}
+                      data-product-spec-row="true"
+                      data-product-spec-id={specification.id}
+                      data-product-spec-index={index}
+                      className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <p className="text-sm font-semibold text-slate-900">Specification {index + 1}</p>
-                      <button
-                        type="button"
-                        onClick={() => removeSpecification(specification.id)}
-                        className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
-                      >
+                        <button
+                          data-product-spec-remove="true"
+                          data-product-spec-remove-id={specification.id}
+                          type="button"
+                          onClick={() => removeSpecification(specification.id)}
+                          className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700"
+                        >
                         Remove
                       </button>
                     </div>
@@ -2326,72 +2687,75 @@ function ProductForm({
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
-          </CardSection>
-
-          <CardSection title="Quick Summary" description="A quick overview before you save the product.">
-            <div className="space-y-3 text-sm text-slate-600">
-              <div className="flex items-center justify-between gap-3">
-                <span>Product Type</span>
-                <span className="font-semibold text-slate-900">
-                  {values.product_type === "single" ? "Single Product" : "Variable Product"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Vendor</span>
-                <span className="font-semibold text-slate-900">
-                  {vendors.find((vendor) => vendor.id === values.vendor_id)?.name ?? "Platform-managed"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Category</span>
-                <span className="font-semibold text-slate-900">
-                  {categories.find((category) => category.id === values.category_id)?.name ?? "Not selected"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Gallery Images</span>
-                <span className="font-semibold text-slate-900">
-                  {values.gallery_images.filter(Boolean).length}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Specifications</span>
-                <span className="font-semibold text-slate-900">
-                  {
-                    values.specifications.filter(
-                      (specification) =>
-                        specification.label.trim().length > 0 || specification.value.trim().length > 0,
-                    ).length
-                  }
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>Variations</span>
-                <span className="font-semibold text-slate-900">{totalVariationCount}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span>{values.product_type === "single" ? "Pricing Tiers" : "Tier Sets"}</span>
-                <span className="font-semibold text-slate-900">
-                  {values.product_type === "single" ? totalPricingTierCount : totalTierSetCount}
-                </span>
-              </div>
-              {values.product_type === "single" ? (
-                <div className="flex items-center justify-between gap-3">
-                  <span>Pricing Type</span>
-                  <span className="font-semibold capitalize text-slate-900">{values.pricing_type}</span>
                 </div>
-              ) : null}
-              <div className="flex items-center justify-between gap-3">
-                <span>CNDS Shipping Profile</span>
-                <span className="font-semibold text-slate-900">
-                  {availableCndsProfiles.find((profile) => profile.id === values.cnds_profile_id)?.name ??
-                    "Not selected"}
-                </span>
               </div>
-            </div>
-          </CardSection>
+            </CardSection>
+          </div>
+
+          <div className="hidden" aria-hidden="true">
+            <CardSection title="Quick Summary" description="A quick overview before you save the product.">
+              <div className="space-y-3 text-sm text-slate-600">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Product Type</span>
+                  <span className="font-semibold text-slate-900">
+                    {values.product_type === "single" ? "Single Product" : "Variable Product"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Vendor</span>
+                  <span className="font-semibold text-slate-900">
+                    {vendors.find((vendor) => vendor.id === values.vendor_id)?.name ?? "Platform-managed"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Category</span>
+                  <span className="font-semibold text-slate-900">
+                    {categories.find((category) => category.id === values.category_id)?.name ?? "Not selected"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Gallery Images</span>
+                  <span className="font-semibold text-slate-900">
+                    {values.gallery_images.filter(Boolean).length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Specifications</span>
+                  <span className="font-semibold text-slate-900">
+                    {
+                      values.specifications.filter(
+                        (specification) =>
+                          specification.label.trim().length > 0 || specification.value.trim().length > 0,
+                      ).length
+                    }
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Variations</span>
+                  <span className="font-semibold text-slate-900">{totalVariationCount}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>{values.product_type === "single" ? "Pricing Tiers" : "Tier Sets"}</span>
+                  <span className="font-semibold text-slate-900">
+                    {values.product_type === "single" ? totalPricingTierCount : totalTierSetCount}
+                  </span>
+                </div>
+                {values.product_type === "single" ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Pricing Type</span>
+                    <span className="font-semibold capitalize text-slate-900">{values.pricing_type}</span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-3">
+                  <span>CNDS Shipping Profile</span>
+                  <span className="font-semibold text-slate-900">
+                    {availableCndsProfiles.find((profile) => profile.id === values.cnds_profile_id)?.name ??
+                      "Not selected"}
+                  </span>
+                </div>
+              </div>
+            </CardSection>
+          </div>
         </aside>
       </div>
     </form>

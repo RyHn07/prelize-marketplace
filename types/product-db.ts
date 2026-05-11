@@ -226,6 +226,7 @@ export type ProductDbRow = {
   category_id: string | null;
   name: string;
   slug: string;
+  sku?: string | null;
   description: string | null;
   image_url: string | null;
   price: number;
@@ -254,6 +255,7 @@ export type ProductUpsertPayload = {
   category_id: string | null;
   name: string;
   slug: string;
+  sku: string | null;
   description: string | null;
   image_url: string | null;
   price: number;
@@ -312,6 +314,7 @@ export type ProductFormValues = {
   category_id: string;
   name: string;
   slug: string;
+  sku: string;
   description: string;
   image_url: string;
   gallery_images: string[];

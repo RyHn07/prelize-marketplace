@@ -101,11 +101,14 @@ function buildSchemaErrorMessage(message: string) {
     return "The product_variants table is missing the pricing_tier_set_id column. Run the latest variable pricing tier migration or save without per-variant tier set links.";
   }
 
+  if (missingProductColumn && PRODUCT_EDITOR_SCHEMA_COLUMNS.has(missingProductColumn)) {
+    return `The products table is missing the "${missingProductColumn}" column. Run the latest product editor schema migration, then try saving again. Original error: ${message}`;
+  }
+
   if (
-    (missingProductColumn && PRODUCT_EDITOR_SCHEMA_COLUMNS.has(missingProductColumn)) ||
     (normalizedMessage.includes("products") && normalizedMessage.includes("schema cache"))
   ) {
-    return "The products table is missing one or more product editor columns. Add price, moq, image_url, status, product_type, regular_price, discount_price, vendor_id, gallery_images, attributes, cdd_shipping_profile, cnds_profile_id, pricing_tier_profile_id, pricing_source, and pricing_tier_set_id support before saving the full product editor data.";
+    return `Supabase schema cache still reports a products table editor column mismatch. If you just ran the migration, wait a few seconds and try again. Original error: ${message}`;
   }
 
   if (normalizedMessage.includes("product_variants")) {

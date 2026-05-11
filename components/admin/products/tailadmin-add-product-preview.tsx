@@ -756,18 +756,22 @@ export default function TailadminAddProductPreview() {
           })
         : null;
 
-    vendorObserver?.observe(vendorSelect, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["value", "disabled"],
-    });
-    categoryObserver?.observe(categorySelect, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ["value", "disabled"],
-    });
+    if (vendorSelect && vendorObserver) {
+      vendorObserver.observe(vendorSelect, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["value", "disabled"],
+      });
+    }
+    if (categorySelect && categoryObserver) {
+      categoryObserver.observe(categorySelect, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["value", "disabled"],
+      });
+    }
 
     const timer = window.setTimeout(syncFromRealForm, 400);
 

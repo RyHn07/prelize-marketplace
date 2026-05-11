@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import AdminPageHeader from "@/components/admin/admin-page-header";
+import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
 import { createAdminProductRecord, updateAdminProductRecord } from "@/lib/admin-product-actions";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
@@ -74,22 +74,7 @@ export default function AdminNewProductPage() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <AdminPageHeader
-          eyebrow="Product Editor"
-          title="Add Product"
-          description="Create a new marketplace product without changing the existing submission logic."
-          actions={
-            <Link
-              href="/admin/products"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
-            >
-              Back to Products
-            </Link>
-          }
-        />
-      </div>
+    <section className="w-full space-y-6">
       <ProductForm
         key="new-product"
         mode="create"
@@ -102,6 +87,7 @@ export default function AdminNewProductPage() {
             : updateAdminProductRecord(productId ?? "", payload)
         }
       />
+      <TailadminAddProductPreview />
     </section>
   );
 }
