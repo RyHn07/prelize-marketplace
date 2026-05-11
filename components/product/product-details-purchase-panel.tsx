@@ -41,6 +41,8 @@ type ProductOptionAttribute = {
   values: string[];
 };
 
+type AttributeImageMap = Record<string, Record<string, string>>;
+
 function formatCurrency(value: number) {
   return `\u09F3${value.toLocaleString()}`;
 }
@@ -140,6 +142,60 @@ function buildProductOptions(
       attributeValues: {},
     },
   ];
+}
+
+function buildAttributeImageMap(options: ProductOption[]): AttributeImageMap {
+  const nextMap: AttributeImageMap = {};
+
+  options.forEach((option) => {
+    Object.entries(option.attributeValues).forEach(([attributeName, attributeValue]) => {
+      const normalizedName = attributeName.trim();
+      const normalizedValue = attributeValue.trim();
+
+      if (!normalizedName || !normalizedValue || !option.image) {
+        return;
+      }
+
+      if (!nextMap[normalizedName]) {
+        nextMap[normalizedName] = {};
+      }
+
+      if (!nextMap[normalizedName][normalizedValue]) {
+        nextMap[normalizedName][normalizedValue] = option.image;
+      }
+    });
+  });
+
+  return nextMap;
+}
+
+function shouldUseImageSelector(
+  attributeName: string,
+  values: string[],
+  attributeImageMap: AttributeImageMap,
+) {
+  const normalizedName = attributeName.trim().toLowerCase();
+  const isImageFriendlyAttribute = normalizedName === "color" || normalizedName === "colour";
+
+  if (!isImageFriendlyAttribute) {
+    return false;
+  }
+
+  return values.every((value) => {
+    const imageUrl = attributeImageMap[attributeName]?.[value];
+    return typeof imageUrl === "string" && imageUrl.trim().length > 0;
+  });
+}
+
+function buildDefaultSelectedAttributes(
+  attributes: ProductOptionAttribute[],
+  attributeImageMap: AttributeImageMap,
+) {
+  return Object.fromEntries(
+    attributes
+      .filter((attribute) => shouldUseImageSelector(attribute.name, attribute.values, attributeImageMap))
+      .map((attribute) => [attribute.name, attribute.values[0] ?? ""]),
+  );
 }
 
 function calculateCndsCost(
@@ -312,6 +368,22 @@ export default function ProductDetailsPurchasePanel({
     () => buildProductOptions(product, productRecord, variants, productPricingConfig),
     [product, productPricingConfig, productRecord, variants],
   );
+  const attributeImageMap = useMemo(() => buildAttributeImageMap(productOptions), [productOptions]);
+  const visibleOptionAttributes = useMemo(
+    () =>
+      optionAttributes.filter((attribute) =>
+        shouldUseImageSelector(attribute.name, attribute.values, attributeImageMap),
+      ),
+    [attributeImageMap, optionAttributes],
+  );
+  const optionColumnLabel = useMemo(
+    () =>
+      optionAttributes.find(
+        (attribute) =>
+          !shouldUseImageSelector(attribute.name, attribute.values, attributeImageMap),
+      )?.name ?? "Option",
+    [attributeImageMap, optionAttributes],
+  );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -328,11 +400,11 @@ export default function ProductDetailsPurchasePanel({
   }, [product.id]);
 
   useEffect(() => {
-    setSelectedAttributes({});
+    setSelectedAttributes(buildDefaultSelectedAttributes(optionAttributes, attributeImageMap));
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
     setShowAllVariants(false);
     setSelectedShippingMethodId(internationalShippingMethods[0]?.id ?? "");
-  }, [internationalShippingMethods, product.id, productOptions]);
+  }, [attributeImageMap, internationalShippingMethods, optionAttributes, product.id, productOptions]);
 
   const selectedShippingMethod = useMemo(
     () =>
@@ -493,29 +565,37 @@ export default function ProductDetailsPurchasePanel({
         </div>
 
         <div className="space-y-4">
-          {optionAttributes.length > 0 ? (
-            optionAttributes.map((attribute) => (
+          {visibleOptionAttributes.length > 0 ? (
+            visibleOptionAttributes.map((attribute) => (
               <div key={attribute.name} className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-base font-semibold text-slate-900">{attribute.name}</p>
+                  <p className="text-base font-semibold text-slate-900">
+                    {attribute.name}
+                    {selectedAttributes[attribute.name] ? (
+                      <span className="ml-2 font-medium text-slate-500">
+                        : {selectedAttributes[attribute.name]}
+                      </span>
+                    ) : null}
+                  </p>
                   {selectedAttributes[attribute.name] ? (
                     <button
                       type="button"
                       onClick={() =>
                         setSelectedAttributes((current) => ({
                           ...current,
-                          [attribute.name]: "",
+                          [attribute.name]: attribute.values[0] ?? "",
                         }))
                       }
                       className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
                     >
-                      Clear
+                      Reset
                     </button>
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {attribute.values.map((value) => {
                     const isSelected = selectedAttributes[attribute.name] === value;
+                    const imageUrl = attributeImageMap[attribute.name]?.[value] ?? "";
 
                     return (
                       <button
@@ -524,16 +604,22 @@ export default function ProductDetailsPurchasePanel({
                         onClick={() =>
                           setSelectedAttributes((current) => ({
                             ...current,
-                            [attribute.name]: current[attribute.name] === value ? "" : value,
+                            [attribute.name]: value,
                           }))
                         }
                         className={
                           isSelected
-                            ? "rounded-full border border-[#615FFF] bg-[#615FFF]/10 px-4 py-2 text-sm font-semibold text-[#615FFF]"
-                            : "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
+                            ? "group flex h-[76px] w-[76px] items-center justify-center overflow-hidden rounded-2xl border-2 border-[#615FFF] bg-white p-1 shadow-sm ring-4 ring-[#615FFF]/10"
+                            : "group flex h-[76px] w-[76px] items-center justify-center overflow-hidden rounded-2xl border border-slate-300 bg-white p-1 shadow-sm transition-colors hover:border-slate-400"
                         }
+                        aria-label={`${attribute.name}: ${value}`}
+                        title={value}
                       >
-                        {value}
+                        <div
+                          aria-hidden="true"
+                          className="h-full w-full rounded-xl bg-cover bg-center"
+                          style={{ backgroundImage: `url("${imageUrl}")` }}
+                        />
                       </button>
                     );
                   })}
@@ -544,7 +630,7 @@ export default function ProductDetailsPurchasePanel({
 
           <div className="space-y-4">
             <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_auto] items-center gap-4 text-base font-semibold text-slate-900">
-              <span className="self-center">Option</span>
+              <span className="self-center">{optionColumnLabel}</span>
               <span className="self-center">Price</span>
               <span className="self-center">Quantity</span>
             </div>
