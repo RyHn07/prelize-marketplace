@@ -111,6 +111,32 @@ export const adminNavigation: AdminNavItem[] = [
     icon: "folder",
   },
   {
+    name: "Homepage",
+    icon: "grid",
+    subItems: [
+      {
+        label: "Theme Engine",
+        href: "/admin/homepage",
+        description: "Manage homepage themes, previews, and activation flow.",
+      },
+      {
+        label: "Themes",
+        href: "/admin/homepage/themes",
+        description: "Create and switch homepage layouts without changing content.",
+      },
+      {
+        label: "Content Blocks",
+        href: "/admin/homepage/content",
+        description: "Edit reusable homepage copy, cards, and CTA content.",
+      },
+      {
+        label: "Product Sections",
+        href: "/admin/homepage/product-sections",
+        description: "Control dynamic homepage product feeds and merchandising strips.",
+      },
+    ],
+  },
+  {
     name: "Shipping",
     icon: "list",
     subItems: [

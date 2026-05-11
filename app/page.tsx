@@ -1,21 +1,7 @@
-import Header from "@/components/Header";
+import ThemeRenderer from "@/components/homepage/theme-renderer";
+import { getHomepageRenderData } from "@/lib/homepage/queries";
 
-export default function Home() {
-  return (
-    <main className="min-h-screen bg-white text-slate-900">
-      
-      <Header />
-
-      <section className="text-center py-20 px-6">
-        <h2 className="text-4xl font-bold">
-          Wholesale Products from China
-        </h2>
-
-        <p className="mt-4 text-slate-500">
-          Import products easily with bulk pricing and fast delivery to Bangladesh.
-        </p>
-      </section>
-
-    </main>
-  );
+export default async function HomePage() {
+  const { data } = await getHomepageRenderData();
+  return <ThemeRenderer data={data} />;
 }

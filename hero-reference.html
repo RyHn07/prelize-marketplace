@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hero Reference</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --page-bg: #ffffff;
+        --hero-bg: #061b28;
+        --promo-bg: #dff2fd;
+        --promo-image-bg: #071d2c;
+        --title: #ffffff;
+        --text-soft: rgba(255, 255, 255, 0.88);
+        --text-dark: #0b0f14;
+        --accent: #5d5df6;
+        --accent-2: #6a58ff;
+        --container: 1220px;
+        --radius-lg: 16px;
+        --radius-md: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--page-bg);
+        color: var(--text-dark);
+        font-family: "Outfit", sans-serif;
+      }
+
+      body {
+        padding: 32px 20px;
+      }
+
+      .hero-shell {
+        max-width: var(--container);
+        margin: 0 auto;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 360px;
+        align-items: start;
+        gap: 24px;
+      }
+
+      .hero-card {
+        min-height: 534px;
+        padding: 84px;
+        border-radius: var(--radius-lg);
+        background: var(--hero-bg);
+        display: flex;
+        align-items: center;
+      }
+
+      .hero-content {
+        width: 100%;
+        max-width: 400px;
+      }
+
+      .hero-eyebrow {
+        margin: 0 0 24px;
+        color: var(--title);
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+      }
+
+      .hero-title {
+        margin: 0;
+        color: var(--title);
+        font-size: 54px;
+        font-weight: 600;
+        line-height: 1.12;
+        letter-spacing: -0.04em;
+      }
+
+      .hero-description {
+        max-width: 332px;
+        margin: 16px 0 0;
+        color: var(--text-soft);
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.7;
+      }
+
+      .hero-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 98px;
+        height: 42px;
+        margin-top: 40px;
+        padding: 0 25px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, var(--accent-2) 0%, var(--accent) 100%);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .promo-stack {
+        display: grid;
+        gap: 24px;
+      }
+
+      .promo-card {
+        min-height: 255px;
+        padding: 24px;
+        border-radius: var(--radius-lg);
+        background: var(--promo-bg);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 160px;
+        gap: 24px;
+      }
+
+      .promo-copy {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+      }
+
+      .promo-title {
+        max-width: 120px;
+        margin: 0;
+        color: #000000;
+        font-size: 19px;
+        font-weight: 600;
+        line-height: 1.4;
+        letter-spacing: -0.03em;
+      }
+
+      .promo-save {
+        margin: auto 0 0;
+        color: #111111;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.2;
+      }
+
+      .promo-save strong {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .promo-visual {
+        min-height: 0;
+        border-radius: var(--radius-md);
+        background: var(--promo-image-bg);
+        aspect-ratio: 160 / 207;
+      }
+
+      @media (max-width: 1100px) {
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .promo-stack {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 767px) {
+        body {
+          padding: 20px 16px;
+        }
+
+        .hero-card {
+          min-height: auto;
+          padding: 48px 32px;
+        }
+
+        .hero-title {
+          font-size: 40px;
+        }
+
+        .promo-stack {
+          grid-template-columns: 1fr;
+        }
+
+        .promo-card {
+          grid-template-columns: minmax(0, 1fr) 132px;
+          min-height: 220px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .hero-card {
+          padding: 40px 24px;
+        }
+
+        .hero-title {
+          font-size: 34px;
+        }
+
+        .promo-card {
+          grid-template-columns: 1fr;
+        }
+
+        .promo-title {
+          max-width: none;
+        }
+
+        .promo-visual {
+          width: 100%;
+          max-width: 180px;
+          justify-self: end;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="hero-shell">
+      <section class="hero-grid" aria-label="Featured promotions">
+        <article class="hero-card">
+          <div class="hero-content">
+            <p class="hero-eyebrow">Special Edition</p>
+            <h1 class="hero-title">Apple AirPods<br />Max</h1>
+            <p class="hero-description">
+              Transparency mode and spatial audio, it delivers a premium listening
+              experience.
+            </p>
+            <a class="hero-cta" href="#">Shop Now</a>
+          </div>
+        </article>
+
+        <div class="promo-stack">
+          <article class="promo-card">
+            <div class="promo-copy">
+              <h2 class="promo-title">Smart Security Home Camera</h2>
+              <p class="promo-save">Save up to <strong>$450</strong></p>
+            </div>
+            <div class="promo-visual" aria-hidden="true"></div>
+          </article>
+
+          <article class="promo-card">
+            <div class="promo-copy">
+              <h2 class="promo-title">Smart Security Home Camera</h2>
+              <p class="promo-save">Save up to <strong>$450</strong></p>
+            </div>
+            <div class="promo-visual" aria-hidden="true"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

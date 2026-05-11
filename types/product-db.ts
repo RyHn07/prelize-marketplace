@@ -13,6 +13,18 @@ export type VendorStatus = "pending" | "active" | "suspended";
 export type VendorMemberRole = "owner" | "staff";
 export type VendorMemberStatus = "active" | "invited" | "disabled";
 export type VendorInvitationStatus = "pending" | "accepted" | "rejected";
+export type HomepageThemeStatus = "draft" | "active" | "archived";
+export type HomepageThemeSectionKey =
+  | "hero"
+  | "featured_categories"
+  | "promo_banners"
+  | "product_showcase"
+  | "why_choose_prelize"
+  | "how_it_works"
+  | "lead_capture"
+  | "testimonials";
+export type HomepageSectionType = HomepageThemeSectionKey;
+export type HomepageProductSectionSourceType = "manual" | "newest" | "featured" | "category" | "low_moq";
 export type VendorOrderStatus =
   | "Pending"
   | "Confirmed"
@@ -292,6 +304,79 @@ export type ProductVariationFormValue = {
   image_url: string;
   pricing_tier_set_id: string;
   attribute_values: ProductVariantAttributeValues;
+};
+
+export type HomepageThemeRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  preview_image_url: string | null;
+  status: HomepageThemeStatus;
+  is_active: boolean;
+  settings_json: JsonValue;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomepageThemeSectionRow = {
+  id: string;
+  theme_id: string;
+  section_key: HomepageThemeSectionKey;
+  section_type: HomepageSectionType;
+  component_name: string;
+  sort_order: number;
+  is_enabled: boolean;
+  layout_settings: JsonValue;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomepageContentBlockRow = {
+  id: string;
+  content_key: string;
+  title: string | null;
+  subtitle: string | null;
+  description: string | null;
+  image_url: string | null;
+  button_text: string | null;
+  button_link: string | null;
+  data_json: JsonValue;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HomepageBannerRow = {
+  id: string;
+  title: string | null;
+  subtitle: string | null;
+  image_url: string | null;
+  link_url: string | null;
+  placement: string | null;
+  sort_order: number;
+  start_date: string | null;
+  end_date: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type HomepageProductSectionRow = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  section_key: string;
+  source_type: HomepageProductSectionSourceType;
+  category_id: string | null;
+  product_ids: string[];
+  limit_count: number;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type HomepageResolvedProductSection = HomepageProductSectionRow & {
+  products: import("@/types/product").Product[];
 };
 
 export type ProductPricingTierFormValue = {
