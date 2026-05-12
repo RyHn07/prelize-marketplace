@@ -10,6 +10,7 @@ import {
   toPlatformSettingsFormValues,
   toPlatformSettingsUpsertPayload,
 } from "@/lib/platform-settings";
+import { uploadProductMedia } from "@/lib/media/storage";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type { PlatformSettingsFormValues, PlatformSettingsRow } from "@/types/platform-settings";
 
@@ -53,6 +54,78 @@ function SettingsField({
   );
 }
 
+function ImageSettingsField({
+  label,
+  hint,
+  value,
+  disabled,
+  uploading,
+  uploadLabel,
+  onUpload,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  disabled: boolean;
+  uploading: boolean;
+  uploadLabel: string;
+  onUpload: (file: File | null) => Promise<void>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <SettingsField label={label} hint={hint}>
+      <div className="space-y-3">
+        <input
+          type="url"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="https://example.com/image.png"
+          className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900">
+            {uploading ? "Uploading..." : uploadLabel}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={disabled || uploading}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                void onUpload(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+
+          {value ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange("")}
+              className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed"
+            >
+              Remove image
+            </button>
+          ) : null}
+        </div>
+
+        {value ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <img src={value} alt={`${label} preview`} className="h-20 w-auto max-w-full rounded-xl object-contain" />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+            {uploading ? "Uploading image..." : "No image uploaded yet."}
+          </div>
+        )}
+      </div>
+    </SettingsField>
+  );
+}
+
 export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,6 +134,7 @@ export default function AdminSettingsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [uploadingField, setUploadingField] = useState<"" | "logo" | "favicon" | "share">("");
   const [formValues, setFormValues] = useState<PlatformSettingsFormValues>(
     DEFAULT_PLATFORM_SETTINGS,
   );
@@ -103,7 +177,7 @@ export default function AdminSettingsPage() {
         setErrorMessage(
           error.message.toLowerCase().includes("relation")
             ? "Platform settings table is missing. Run the latest Supabase migration, then reload this page."
-            : "Unable to load platform settings right now.",
+            : error.message,
         );
         setFormValues(DEFAULT_PLATFORM_SETTINGS);
         setLoading(false);
@@ -140,6 +214,36 @@ export default function AdminSettingsPage() {
     setSuccessMessage("");
   };
 
+  const handleAssetUpload = async (
+    field: "logo_url" | "favicon_url" | "share_image_url",
+    file: File | null,
+    uploadingState: "" | "logo" | "favicon" | "share",
+  ) => {
+    if (!file) {
+      return;
+    }
+
+    setUploadingField(uploadingState);
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    try {
+      const result = await uploadProductMedia(file);
+
+      if (result.error || !result.data) {
+        setErrorMessage(result.error?.message ?? "Unable to upload image right now.");
+        return;
+      }
+
+      handleFieldChange(field, result.data.publicUrl);
+      setSuccessMessage("Image uploaded successfully.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to upload image right now.");
+    } finally {
+      setUploadingField("");
+    }
+  };
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -162,7 +266,7 @@ export default function AdminSettingsPage() {
       setErrorMessage(
         error.message.toLowerCase().includes("relation")
           ? "Platform settings table is missing. Run the latest Supabase migration, then save again."
-          : "Unable to save platform settings right now.",
+          : error.message,
       );
       setSaving(false);
       return;
@@ -208,7 +312,7 @@ export default function AdminSettingsPage() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl">
+    <section className="w-full space-y-6">
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">
@@ -216,8 +320,7 @@ export default function AdminSettingsPage() {
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Settings</h1>
           <p className="max-w-2xl text-sm text-slate-500">
-            Manage the marketplace identity and the support copy the admin team can reuse across
-            customer-facing flows.
+            Manage site identity, share preview assets, and reusable support copy from one place.
           </p>
         </div>
 
@@ -241,25 +344,32 @@ export default function AdminSettingsPage() {
         </div>
       ) : null}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm text-slate-500">Site Title</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
+            {formValues.site_title.trim() || DEFAULT_PLATFORM_SETTINGS.site_title}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm text-slate-500">Short Title</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">
+            {formValues.site_short_title.trim() || "Not configured"}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-sm text-slate-500">Site URL</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">
+            {formValues.site_url.trim() || "Not configured"}
+          </p>
+        </div>
+
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Marketplace Name</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
+          <p className="mt-2 text-lg font-semibold text-slate-900">
             {formValues.marketplace_name.trim() || DEFAULT_PLATFORM_SETTINGS.marketplace_name}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Support Email</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {formValues.support_email.trim() || "Not configured"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Support Phone</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {formValues.support_phone.trim() || "Not configured"}
           </p>
         </div>
       </div>
@@ -275,6 +385,45 @@ export default function AdminSettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <SettingsField
+                label="Site title"
+                hint="Used for browser title, search results, and social share title fallback."
+              >
+                <input
+                  type="text"
+                  value={formValues.site_title}
+                  onChange={(event) => handleFieldChange("site_title", event.target.value)}
+                  placeholder="Prelize Marketplace"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </SettingsField>
+
+              <SettingsField
+                label="Short title"
+                hint="A compact brand label for logo text, metadata template, and small UI spaces."
+              >
+                <input
+                  type="text"
+                  value={formValues.site_short_title}
+                  onChange={(event) => handleFieldChange("site_short_title", event.target.value)}
+                  placeholder="Prelize"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </SettingsField>
+
+              <SettingsField
+                label="Site URL"
+                hint="Used as the canonical site base for metadata and share links."
+              >
+                <input
+                  type="url"
+                  value={formValues.site_url}
+                  onChange={(event) => handleFieldChange("site_url", event.target.value)}
+                  placeholder="https://example.com"
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </SettingsField>
+
               <SettingsField
                 label="Marketplace name"
                 hint="Used as the main admin-facing store label and future storefront fallback."
@@ -313,6 +462,67 @@ export default function AdminSettingsPage() {
                   className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
                 />
               </SettingsField>
+
+              <div className="md:col-span-2">
+                <SettingsField
+                  label="Site description"
+                  hint="Used for search metadata and social link preview description."
+                >
+                  <textarea
+                    rows={4}
+                    value={formValues.site_description}
+                    onChange={(event) => handleFieldChange("site_description", event.target.value)}
+                    placeholder="Source wholesale products with a cleaner marketplace workflow."
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  />
+                </SettingsField>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">
+                Branding Assets
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-900">Logo, favicon, and share image</h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <ImageSettingsField
+                label="Website logo"
+                hint="Shown in the storefront header and used as the main visual brand mark."
+                value={formValues.logo_url}
+                disabled={saving}
+                uploading={uploadingField === "logo"}
+                uploadLabel="Upload Logo"
+                onUpload={(file) => handleAssetUpload("logo_url", file, "logo")}
+                onChange={(value) => handleFieldChange("logo_url", value)}
+              />
+
+              <ImageSettingsField
+                label="Favicon icon"
+                hint="Used in browser tabs, bookmarks, and app icons where supported."
+                value={formValues.favicon_url}
+                disabled={saving}
+                uploading={uploadingField === "favicon"}
+                uploadLabel="Upload Favicon"
+                onUpload={(file) => handleAssetUpload("favicon_url", file, "favicon")}
+                onChange={(value) => handleFieldChange("favicon_url", value)}
+              />
+
+              <div className="md:col-span-2">
+                <ImageSettingsField
+                  label="Share banner image"
+                  hint="Shown when someone shares your site link on Facebook, WhatsApp, Messenger, and similar apps."
+                  value={formValues.share_image_url}
+                  disabled={saving}
+                  uploading={uploadingField === "share"}
+                  uploadLabel="Upload Share Image"
+                  onUpload={(file) => handleAssetUpload("share_image_url", file, "share")}
+                  onChange={(value) => handleFieldChange("share_image_url", value)}
+                />
+              </div>
             </div>
           </div>
 
@@ -365,8 +575,8 @@ export default function AdminSettingsPage() {
             </p>
             <h2 className="mt-1 text-xl font-semibold text-slate-900">Update platform settings</h2>
             <p className="mt-3 text-sm text-slate-500">
-              These values are saved in Supabase and can be reused by future storefront, order, and
-              support workflows.
+              These values are saved in Supabase and now drive storefront branding, metadata, and
+              future support workflows.
             </p>
 
             <div className="mt-6 space-y-3">
@@ -395,11 +605,9 @@ export default function AdminSettingsPage() {
             </p>
             <ul className="mt-4 space-y-3 text-sm text-slate-600">
               <li>Settings are stored as one singleton record for the marketplace.</li>
+              <li>Logo is used in the storefront header, and favicon/share image power browser and social previews.</li>
               <li>Admin access now prefers platform roles and falls back to the legacy admin email allowlist.</li>
-              <li>
-                This page prepares the data layer for future role-based admin settings and
-                storefront reuse.
-              </li>
+              <li>Run the new site identity migration before saving these new fields in production.</li>
             </ul>
           </div>
         </div>

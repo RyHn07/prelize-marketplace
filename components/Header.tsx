@@ -1,6 +1,8 @@
 import Link from "next/link";
 
 import HeaderAuthButton from "@/components/auth/header-auth-button";
+import { DEFAULT_PLATFORM_SETTINGS } from "@/lib/platform-settings";
+import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 import HeaderQuoteButton from "@/components/quote/header-quote-button";
 import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
 
@@ -191,7 +193,14 @@ function WhatsAppIcon() {
   );
 }
 
-export default function Header() {
+export default async function Header() {
+  const settings = await getResolvedPlatformSettings();
+  const logoUrl = settings.logo_url.trim();
+  const siteShortTitle =
+    settings.site_short_title.trim() ||
+    settings.marketplace_name.trim() ||
+    DEFAULT_PLATFORM_SETTINGS.site_short_title;
+
   return (
     <header className="border-b border-slate-200/80 bg-white">
       <div className="border-b border-slate-200/80 bg-slate-50/80">
@@ -257,10 +266,20 @@ export default function Header() {
           <div className="flex items-center justify-between gap-4 lg:w-auto lg:flex-none lg:justify-start">
             <Link
               href="/"
-              className="shrink-0 text-[2rem] font-extrabold tracking-tight text-slate-900 transition-colors hover:text-[#615FFF]"
+              className="flex shrink-0 items-center gap-3 transition-colors hover:text-[#615FFF]"
             >
-              <span className="text-slate-900">PRE</span>
-              <span className="text-[#615FFF]">LIZE</span>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={siteShortTitle}
+                  className="h-10 w-auto max-w-[180px] object-contain"
+                />
+              ) : (
+                <span className="text-[2rem] font-extrabold tracking-tight text-slate-900">
+                  <span className="text-slate-900">PRE</span>
+                  <span className="text-[#615FFF]">LIZE</span>
+                </span>
+              )}
             </Link>
           </div>
 
