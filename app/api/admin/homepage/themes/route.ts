@@ -15,14 +15,23 @@ export async function GET(request: Request) {
     return auth.errorResponse;
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const result = await listHomepageThemes(supabase);
+  try {
+    const supabase = getSupabaseServiceRoleClient();
+    const result = await listHomepageThemes(supabase);
 
-  if (result.error) {
-    return NextResponse.json({ error: result.error.message }, { status: 500 });
+    if (result.error) {
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ themes: result.data });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unable to load homepage themes.",
+      },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json({ themes: result.data });
 }
 
 export async function POST(request: Request) {
@@ -32,19 +41,28 @@ export async function POST(request: Request) {
     return auth.errorResponse;
   }
 
-  const payload = parseHomepageThemeInput(await request.json());
-  const validationError = validateHomepageThemeInput(payload);
+  try {
+    const payload = parseHomepageThemeInput(await request.json());
+    const validationError = validateHomepageThemeInput(payload);
 
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServiceRoleClient();
+    const result = await createHomepageTheme(supabase, payload);
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ record: result.data });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unable to create homepage theme.",
+      },
+      { status: 500 },
+    );
   }
-
-  const supabase = getSupabaseServiceRoleClient();
-  const result = await createHomepageTheme(supabase, payload);
-
-  if (result.error) {
-    return NextResponse.json({ error: result.error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ record: result.data });
 }

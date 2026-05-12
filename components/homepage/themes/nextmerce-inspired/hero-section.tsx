@@ -209,13 +209,13 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
                 <h1 className="mt-6 whitespace-pre-line text-[32px] font-semibold leading-[1.2] tracking-[-0.03em] text-white sm:text-[40px] lg:text-[40px]">
                   {heroTitle}
                 </h1>
-                <p className="mt-4 max-w-[332px] text-[11px] leading-[1.75] text-white/88 sm:text-[13px] lg:text-[13px]">
+                <p className="mt-4 max-w-[332px] text-[14px] leading-[1.75] text-white/88">
                   {heroDescription}
                 </p>
                 <div className="mt-10">
                   <a
                     href={slideState.current.cta_link ?? "/products"}
-                    className="inline-flex h-[49px] min-w-[103px] items-center justify-center rounded-full bg-[#5561f5] px-6 text-[12px] font-semibold text-white shadow-[0_14px_28px_rgba(85,97,245,0.28)] transition-transform hover:-translate-y-0.5"
+                    className="inline-flex h-[49px] min-w-[103px] items-center justify-center rounded-full bg-[#5561f5] px-6 text-[14px] font-semibold text-white shadow-[0_14px_28px_rgba(85,97,245,0.28)] transition-transform hover:-translate-y-0.5"
                   >
                     {slideState.current.cta_text}
                   </a>

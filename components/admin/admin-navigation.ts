@@ -46,11 +46,6 @@ export const adminNavigation: AdminNavItem[] = [
         href: "/admin/categories",
         description: "Organize collections and product taxonomy.",
       },
-      {
-        label: "Product Reviews",
-        href: "/admin/products?view=reviews",
-        description: "Review customer product feedback from the marketplace.",
-      },
     ],
   },
   {

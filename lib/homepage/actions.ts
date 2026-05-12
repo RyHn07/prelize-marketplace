@@ -48,14 +48,28 @@ async function authorizedHomepageFetch<T>(input: string, init?: RequestInit) {
     },
   });
 
-  const body = (await response.json().catch(() => null)) as { error?: string } & T;
+  const rawBody = await response.text();
+  const body = rawBody
+    ? ((() => {
+        try {
+          return JSON.parse(rawBody) as { error?: string } & T;
+        } catch {
+          return null;
+        }
+      })())
+    : null;
 
   if (!response.ok) {
     if (response.status === 401 || body?.error === "Missing bearer token.") {
       throw new Error("Please login again.");
     }
 
-    throw new Error(body?.error ?? "Request failed.");
+    const fallbackMessage =
+      rawBody && !rawBody.trim().startsWith("<")
+        ? rawBody
+        : `Request failed (${response.status} ${response.statusText || "Server Error"}).`;
+
+    throw new Error(body?.error ?? fallbackMessage);
   }
 
   return body as T;

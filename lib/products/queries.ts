@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { mockCategories } from "@/data/mock-categories";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
@@ -876,29 +875,17 @@ export async function getProductEditorRecordForVendors(id: string, vendorIds: st
 
 export async function getProductCategoryOptions() {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id").order("name", { ascending: true });
+  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, image_url").order("name", { ascending: true });
 
   if (error) {
     return {
-      data: mockCategories.map((category) => ({
-        id: category.id,
-        name: category.name,
-        slug: category.slug,
-        parent_id: null,
-      })) satisfies ProductCategoryOption[],
-      error: null,
+      data: [] as ProductCategoryOption[],
+      error,
     };
   }
 
   return {
-    data: ((data ?? []) as ProductCategoryOption[]).length > 0
-      ? ((data ?? []) as ProductCategoryOption[])
-      : mockCategories.map((category) => ({
-          id: category.id,
-          name: category.name,
-          slug: category.slug,
-          parent_id: null,
-        })),
+    data: (data ?? []) as ProductCategoryOption[],
     error: null,
   };
 }

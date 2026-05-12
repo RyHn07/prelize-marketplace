@@ -79,6 +79,10 @@ function createSlugFallback(value: string) {
     .replace(/-{2,}/g, "-");
 }
 
+function normalizeHomepageProductSectionTitle(value: string) {
+  return value === "Newest wholesale arrivals" ? "Newest arrivals" : value;
+}
+
 function normalizeTimestamp(value: unknown) {
   return typeof value === "string" ? value : new Date(0).toISOString();
 }
@@ -170,7 +174,7 @@ function normalizeHomepageProductSection(row: RawHomepageProductSectionRow): Hom
 
   return {
     id: row.id,
-    title: row.title,
+    title: normalizeHomepageProductSectionTitle(row.title),
     subtitle: normalizeText(row.subtitle),
     section_key: row.section_key,
     source_type:
@@ -241,11 +245,17 @@ function buildHomepageCategories(
   });
 
   return categoryOptions
+    .filter((category) => !category.parent_id)
     .map((category) => ({
       id: category.id,
       name: category.name,
       slug: category.slug ?? createSlugFallback(category.name),
-      image: imageByCategoryId.get(category.id) ?? "/file.svg",
+      image:
+        (typeof category.image_url === "string" && category.image_url.trim()
+          ? category.image_url
+          : null) ??
+        imageByCategoryId.get(category.id) ??
+        "/file.svg",
       itemCount: `${countByCategoryId.get(category.id) ?? 0} products`,
       totalItems: countByCategoryId.get(category.id) ?? 0,
     }))

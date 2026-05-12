@@ -433,6 +433,7 @@ export type ProductCategoryOption = {
   name: string;
   slug?: string;
   parent_id?: string | null;
+  image_url?: string | null;
 };
 
 export type ProductVendorOption = {

@@ -75,18 +75,20 @@ export default function AdminNewProductPage() {
 
   return (
     <section className="w-full space-y-6">
-      <ProductForm
-        key="new-product"
-        mode="create"
-        record={null}
-        allowedVendorIds={manageableVendorIds}
-        canAssignPlatformProducts={canAssignPlatformProducts}
-        onSave={(mode, payload, productId) =>
-          mode === "create"
-            ? createAdminProductRecord(payload)
-            : updateAdminProductRecord(productId ?? "", payload)
-        }
-      />
+      <div className="hidden" aria-hidden="true">
+        <ProductForm
+          key="new-product"
+          mode="create"
+          record={null}
+          allowedVendorIds={manageableVendorIds}
+          canAssignPlatformProducts={canAssignPlatformProducts}
+          onSave={(mode, payload, productId) =>
+            mode === "create"
+              ? createAdminProductRecord(payload)
+              : updateAdminProductRecord(productId ?? "", payload)
+          }
+        />
+      </div>
       <TailadminAddProductPreview />
     </section>
   );

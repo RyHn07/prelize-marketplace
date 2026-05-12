@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import Header from "@/components/Header";
-import ProductBrowseShell from "@/components/product/product-browse-shell";
+import ProductCatalog from "@/components/product/product-catalog";
 import {
   getProductCategoryOptions,
   getProductImageMapByProductIds,
@@ -39,11 +39,15 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   if (!category) {
     notFound();
   }
-
-  const subcategories = categoryOptions
-    .filter((item) => item.parent_id === category.id)
-    .sort((left, right) => left.name.localeCompare(right.name));
-  const { data: scopedProducts, error, totalCount, page, limit } = await getPublicProductsByBrowseParams({
+  const {
+    data: scopedProducts,
+    error,
+    totalCount,
+    page,
+    limit,
+    availableMinPrice,
+    availableMaxPrice,
+  } = await getPublicProductsByBrowseParams({
     ...filters,
     category: slug,
   });
@@ -82,19 +86,16 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
           </div>
         ) : null}
 
-        <ProductBrowseShell
-          title={category.name}
-          description="Browse active products from this category and its linked subcategories with search, filter, and sorting."
+        <ProductCatalog
           products={storefrontProducts}
           totalCount={totalCount}
           categories={categoryOptions}
           vendors={vendorOptions}
-          lockedCategory={category}
-          subcategories={subcategories}
+          availableMinPrice={availableMinPrice}
+          availableMaxPrice={availableMaxPrice}
           currentFilters={{
             search: typeof filters.search === "string" ? filters.search : "",
             category: slug,
-            subcategory: typeof filters.subcategory === "string" ? filters.subcategory : "",
             min: typeof filters.min === "string" ? filters.min : "",
             max: typeof filters.max === "string" ? filters.max : "",
             moq: typeof filters.moq === "string" ? filters.moq : "",

@@ -10,11 +10,9 @@ export default function ProductShowcase({ sections }: { sections: HomepageResolv
     <section className="mx-auto max-w-7xl space-y-12 px-4 py-16 sm:px-6 lg:px-8">
       {sections.map((section) => (
         <div key={section.id} className="space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Product Section</p>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{section.title}</h2>
-              {section.subtitle ? <p className="mt-2 text-sm text-slate-500">{section.subtitle}</p> : null}
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-900">{section.title}</h2>
             </div>
             <a href="/products" className="text-sm font-semibold text-slate-500 hover:text-slate-900">
               Browse all products

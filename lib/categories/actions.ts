@@ -5,6 +5,7 @@ export type CategoryUpsertPayload = {
   name: string;
   slug: string;
   parent_id: string | null;
+  image_url: string | null;
 };
 
 function normalizeCategorySlug(value: string) {
@@ -109,8 +110,9 @@ export async function createCategory(payload: CategoryUpsertPayload) {
       name: payload.name.trim(),
       slug: slugResult.slug,
       parent_id: payload.parent_id,
+      image_url: payload.image_url,
     } as never)
-    .select("id, name, slug, parent_id, created_at")
+    .select("id, name, slug, parent_id, image_url, created_at")
     .single();
 
   if (error || !data) {
@@ -149,9 +151,10 @@ export async function updateCategory(id: string, payload: CategoryUpsertPayload)
       name: payload.name.trim(),
       slug: slugResult.slug,
       parent_id: payload.parent_id,
+      image_url: payload.image_url,
     } as never)
     .eq("id", id)
-    .select("id, name, slug, parent_id, created_at")
+    .select("id, name, slug, parent_id, image_url, created_at")
     .single();
 
   if (error || !data) {

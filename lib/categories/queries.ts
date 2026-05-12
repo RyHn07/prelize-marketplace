@@ -5,6 +5,7 @@ export type AdminCategoryRow = {
   name: string;
   slug: string;
   parent_id: string | null;
+  image_url: string | null;
   created_at?: string | null;
 };
 
@@ -23,12 +24,13 @@ function normalizeCategory(row: AdminCategoryRow): AdminCategoryRow {
     ...row,
     slug: typeof row.slug === "string" && row.slug.trim().length > 0 ? row.slug : String(row.id),
     parent_id: typeof row.parent_id === "string" ? row.parent_id : null,
+    image_url: typeof row.image_url === "string" && row.image_url.trim().length > 0 ? row.image_url : null,
   };
 }
 
 export async function getAdminCategories() {
   const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, created_at").order("name", {
+  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, image_url, created_at").order("name", {
     ascending: true,
   });
 
