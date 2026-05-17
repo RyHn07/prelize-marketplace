@@ -187,7 +187,7 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
   return (
     <section className="bg-white">
       <div className="mx-auto max-w-7xl px-4 pt-4 pb-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6">
+        <div className="grid items-start gap-2 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6">
           <article
             className="relative overflow-hidden rounded-[14px] bg-[#071d2c] text-white lg:rounded-[16px]"
             style={
@@ -224,7 +224,7 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
             </div>
           </article>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-1 lg:gap-6">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-1 lg:gap-6">
             {sideCards.map((card, index) => {
               const body = (
                 <article
