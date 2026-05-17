@@ -5,6 +5,7 @@ import { DEFAULT_PLATFORM_SETTINGS } from "@/lib/platform-settings";
 import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 import HeaderQuoteButton from "@/components/quote/header-quote-button";
 import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
+import HeaderMobileSearchRow from "@/components/header-mobile-search-row";
 
 const topBarLinks = [
   { href: "https://facebook.com", label: "Facebook" },
@@ -127,6 +128,30 @@ function LifeRingIcon() {
   );
 }
 
+function BellIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <path
+        d="M9.5 18h5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6.5 17.5h11l-1.2-1.7a4 4 0 0 1-.8-2.3V11a5 5 0 1 0-10 0v2.5a4 4 0 0 1-.8 2.3l-1.2 1.7h3Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M10 18a2 2 0 0 0 4 0" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function SearchIcon({ className = "h-5 w-5 text-slate-400" }: { className?: string }) {
   return (
     <svg
@@ -203,7 +228,7 @@ export default async function Header() {
 
   return (
     <header className="border-b border-slate-200/80 bg-white">
-      <div className="border-b border-slate-200/80 bg-slate-50/80">
+      <div className="hidden border-b border-slate-200/80 bg-slate-50/80 lg:block">
         <div className="mx-auto flex max-w-7xl justify-end px-4 py-2.5 text-xs text-slate-500 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
             <button
@@ -261,9 +286,9 @@ export default async function Header() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:gap-8">
-          <div className="flex items-center justify-between gap-4 lg:w-auto lg:flex-none lg:justify-start">
+      <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8 lg:py-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-8">
+          <div className="flex items-center justify-between gap-4 border-b border-slate-200 pb-3 lg:w-auto lg:flex-none lg:justify-start lg:border-b-0 lg:pb-0">
             <Link
               href="/"
               className="flex shrink-0 items-center gap-3 transition-colors hover:text-[#615FFF]"
@@ -275,25 +300,41 @@ export default async function Header() {
                   className="h-10 w-auto max-w-[180px] object-contain"
                 />
               ) : (
-                <span className="text-[2rem] font-extrabold tracking-tight text-slate-900">
-                  <span className="text-slate-900">PRE</span>
-                  <span className="text-[#615FFF]">LIZE</span>
+                <span className="text-[1.95rem] font-extrabold tracking-tight text-slate-900 sm:text-[2rem]">
+                  <span className="text-[#615FFF]">PRE</span>
+                  <span className="text-slate-900">LIZE</span>
                 </span>
               )}
             </Link>
+
+            <button
+              type="button"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-slate-700 transition-colors hover:bg-slate-100 hover:text-[#615FFF] lg:hidden"
+              aria-label="Notifications"
+            >
+              <BellIcon />
+            </button>
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-1 lg:flex-row lg:items-center lg:gap-5">
+            <HeaderMobileSearchRow
+              categoriesLabel="Categories"
+              searchPlaceholder="Search for products"
+              categoriesIcon={<GridIcon />}
+              dropdownIcon={<span className="hidden lg:inline-flex"><ChevronDownIcon /></span>}
+              searchIcon={<SearchIcon className="h-5 w-5 text-white" />}
+            />
+
             <button
               type="button"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 lg:flex-none"
+              className="hidden h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 lg:inline-flex"
             >
               <GridIcon />
               <span>Categories</span>
               <ChevronDownIcon />
             </button>
 
-            <form className="flex-1" role="search" action="/products" method="GET">
+            <form className="hidden flex-1 lg:block" role="search" action="/products" method="GET">
               <label htmlFor="header-search" className="sr-only">
                 Search products
               </label>
@@ -302,8 +343,8 @@ export default async function Header() {
                   id="header-search"
                   name="search"
                   type="search"
-                  placeholder="Search product names"
-                  className="w-full border-0 bg-transparent pr-3 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  placeholder="Search for products"
+                  className="w-full border-0 bg-transparent py-3 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 <button
                   type="submit"
@@ -315,7 +356,7 @@ export default async function Header() {
               </div>
             </form>
 
-            <div className="flex flex-wrap items-center gap-3.5 lg:flex-none lg:justify-end">
+            <div className="hidden flex-wrap items-center gap-3.5 lg:flex lg:flex-none lg:justify-end">
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 px-2 text-sm font-semibold text-[#615FFF] transition-colors hover:text-[#5552e6] lg:ml-1"

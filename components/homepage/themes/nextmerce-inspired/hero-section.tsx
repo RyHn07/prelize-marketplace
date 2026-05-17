@@ -186,10 +186,10 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
 
   return (
     <section className="bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="mx-auto max-w-7xl px-4 pt-4 pb-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6">
           <article
-            className="relative overflow-hidden rounded-[16px] bg-[#071d2c] text-white"
+            className="relative overflow-hidden rounded-[14px] bg-[#071d2c] text-white lg:rounded-[16px]"
             style={
               heroImageUrl
                 ? {
@@ -201,21 +201,21 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
                 : undefined
             }
           >
-            <div className="flex min-h-[534px] items-center px-8 py-10 sm:px-12 lg:px-[84px] lg:py-[84px]">
+            <div className="flex min-h-[214px] items-center px-4 py-8 sm:min-h-[320px] sm:px-8 sm:py-10 lg:min-h-[534px] lg:px-[84px] lg:py-[84px]">
               <div className="flex max-w-[400px] flex-col justify-center">
-                <p className="text-[16px] font-semibold uppercase leading-none tracking-[-0.02em] text-white/95">
+                <p className="text-[13px] font-semibold uppercase leading-none tracking-[-0.02em] text-white/95 sm:text-[16px]">
                   {eyebrow}
                 </p>
-                <h1 className="mt-6 whitespace-pre-line text-[32px] font-semibold leading-[1.2] tracking-[-0.03em] text-white sm:text-[40px] lg:text-[40px]">
+                <h1 className="mt-3 whitespace-pre-line text-[25px] font-semibold leading-[1.18] tracking-[-0.03em] text-white sm:mt-6 sm:text-[34px] lg:text-[40px]">
                   {heroTitle}
                 </h1>
-                <p className="mt-4 max-w-[332px] text-[14px] leading-[1.75] text-white/88">
+                <p className="mt-3 max-w-[290px] text-[12px] leading-[1.7] text-white/88 sm:mt-4 sm:max-w-[332px] sm:text-[14px]">
                   {heroDescription}
                 </p>
-                <div className="mt-10">
+                <div className="mt-6 sm:mt-8 lg:mt-10">
                   <a
                     href={slideState.current.cta_link ?? "/products"}
-                    className="inline-flex h-[49px] min-w-[103px] items-center justify-center rounded-full bg-[#5561f5] px-6 text-[14px] font-semibold text-white shadow-[0_14px_28px_rgba(85,97,245,0.28)] transition-transform hover:-translate-y-0.5"
+                    className="inline-flex h-[40px] min-w-[80px] items-center justify-center rounded-full bg-[#5561f5] px-5 text-[12px] font-semibold text-white shadow-[0_14px_28px_rgba(85,97,245,0.28)] transition-transform hover:-translate-y-0.5 sm:h-[46px] sm:min-w-[100px] sm:px-6 sm:text-[14px] lg:h-[49px] lg:min-w-[103px]"
                   >
                     {slideState.current.cta_text}
                   </a>
@@ -224,18 +224,18 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
             </div>
           </article>
 
-          <div className="grid gap-6">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-1 lg:gap-6">
             {sideCards.map((card, index) => {
               const body = (
                 <article
-                  className="grid min-h-[255px] grid-cols-2 items-stretch gap-6 rounded-[16px] p-6"
+                  className="grid min-h-[128px] grid-cols-2 items-stretch gap-3 rounded-[14px] p-3.5 lg:min-h-[255px] lg:gap-6 lg:rounded-[16px] lg:p-6"
                   style={{ backgroundColor: index === 0 ? "#D7EBF2" : "#F3EFE4" }}
                 >
                   <div className="flex flex-col">
-                    <h2 className="text-[22px] font-semibold leading-[1.45] tracking-[-0.03em] text-[#0c0c0d]">
+                    <h2 className="max-w-[84px] text-[10px] font-semibold leading-[1.4] tracking-[-0.03em] text-[#0c0c0d] sm:max-w-[120px] sm:text-[16px] lg:max-w-none lg:text-[22px]">
                       {card.title}
                     </h2>
-                    <p className="mt-auto text-[16px] text-[#0c0c0d]">
+                    <p className="mt-auto pt-3 text-[9px] text-[#0c0c0d] sm:text-[12px] lg:text-[16px]">
                       Save up to{" "}
                       <span className="font-semibold text-[#5c57ff]">
                         {card.highlight}
@@ -243,13 +243,13 @@ export default function HeroSection({ content }: { content?: HomepageContentBloc
                     </p>
                   </div>
 
-                  <div className="h-full min-h-[115px] overflow-hidden rounded-[12px] bg-transparent">
+                  <div className="h-full min-h-[98px] overflow-hidden rounded-[10px] bg-transparent lg:min-h-[115px] lg:rounded-[12px]">
                     {card.image_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={card.image_url}
                         alt={card.title}
-                        className="h-full w-full object-cover object-center"
+                        className="h-full w-full object-contain object-center"
                       />
                     ) : null}
                   </div>

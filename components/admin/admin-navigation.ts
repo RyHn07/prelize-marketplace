@@ -94,11 +94,6 @@ export const adminNavigation: AdminNavItem[] = [
         description: "Manage active and inactive marketplace vendors.",
       },
       {
-        label: "Vendor Applications",
-        href: "/admin/vendors?view=applications",
-        description: "Review onboarding submissions and approval stages.",
-      },
-      {
         label: "Vendor Products",
         href: "/admin/products?view=vendor-products",
         description: "Inspect vendor-submitted catalog inventory.",

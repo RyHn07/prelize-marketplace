@@ -24,7 +24,6 @@ import {
   UsersIcon,
 } from "./admin-icons";
 import AdminBrandLogo from "./admin-brand-logo";
-import AdminSidebarWidget from "./admin-sidebar-widget";
 import { adminNavigation, isNavPathActive, isNavPathExact } from "./admin-navigation";
 
 const iconMap = {
@@ -195,8 +194,6 @@ export default function AdminSidebar() {
             </div>
           </div>
         </nav>
-
-        {isExpanded || isHovered || isMobileOpen ? <AdminSidebarWidget /> : null}
       </div>
     </aside>
   );

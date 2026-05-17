@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import AdminPageHeader from "@/components/admin/admin-page-header";
+import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { fetchHomepageContentBlocks, saveHomepageContentBlocks } from "@/lib/homepage/actions";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -186,44 +186,73 @@ export default function HomepageContentPage() {
   }
 
   return (
-    <section className="space-y-6">
-      <AdminPageHeader
-        eyebrow="Admin Homepage"
-        title="Homepage Content Blocks"
-        description="These blocks stay reusable across themes. Update the text and structured JSON without changing the active layout."
-        actions={
-          <button type="button" onClick={() => void saveBlocks()} className="rounded-2xl bg-[#615FFF] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90">
-            Save Content
-          </button>
-        }
-      />
+    <section className="w-full space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white">
+        <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800">Homepage Content Blocks</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              These blocks stay reusable across themes. Update the text and structured JSON without changing the active layout.
+            </p>
+          </div>
 
-      {errorMessage ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600">{errorMessage}</div> : null}
-      {successMessage ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-600">{successMessage}</div> : null}
-
-      <div className="space-y-5">
-        {blocks.map((block, index) => (
-          <div key={block.id} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">{block.content_key}</h2>
-                <p className="text-sm text-slate-500">Shared content block {index + 1}</p>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={block.is_active}
-                  onChange={(event) =>
-                    setBlocks((current) =>
-                      current.map((entry) => (entry.id === block.id ? { ...entry, is_active: event.target.checked } : entry)),
-                    )
-                  }
-                />
-                Active
-              </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg bg-[#615FFF]/8 px-3 py-2 text-sm font-medium text-[#615FFF]">
+              {blocks.length} visible
             </div>
+            <button
+              type="button"
+              onClick={() => void saveBlocks()}
+              className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              Save Content
+            </button>
+          </div>
+        </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+        {errorMessage ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600 sm:px-6">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {successMessage ? (
+          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-600 sm:px-6">
+            {successMessage}
+          </div>
+        ) : null}
+
+        {blocks.length === 0 ? (
+          <div className="p-6">
+            <AdminEmptyState
+              title="No content blocks found"
+              description="Homepage content blocks will appear here once they are available."
+            />
+          </div>
+        ) : (
+          <div className="space-y-5 p-5 sm:p-6">
+            {blocks.map((block, index) => (
+              <div key={block.id} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-900">{block.content_key}</h2>
+                    <p className="text-sm text-slate-500">Shared content block {index + 1}</p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={block.is_active}
+                      onChange={(event) =>
+                        setBlocks((current) =>
+                          current.map((entry) => (entry.id === block.id ? { ...entry, is_active: event.target.checked } : entry)),
+                        )
+                      }
+                    />
+                    Active
+                  </label>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
               <input value={block.title ?? ""} onChange={(event) => setBlocks((current) => current.map((entry) => (entry.id === block.id ? { ...entry, title: event.target.value || null } : entry)))} placeholder="Title" className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-[#615FFF]" />
               <input value={block.subtitle ?? ""} onChange={(event) => setBlocks((current) => current.map((entry) => (entry.id === block.id ? { ...entry, subtitle: event.target.value || null } : entry)))} placeholder="Subtitle" className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-[#615FFF]" />
               <input value={block.image_url ?? ""} onChange={(event) => setBlocks((current) => current.map((entry) => (entry.id === block.id ? { ...entry, image_url: event.target.value || null } : entry)))} placeholder="Image URL" className="h-11 rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-[#615FFF]" />
@@ -412,10 +441,12 @@ export default function HomepageContentPage() {
                   </div>
                 </>
               ) : null}
-              <textarea value={block.data_json_text} onChange={(event) => setBlocks((current) => current.map((entry) => (entry.id === block.id ? { ...entry, data_json_text: event.target.value } : entry)))} placeholder="Structured JSON for cards, steps, stats, or testimonials" className="min-h-40 rounded-xl border border-slate-300 px-3 py-3 font-mono text-xs outline-none focus:border-[#615FFF] md:col-span-2" />
-            </div>
+                  <textarea value={block.data_json_text} onChange={(event) => setBlocks((current) => current.map((entry) => (entry.id === block.id ? { ...entry, data_json_text: event.target.value } : entry)))} placeholder="Structured JSON for cards, steps, stats, or testimonials" className="min-h-40 rounded-xl border border-slate-300 px-3 py-3 font-mono text-xs outline-none focus:border-[#615FFF] md:col-span-2" />
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </section>
   );

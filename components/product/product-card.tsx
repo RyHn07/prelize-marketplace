@@ -62,9 +62,7 @@ function Badge({ label }: { label: NonNullable<Product["badge"]> }) {
         : "bg-indigo-50 text-[#615FFF]";
 
   return (
-    <span
-      className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${badgeClasses}`}
-    >
+    <span className={`inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${badgeClasses}`}>
       {label}
     </span>
   );
@@ -79,6 +77,10 @@ function getCardMeta(productId: string) {
     rating: ratings[(seed - 1) % ratings.length],
     delivery: deliveryWindows[(seed - 1) % deliveryWindows.length],
   };
+}
+
+function formatPriceLabel(price: string | number) {
+  return `From ৳${price}`;
 }
 
 export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
@@ -102,13 +104,13 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
   return (
     <Link
       href={`/products/${product.slug}`}
-      className={`group overflow-hidden rounded-lg border border-slate-200 bg-white transition-colors hover:border-slate-300 ${
-        isListView ? "flex items-stretch gap-4 p-4" : "flex h-full flex-col"
+      className={`group overflow-hidden border border-slate-200 bg-white transition-colors hover:border-slate-300 ${
+        isListView ? "flex items-stretch gap-4 rounded-lg p-4" : "flex h-full flex-col rounded-[14px]"
       }`}
     >
       <div
         className={`relative overflow-hidden bg-slate-50 ${
-          isListView ? "h-40 w-40 shrink-0 rounded-lg" : "aspect-square"
+          isListView ? "h-40 w-40 shrink-0 rounded-lg" : "aspect-[0.96/1]"
         }`}
       >
         <Image
@@ -118,7 +120,7 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
           sizes={
             isListView
               ? "(min-width: 1024px) 160px, 160px"
-              : "(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
+              : "(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 50vw"
           }
           className="object-cover"
         />
@@ -137,7 +139,7 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
             const nextIds = toggleWishlistProduct(product.id);
             setIsWishlisted(nextIds.includes(product.id));
           }}
-          className={`absolute left-auto right-2.5 top-2.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-colors ${
+          className={`absolute right-2.5 top-2.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border shadow-sm transition-colors ${
             isWishlisted
               ? "border-rose-200 bg-white text-rose-500 hover:bg-rose-50"
               : "border-white/80 bg-white/95 text-slate-500 hover:text-rose-500"
@@ -149,33 +151,48 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
         </button>
       </div>
 
-      <div className={`flex flex-1 flex-col gap-2.5 ${isListView ? "py-1 pr-1" : "p-3"}`}>
-        <div className="space-y-1.5">
+      <div className={`flex flex-1 flex-col gap-2 ${isListView ? "py-1 pr-1" : "p-2.5 sm:p-3"}`}>
+        <div className="space-y-1">
           {product.vendorName ? (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            <p className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:block">
               Vendor: {product.vendorName}
             </p>
           ) : null}
           <h3
-            className={`text-[13px] font-semibold leading-5 text-slate-900 ${
-              isListView ? "line-clamp-2" : "line-clamp-1 min-h-5"
+            className={`font-semibold text-slate-900 ${
+              isListView
+                ? "line-clamp-2 text-[13px] leading-5"
+                : "line-clamp-2 min-h-[2.8rem] max-h-[2.8rem] overflow-hidden text-[12px] leading-[1.32] sm:line-clamp-1 sm:min-h-5 sm:max-h-5 sm:text-[13px] sm:leading-5"
             }`}
+            style={
+              isListView
+                ? undefined
+                : {
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical",
+                    WebkitLineClamp: 2,
+                  }
+            }
           >
             {product.name}
           </h3>
-          <p className="text-sm font-bold text-[#615FFF]">From ৳{product.priceFrom}</p>
+          <p className="text-[14px] font-bold leading-none text-[#615FFF] sm:text-sm">
+            {formatPriceLabel(product.priceFrom)}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 sm:text-xs">
           <div className="flex items-center gap-1.5">
-            <span className="-mt-0.5 text-[19px] leading-none tracking-tight text-amber-400">★★★★★</span>
-            <span className="font-medium text-slate-600">{meta.rating}</span>
+            <span className="-mt-0.5 text-[10px] leading-none tracking-tight text-amber-400 sm:text-[19px]">
+              ★★★★★
+            </span>
+            <span className="hidden font-medium text-slate-600 sm:inline">{meta.rating}</span>
           </div>
           <span>MOQ: {product.moq}</span>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 text-[8px] text-slate-500 sm:text-[11px]">
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
             <DeliveryIcon />
             <span>CN to BD · {meta.delivery}</span>
           </span>

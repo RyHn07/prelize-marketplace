@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { getAdminAccessState } from "@/lib/admin-access";
@@ -24,14 +24,18 @@ type OrderSummary = {
   payOnDelivery: number | string | null;
 };
 
+type BuyerInfo = Record<string, string | number | boolean | null> | null;
+
 type AdminOrder = {
   id: string;
   order_number: string;
+  user_id?: string | null;
   user_email: string;
   status: OrderStatus;
   created_at: string;
   payment_status?: string | null;
   summary: OrderSummary;
+  buyer?: BuyerInfo;
 };
 
 function formatBDT(amount: number) {
@@ -50,6 +54,22 @@ function formatOrderDate(value: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function readBuyerString(buyer: BuyerInfo, keys: string[]) {
+  if (!buyer) {
+    return null;
+  }
+
+  for (const key of keys) {
+    const value = buyer[key];
+
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return null;
 }
 
 function getStatusColor(status: string) {
@@ -119,7 +139,20 @@ function SearchIcon() {
   );
 }
 
-export default function OrdersContent() {
+function parseCustomerKey(rawKey: string) {
+  if (rawKey.startsWith("user:")) {
+    return { type: "user" as const, value: rawKey.slice(5) };
+  }
+
+  if (rawKey.startsWith("email:")) {
+    return { type: "email" as const, value: rawKey.slice(6) };
+  }
+
+  return null;
+}
+
+export default function AdminCustomerOrdersPage() {
+  const params = useParams<{ customerKey: string }>();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -128,8 +161,8 @@ export default function OrdersContent() {
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [customerLabel, setCustomerLabel] = useState("Customer");
 
   const statusFilter = useMemo<"All Status" | OrderStatus>(() => {
     const currentStatus = searchParams.get("status");
@@ -145,7 +178,7 @@ export default function OrdersContent() {
     let isMounted = true;
     const supabase = getSupabaseClient();
 
-    const loadAdminOrders = async () => {
+    const loadCustomerOrders = async () => {
       const access = await getAdminAccessState(supabase);
 
       if (!isMounted) {
@@ -160,49 +193,60 @@ export default function OrdersContent() {
         return;
       }
 
-      const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
+      const rawCustomerKey =
+        typeof params.customerKey === "string" ? decodeURIComponent(params.customerKey) : "";
+      const parsedKey = parseCustomerKey(rawCustomerKey);
+
+      if (!parsedKey?.value) {
+        setErrorMessage("Invalid customer identifier.");
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      let query = supabase.from("orders").select("*").order("created_at", { ascending: false });
+
+      query =
+        parsedKey.type === "user"
+          ? query.eq("user_id", parsedKey.value)
+          : query.eq("user_email", parsedKey.value);
+
+      const { data, error } = await query;
 
       if (!isMounted) {
         return;
       }
 
       if (error) {
-        setErrorMessage("Admin database policy required to view all orders.");
+        setErrorMessage("Unable to load customer orders right now.");
         setOrders([]);
         setLoading(false);
         return;
       }
 
-      setOrders((data ?? []) as AdminOrder[]);
+      const nextOrders = (data ?? []) as AdminOrder[];
+      setOrders(nextOrders);
+
+      const firstOrder = nextOrders[0];
+      if (firstOrder) {
+        setCustomerLabel(
+          readBuyerString(firstOrder.buyer ?? null, ["fullName", "name"]) ??
+            firstOrder.user_email ??
+            "Customer",
+        );
+      } else if (parsedKey.type === "email") {
+        setCustomerLabel(parsedKey.value);
+      }
+
       setLoading(false);
     };
 
-    void loadAdminOrders();
+    void loadCustomerOrders();
 
     return () => {
       isMounted = false;
     };
-  }, []);
-
-  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
-    const supabase = getSupabaseClient();
-
-    setUpdatingOrderId(orderId);
-    setErrorMessage("");
-
-    const { error } = await supabase.from("orders").update({ status: newStatus } as never).eq("id", orderId);
-
-    if (error) {
-      setErrorMessage("Unable to update order status right now.");
-      setUpdatingOrderId(null);
-      return;
-    }
-
-    setOrders((currentOrders) =>
-      currentOrders.map((order) => (order.id === orderId ? { ...order, status: newStatus } : order)),
-    );
-    setUpdatingOrderId(null);
-  };
+  }, [params.customerKey]);
 
   const filteredOrders = useMemo(() => {
     const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -235,7 +279,7 @@ export default function OrdersContent() {
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
-        Loading orders...
+        Loading customer orders...
       </div>
     );
   }
@@ -243,7 +287,7 @@ export default function OrdersContent() {
   if (!userEmail) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Customer Orders</h1>
         <p className="mt-3 text-sm text-slate-500">Please login as admin</p>
         <Link
           href="/login"
@@ -258,7 +302,7 @@ export default function OrdersContent() {
   if (!hasAdminAccess) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Admin Orders</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Customer Orders</h1>
         <p className="mt-3 text-sm text-slate-500">You do not have admin access</p>
       </div>
     );
@@ -269,9 +313,9 @@ export default function OrdersContent() {
       <div className="rounded-2xl border border-gray-200 bg-white">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h3 className="text-base font-medium text-gray-800">Orders List</h3>
+            <h3 className="text-base font-medium text-gray-800">Customer Orders</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Review marketplace orders, update statuses, and keep payment tracking visible from one workspace.
+              Review every marketplace order placed by {customerLabel} from one workspace.
             </p>
           </div>
 
@@ -279,19 +323,25 @@ export default function OrdersContent() {
             <div className="rounded-lg bg-[#615FFF]/8 px-3 py-2 text-sm font-medium text-[#615FFF]">
               {filteredOrders.length} visible
             </div>
+            <Link
+              href="/admin/customers"
+              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+            >
+              Back to Customers
+            </Link>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full max-w-[380px]">
-            <label htmlFor="admin-order-search" className="sr-only">
+            <label htmlFor="customer-order-search" className="sr-only">
               Search orders
             </label>
             <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
               <SearchIcon />
             </span>
             <input
-              id="admin-order-search"
+              id="customer-order-search"
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -302,11 +352,11 @@ export default function OrdersContent() {
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="w-full sm:w-56">
-              <label htmlFor="admin-status-filter" className="sr-only">
+              <label htmlFor="customer-order-status-filter" className="sr-only">
                 Filter by status
               </label>
               <select
-                id="admin-status-filter"
+                id="customer-order-status-filter"
                 value={statusFilter}
                 onChange={(event) => updateStatusFilter(event.target.value as "All Status" | OrderStatus)}
                 className="h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10"
@@ -343,7 +393,7 @@ export default function OrdersContent() {
           <div className="p-6">
             <AdminEmptyState
               title="No orders found"
-              description="New marketplace orders will appear here once customers place them."
+              description="This customer has not placed any orders yet."
             />
           </div>
         ) : filteredOrders.length === 0 ? (
@@ -391,27 +441,13 @@ export default function OrdersContent() {
                       </td>
                       <td className="px-4 py-5 text-sm text-gray-500">{order.user_email}</td>
                       <td className="px-4 py-5">
-                        <div className="space-y-3">
-                          <StatusBadge status={order.status} />
-                          <select
-                            value={order.status}
-                            onChange={(event) => handleStatusChange(order.id, event.target.value as OrderStatus)}
-                            disabled={updatingOrderId === order.id}
-                            className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10 disabled:cursor-not-allowed disabled:bg-slate-50"
-                          >
-                            {ORDER_STATUSES.map((status) => (
-                              <option key={status} value={status}>
-                                {status}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                        <StatusBadge status={order.status} />
                       </td>
                       <td className="px-4 py-5">
                         <PaymentBadge status={order.payment_status} />
                       </td>
                       <td className="px-4 py-5 text-sm font-semibold text-[#615FFF]">
-                        {formatBDT(order.summary.payNow)}
+                        {formatBDT(order.summary?.payNow ?? 0)}
                       </td>
                       <td className="px-4 py-5 text-sm text-gray-500">{formatOrderDate(order.created_at)}</td>
                       <td className="px-4 py-5 text-right">
