@@ -34,32 +34,31 @@ function MetricIcon({ type }: { type: DashboardMetricItem["icon"] }) {
   if (type === "customers") {
     return (
       <svg className={common} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M16 19a4 4 0 0 0-8 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <circle cx="12" cy="11" r="3" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M19 19a3 3 0 0 0-2.5-2.96M5 19a3 3 0 0 1 2.5-2.96M17.5 8.5A2.5 2.5 0 1 1 15 6M6.5 8.5A2.5 2.5 0 1 0 9 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M16 20v-1.2c0-1.68 0-2.52-.327-3.162a3 3 0 0 0-1.311-1.311C13.72 14 12.88 14 11.2 14H8.8c-1.68 0-2.52 0-3.162.327a3 3 0 0 0-1.311 1.311C4 16.28 4 17.12 4 18.8V20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10 11a3.25 3.25 0 1 0 0-6.5A3.25 3.25 0 0 0 10 11Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M20 20v-1.2c0-1.47-.547-2.812-1.45-3.833M15.5 4.72A3.25 3.25 0 0 1 15.5 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
   if (type === "orders") {
     return (
       <svg className={common} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M8 8h8m-8 4h8m-8 4h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M7 3h10a2 2 0 0 1 2 2v14l-3-2-4 2-4-2-3 2V5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M8.75 10.25V7.75a3.25 3.25 0 1 1 6.5 0v2.5M7.1 20.25h9.8c1.12 0 1.68 0 2.108-.218a2 2 0 0 0 .874-.874c.218-.428.218-.988.218-2.108v-4.8c0-1.12 0-1.68-.218-2.108a2 2 0 0 0-.874-.874c-.428-.218-.988-.218-2.108-.218H7.1c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874c-.218.428-.218.988-.218 2.108v4.8c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.428.218.988.218 2.108.218Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
   if (type === "products") {
     return (
       <svg className={common} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="m8 5 8 4.5M12 12v9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="m7.5 6.25 4.5 2.625 4.5-2.625M12 8.875v8.875M5.55 7.438l5.4 3.15c.397.232.595.347.806.392.187.04.381.04.568 0 .21-.045.409-.16.806-.392l5.4-3.15M6.8 19.75h10.4c1.12 0 1.68 0 2.108-.218a2 2 0 0 0 .874-.874c.218-.428.218-.988.218-2.108V7.45c0-1.12 0-1.68-.218-2.108a2 2 0 0 0-.874-.874c-.428-.218-.988-.218-2.108-.218H6.8c-1.12 0-1.68 0-2.108.218a2 2 0 0 0-.874.874C3.6 5.77 3.6 6.33 3.6 7.45v9.1c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.428.218.988.218 2.108.218Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
   return (
     <svg className={common} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M6 18v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M16 20v-1.2c0-1.68 0-2.52-.327-3.162a3 3 0 0 0-1.311-1.311C13.72 14 12.88 14 11.2 14H8.8c-1.68 0-2.52 0-3.162.327a3 3 0 0 0-1.311 1.311C4 16.28 4 17.12 4 18.8V20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 11a3.25 3.25 0 1 0 0-6.5A3.25 3.25 0 0 0 10 11Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M20 20v-1.2c0-1.47-.547-2.812-1.45-3.833M15.5 4.72A3.25 3.25 0 0 1 15.5 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -91,4 +90,3 @@ export function EcommerceMetrics({ items }: { items: DashboardMetricItem[] }) {
     </div>
   );
 }
-

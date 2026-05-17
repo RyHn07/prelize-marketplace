@@ -344,36 +344,6 @@ export default function AdminSettingsPage() {
         </div>
       ) : null}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Site Title</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {formValues.site_title.trim() || DEFAULT_PLATFORM_SETTINGS.site_title}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Short Title</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {formValues.site_short_title.trim() || "Not configured"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Site URL</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {formValues.site_url.trim() || "Not configured"}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Marketplace Name</p>
-          <p className="mt-2 text-lg font-semibold text-slate-900">
-            {formValues.marketplace_name.trim() || DEFAULT_PLATFORM_SETTINGS.marketplace_name}
-          </p>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 xl:grid-cols-[1.8fr_1fr]">
         <div className="space-y-6">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

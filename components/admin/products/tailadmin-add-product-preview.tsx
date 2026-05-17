@@ -658,8 +658,10 @@ function GalleryLibraryModal({
 
 export default function TailadminAddProductPreview() {
   const [productName, setProductName] = useState("");
+  const [vendorValue, setVendorValue] = useState("");
   const [brandValue, setBrandValue] = useState("");
   const [categoryValue, setCategoryValue] = useState("");
+  const [vendorOptions, setVendorOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [brandOptions, setBrandOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [categoryOptions, setCategoryOptions] = useState<Array<{ value: string; label: string }>>([]);
   const [specifications, setSpecifications] = useState<SpecificationPreviewRow[]>([]);
@@ -706,14 +708,24 @@ export default function TailadminAddProductPreview() {
     const syncFromRealForm = () => {
       const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
       const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
+      const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
       const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
       setProductName(productNameInput?.value ?? "");
-      setBrandValue(vendorSelect?.value ?? "");
+      setVendorValue(vendorSelect?.value ?? "");
+      setBrandValue(brandSelect?.value ?? "");
       setCategoryValue(categorySelect?.value ?? "");
-      setBrandOptions(
+      setVendorOptions(
         vendorSelect
           ? Array.from(vendorSelect.options).map((option) => ({
+              value: option.value,
+              label: option.text,
+            }))
+          : [],
+      );
+      setBrandOptions(
+        brandSelect
+          ? Array.from(brandSelect.options).map((option) => ({
               value: option.value,
               label: option.text,
             }))
@@ -733,18 +745,27 @@ export default function TailadminAddProductPreview() {
 
     const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
     const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
+    const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
     const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
     const handleNameInput = () => syncFromRealForm();
     const handleVendorChange = () => syncFromRealForm();
+    const handleBrandChange = () => syncFromRealForm();
     const handleCategoryChange = () => syncFromRealForm();
 
     productNameInput?.addEventListener("input", handleNameInput);
     vendorSelect?.addEventListener("change", handleVendorChange);
+    brandSelect?.addEventListener("change", handleBrandChange);
     categorySelect?.addEventListener("change", handleCategoryChange);
 
     const vendorObserver =
       vendorSelect
+        ? new MutationObserver(() => {
+            syncFromRealForm();
+          })
+        : null;
+    const brandObserver =
+      brandSelect
         ? new MutationObserver(() => {
             syncFromRealForm();
           })
@@ -758,6 +779,14 @@ export default function TailadminAddProductPreview() {
 
     if (vendorSelect && vendorObserver) {
       vendorObserver.observe(vendorSelect, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["value", "disabled"],
+      });
+    }
+    if (brandSelect && brandObserver) {
+      brandObserver.observe(brandSelect, {
         childList: true,
         subtree: true,
         attributes: true,
@@ -779,8 +808,10 @@ export default function TailadminAddProductPreview() {
       window.clearTimeout(timer);
       productNameInput?.removeEventListener("input", handleNameInput);
       vendorSelect?.removeEventListener("change", handleVendorChange);
+      brandSelect?.removeEventListener("change", handleBrandChange);
       categorySelect?.removeEventListener("change", handleCategoryChange);
       vendorObserver?.disconnect();
+      brandObserver?.disconnect();
       categoryObserver?.disconnect();
     };
   }, []);
@@ -1039,14 +1070,13 @@ export default function TailadminAddProductPreview() {
                   options={brandOptions}
                   onChange={(nextValue) => {
                     setBrandValue(nextValue);
-                    const realSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
+                    const realSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
                     if (realSelect) {
                       realSelect.value = nextValue;
                       realSelect.dispatchEvent(new Event("change", { bubbles: true }));
                     }
                   }}
                 />
-                <p className="mt-2 text-xs leading-5 text-slate-500">Temporary bridge: this TailAdmin brand field is currently synced with the existing vendor assignment field.</p>
               </div>
               <div>
                 <label htmlFor="preview-category" className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -1067,6 +1097,26 @@ export default function TailadminAddProductPreview() {
                   }}
                 />
               </div>
+            </div>
+
+            <div>
+              <label htmlFor="preview-vendor" className="mb-1.5 block text-sm font-medium text-gray-700">
+                Vendor
+              </label>
+              <StyledSelect
+                id="preview-vendor"
+                value={vendorValue}
+                placeholder="Select Vendor"
+                options={vendorOptions}
+                onChange={(nextValue) => {
+                  setVendorValue(nextValue);
+                  const realSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
+                  if (realSelect) {
+                    realSelect.value = nextValue;
+                    realSelect.dispatchEvent(new Event("change", { bubbles: true }));
+                  }
+                }}
+              />
             </div>
 
             <div>
@@ -1307,7 +1357,7 @@ export default function TailadminAddProductPreview() {
         isOpen={openMediaTarget !== null}
         target={openMediaTarget ?? "gallery"}
         currentMainImage={mainImage}
-        vendorId={brandValue}
+        vendorId={vendorValue}
         onClose={() => setOpenMediaTarget(null)}
         onConfirmSelection={(imageUrls) => {
           if (openMediaTarget === "main-image") {

@@ -1,13 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import React, { useState } from "react";
+import React from "react";
 
+import { getSupabaseClient } from "@/lib/supabase-client";
 import { AdminDropdown } from "./admin-dropdown";
 import { AdminDropdownItem } from "./admin-dropdown-item";
+import { useAdminBranding } from "./use-admin-branding";
 
 export default function AdminUserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("admin@example.com");
+  const brand = useAdminBranding();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAdminUser = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data } = await supabase.auth.getUser();
+        const email = data.user?.email?.trim();
+
+        if (isMounted && email) {
+          setAdminEmail(email);
+        }
+      } catch {
+        // Keep a neutral fallback when the session is unavailable.
+      }
+    };
+
+    void loadAdminUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   function toggleDropdown(event: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     event.stopPropagation();
@@ -18,14 +47,16 @@ export default function AdminUserDropdown() {
     setIsOpen(false);
   }
 
+  const adminInitial = brand.siteShortTitle.trim().charAt(0).toUpperCase() || "A";
+
   return (
     <div className="relative">
       <button onClick={toggleDropdown} className="dropdown-toggle flex items-center text-gray-700">
         <span className="mr-3 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-[#615FFF] text-sm font-semibold text-white">
-          PA
+          {adminInitial}
         </span>
 
-        <span className="mr-1 block text-sm font-medium">PRELIZE ADMIN</span>
+        <span className="mr-1 block text-sm font-medium">{brand.adminLabel}</span>
 
         <svg
           className={`stroke-gray-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
@@ -51,8 +82,8 @@ export default function AdminUserDropdown() {
         className="absolute right-0 mt-[17px] flex w-[260px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-xl"
       >
         <div>
-          <span className="block text-sm font-medium text-gray-700">PRELIZE ADMIN</span>
-          <span className="mt-0.5 block text-xs text-gray-500">admin@prelize.example</span>
+          <span className="block text-sm font-medium text-gray-700">{brand.adminLabel}</span>
+          <span className="mt-0.5 block text-xs text-gray-500">{adminEmail}</span>
         </div>
 
         <ul className="flex flex-col gap-1 border-b border-gray-200 pb-3 pt-4">

@@ -50,6 +50,7 @@ export type ProductEditorSavePayload = {
 const REMOVABLE_LEGACY_COLUMNS = new Set([
   "attributes",
   "badge",
+  "brand_id",
   "category_id",
   "cdd_shipping_profile",
   "cnds_profile_id",
@@ -71,6 +72,7 @@ const REMOVABLE_VARIANT_COLUMNS = new Set([
 const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
   "price",
   "moq",
+  "brand_id",
   "image_url",
   "status",
   "product_type",

@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
-import { AdminThemeToggleButton } from "./admin-theme-toggle-button";
+import AdminBrandLogo from "./admin-brand-logo";
 import AdminNotificationDropdown from "./admin-notification-dropdown";
 import AdminUserDropdown from "./admin-user-dropdown";
 import { useSidebar } from "./admin-sidebar-context";
@@ -67,9 +67,7 @@ export default function AdminHeader() {
           </button>
 
           <Link href="/admin" className="lg:hidden">
-            <div className="rounded-lg bg-[#615FFF] px-3 py-2 text-sm font-semibold tracking-wide text-white">
-              PRELIZE ADMIN
-            </div>
+            <AdminBrandLogo />
           </Link>
 
           <button
@@ -119,7 +117,6 @@ export default function AdminHeader() {
           className={`${isApplicationMenuOpen ? "flex" : "hidden"} w-full items-center justify-between gap-4 px-5 py-4 shadow-md lg:flex lg:justify-end lg:px-0 lg:shadow-none`}
         >
           <div className="flex items-center gap-2">
-            <AdminThemeToggleButton />
             <AdminNotificationDropdown />
           </div>
           <AdminUserDropdown />

@@ -6,30 +6,41 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 import { useSidebar } from "./admin-sidebar-context";
 import {
-  BoxCubeIcon,
+  BellIcon,
+  ChartIcon,
   ChevronDownIcon,
-  DollarLineIcon,
-  FolderIcon,
+  CustomerUsersIcon,
+  CreditCardIcon,
   GridIcon,
-  GroupIcon,
   HorizontalDotsIcon,
-  ListIcon,
-  PieChartIcon,
-  PlugInIcon,
+  ImageIcon,
+  LayoutIcon,
+  PackageIcon,
   SidebarIconContainer,
+  SettingsIcon,
+  ShoppingBagIcon,
+  TruckIcon,
+  UserPlusIcon,
+  UsersIcon,
 } from "./admin-icons";
+import AdminBrandLogo from "./admin-brand-logo";
 import AdminSidebarWidget from "./admin-sidebar-widget";
 import { adminNavigation, isNavPathActive, isNavPathExact } from "./admin-navigation";
 
 const iconMap = {
   grid: <GridIcon />,
-  boxCube: <BoxCubeIcon />,
-  dollarLine: <DollarLineIcon />,
-  group: <GroupIcon />,
-  folder: <FolderIcon />,
-  list: <ListIcon />,
-  pieChart: <PieChartIcon />,
-  plugIn: <PlugInIcon />,
+  package: <PackageIcon />,
+  shoppingBag: <ShoppingBagIcon />,
+  users: <UsersIcon />,
+  customerUsers: <CustomerUsersIcon />,
+  userPlus: <UserPlusIcon />,
+  image: <ImageIcon />,
+  bell: <BellIcon />,
+  layout: <LayoutIcon />,
+  truck: <TruckIcon />,
+  creditCard: <CreditCardIcon />,
+  chart: <ChartIcon />,
+  settings: <SettingsIcon />,
 };
 
 export default function AdminSidebar() {
@@ -83,13 +94,9 @@ export default function AdminSidebar() {
       <div className={`flex py-8 ${!isExpanded && !isHovered ? "lg:justify-center" : "justify-start"}`}>
         <Link href="/admin" onClick={closeOnMobile}>
           {isExpanded || isHovered || isMobileOpen ? (
-            <div className="rounded-lg bg-[#615FFF] px-4 py-3">
-              <span className="text-sm font-semibold tracking-wide text-white">PRELIZE ADMIN</span>
-            </div>
+            <AdminBrandLogo />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#615FFF]">
-              <span className="text-sm font-semibold text-white">P</span>
-            </div>
+            <AdminBrandLogo compact />
           )}
         </Link>
       </div>

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
+  ProductBrandOption,
   ProductCategoryOption,
   ProductDbRow,
   ProductPricingSource,
@@ -64,6 +65,7 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
   return {
     ...row,
     vendor_id: typeof row.vendor_id === "string" ? row.vendor_id : null,
+    brand_id: typeof row.brand_id === "string" ? row.brand_id : null,
     slug: typeof row.slug === "string" && row.slug.trim().length > 0 ? row.slug : String(row.id),
     image_url: typeof row.image_url === "string" ? row.image_url : null,
     description: typeof row.description === "string" ? row.description : null,
@@ -886,6 +888,26 @@ export async function getProductCategoryOptions() {
 
   return {
     data: (data ?? []) as ProductCategoryOption[],
+    error: null,
+  };
+}
+
+export async function getProductBrandOptions() {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("brands")
+    .select("id, name, slug, image_url")
+    .order("name", { ascending: true });
+
+  if (error) {
+    return {
+      data: [] as ProductBrandOption[],
+      error,
+    };
+  }
+
+  return {
+    data: (data ?? []) as ProductBrandOption[],
     error: null,
   };
 }

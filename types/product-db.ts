@@ -236,6 +236,7 @@ export type ProductDbRow = {
   id: string;
   vendor_id?: string | null;
   category_id: string | null;
+  brand_id?: string | null;
   name: string;
   slug: string;
   sku?: string | null;
@@ -265,6 +266,7 @@ export type ProductDbRow = {
 export type ProductUpsertPayload = {
   vendor_id: string | null;
   category_id: string | null;
+  brand_id: string | null;
   name: string;
   slug: string;
   sku: string | null;
@@ -397,6 +399,7 @@ export type ProductPricingTierSetFormValue = {
 export type ProductFormValues = {
   vendor_id: string;
   category_id: string;
+  brand_id: string;
   name: string;
   slug: string;
   sku: string;
@@ -433,6 +436,13 @@ export type ProductCategoryOption = {
   name: string;
   slug?: string;
   parent_id?: string | null;
+  image_url?: string | null;
+};
+
+export type ProductBrandOption = {
+  id: string;
+  name: string;
+  slug?: string;
   image_url?: string | null;
 };
 

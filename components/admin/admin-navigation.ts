@@ -10,13 +10,18 @@ export type AdminNavItem = {
   name: string;
   icon:
     | "grid"
-    | "boxCube"
-    | "dollarLine"
-    | "group"
-    | "folder"
-    | "list"
-    | "pieChart"
-    | "plugIn";
+    | "package"
+    | "shoppingBag"
+    | "users"
+    | "customerUsers"
+    | "userPlus"
+    | "image"
+    | "bell"
+    | "layout"
+    | "truck"
+    | "creditCard"
+    | "chart"
+    | "settings";
   path?: string;
   subItems?: AdminNavChild[];
 };
@@ -29,7 +34,7 @@ export const adminNavigation: AdminNavItem[] = [
   },
   {
     name: "Products",
-    icon: "boxCube",
+    icon: "package",
     subItems: [
       {
         label: "All Products",
@@ -46,11 +51,16 @@ export const adminNavigation: AdminNavItem[] = [
         href: "/admin/categories",
         description: "Organize collections and product taxonomy.",
       },
+      {
+        label: "Brands",
+        href: "/admin/brands",
+        description: "Manage reusable product brands and brand assets.",
+      },
     ],
   },
   {
     name: "Orders",
-    icon: "dollarLine",
+    icon: "shoppingBag",
     subItems: [
       {
         label: "All Orders",
@@ -76,7 +86,7 @@ export const adminNavigation: AdminNavItem[] = [
   },
   {
     name: "Vendors",
-    icon: "group",
+    icon: "userPlus",
     subItems: [
       {
         label: "All Vendors",
@@ -98,16 +108,21 @@ export const adminNavigation: AdminNavItem[] = [
   {
     name: "Customers",
     path: "/admin/customers",
-    icon: "group",
+    icon: "customerUsers",
   },
   {
     name: "Media Library",
     path: "/admin/media",
-    icon: "folder",
+    icon: "image",
+  },
+  {
+    name: "Notifications",
+    path: "/admin/notifications",
+    icon: "bell",
   },
   {
     name: "Homepage",
-    icon: "grid",
+    icon: "layout",
     subItems: [
       {
         label: "Theme Engine",
@@ -133,7 +148,7 @@ export const adminNavigation: AdminNavItem[] = [
   },
   {
     name: "Shipping",
-    icon: "list",
+    icon: "truck",
     subItems: [
       {
         label: "China Domestic Delivery",
@@ -155,17 +170,17 @@ export const adminNavigation: AdminNavItem[] = [
   {
     name: "Payments",
     path: "/admin/orders?view=payments",
-    icon: "dollarLine",
+    icon: "creditCard",
   },
   {
     name: "Reports / Analytics",
     path: "/admin?view=reports",
-    icon: "pieChart",
+    icon: "chart",
   },
   {
     name: "Settings",
     path: "/admin/settings",
-    icon: "plugIn",
+    icon: "settings",
   },
 ];
 

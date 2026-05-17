@@ -15,10 +15,15 @@ import {
 } from "@/lib/products/actions";
 import { getCndsShippingProfilesForVendor } from "@/lib/cnds/queries";
 import { listProductMedia, uploadProductMedia } from "@/lib/media/storage";
-import { getProductCategoryOptions, getProductVendorOptions } from "@/lib/products/queries";
+import {
+  getProductBrandOptions,
+  getProductCategoryOptions,
+  getProductVendorOptions,
+} from "@/lib/products/queries";
 import type {
   CndsShippingProfileOption,
   ProductAttribute,
+  ProductBrandOption,
   ProductAttributeFormValue,
   ProductCategoryOption,
   ProductEditorRecord,
@@ -305,6 +310,7 @@ function getInitialValues(
   return {
     vendor_id: defaultVendorId,
     category_id: product?.category_id ?? "",
+    brand_id: product?.brand_id ?? "",
     name: product?.name ?? "",
     slug: product?.slug ?? "",
     sku: product?.sku ?? "",
@@ -383,6 +389,10 @@ function normalizeCategoryId(value: string) {
   return normalizeOptionalUuid(value);
 }
 
+function normalizeBrandId(value: string) {
+  return normalizeOptionalUuid(value);
+}
+
 function normalizeVendorId(value: string) {
   return normalizeOptionalUuid(value);
 }
@@ -423,6 +433,7 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
   return {
     vendor_id: normalizeVendorId(values.vendor_id),
     category_id: normalizeCategoryId(values.category_id),
+    brand_id: normalizeBrandId(values.brand_id),
     name: trimmedName,
     slug: fallbackSlug,
     sku: normalizeOptionalText(values.sku),
@@ -970,9 +981,11 @@ function ProductForm({
   const [values, setValues] = useState<ProductFormValues>(() =>
     getInitialValues(record, allowedVendorIds, canAssignPlatformProducts, forcedVendorId),
   );
+  const [brands, setBrands] = useState<ProductBrandOption[]>([]);
   const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
   const [cndsProfiles, setCndsProfiles] = useState<CndsShippingProfileOption[]>([]);
   const [vendors, setVendors] = useState<ProductVendorOption[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(true);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [cndsProfilesLoading, setCndsProfilesLoading] = useState(true);
   const [vendorsLoading, setVendorsLoading] = useState(true);
@@ -983,7 +996,8 @@ function ProductForm({
     let isMounted = true;
 
     const loadEditorOptions = async () => {
-      const [categoryResult, vendorResult] = await Promise.all([
+      const [brandResult, categoryResult, vendorResult] = await Promise.all([
+        getProductBrandOptions(),
         getProductCategoryOptions(),
         getProductVendorOptions(),
       ]);
@@ -998,8 +1012,10 @@ function ProductForm({
           ? activeVendors.filter((vendor) => allowedVendorIds.includes(vendor.id))
           : activeVendors;
 
+      setBrands(brandResult.data);
       setCategories(categoryResult.data);
       setVendors(scopedVendors);
+      setBrandsLoading(false);
       setCategoriesLoading(false);
       setVendorsLoading(false);
     };
@@ -2578,6 +2594,25 @@ function ProductForm({
                 />
 
                 <div>
+                  <label htmlFor="product-brand" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Brand
+                  </label>
+                  <select
+                    id="product-brand"
+                    value={values.brand_id}
+                    onChange={(event) => updateField("brand_id", event.target.value)}
+                    className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                  >
+                    <option value="">{brandsLoading ? "Loading brands..." : "Non Brand"}</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
                   <label htmlFor="product-category" className="mb-1.5 block text-sm font-medium text-slate-700">
                     Select Category
                   </label>
@@ -2711,6 +2746,12 @@ function ProductForm({
                   <span>Category</span>
                   <span className="font-semibold text-slate-900">
                     {categories.find((category) => category.id === values.category_id)?.name ?? "Not selected"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>Brand</span>
+                  <span className="font-semibold text-slate-900">
+                    {brands.find((brand) => brand.id === values.brand_id)?.name ?? "Non Brand"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
