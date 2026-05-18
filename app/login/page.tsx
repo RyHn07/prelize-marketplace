@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
+import AuthPageHeaderFallback from "@/components/auth/auth-page-header-fallback";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function LoginPage() {
@@ -14,6 +15,31 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkExistingSession() {
+      try {
+        const supabase = getSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (isMounted && session?.user) {
+          router.replace("/");
+        }
+      } catch {
+        // Keep the login form usable even if session lookup fails.
+      }
+    }
+
+    void checkExistingSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,7 +71,9 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen bg-white">
-      <Header />
+      <Suspense fallback={<AuthPageHeaderFallback />}>
+        <Header />
+      </Suspense>
 
       <section className="mx-auto flex max-w-7xl justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">

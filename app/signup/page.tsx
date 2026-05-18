@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import Link from "next/link";
 
 import Header from "@/components/Header";
+import AuthPageHeaderFallback from "@/components/auth/auth-page-header-fallback";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function SignupPage() {
@@ -51,7 +52,9 @@ export default function SignupPage() {
 
   return (
     <main className="min-h-screen bg-white">
-      <Header />
+      <Suspense fallback={<AuthPageHeaderFallback />}>
+        <Header />
+      </Suspense>
 
       <section className="mx-auto flex max-w-7xl justify-center px-4 py-12 sm:px-6 lg:px-8">
         <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
