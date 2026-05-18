@@ -57,10 +57,6 @@ const defaultSections: HomepageThemeSectionInput[] = [
   { section_key: "featured_categories", section_type: "featured_categories", component_name: "featured-categories", sort_order: 1, is_enabled: true, layout_settings: {} },
   { section_key: "promo_banners", section_type: "promo_banners", component_name: "promo-banners", sort_order: 2, is_enabled: true, layout_settings: {} },
   { section_key: "product_showcase", section_type: "product_showcase", component_name: "product-showcase", sort_order: 3, is_enabled: true, layout_settings: {} },
-  { section_key: "why_choose_prelize", section_type: "why_choose_prelize", component_name: "why-choose", sort_order: 4, is_enabled: true, layout_settings: {} },
-  { section_key: "how_it_works", section_type: "how_it_works", component_name: "how-it-works", sort_order: 5, is_enabled: true, layout_settings: {} },
-  { section_key: "lead_capture", section_type: "lead_capture", component_name: "lead-capture", sort_order: 6, is_enabled: true, layout_settings: {} },
-  { section_key: "testimonials", section_type: "testimonials", component_name: "testimonials", sort_order: 7, is_enabled: true, layout_settings: {} },
 ];
 
 const defaultHeroSlides: HeroSlideEditor[] = [
@@ -131,6 +127,8 @@ function normalizeInput(record?: HomepageThemeEditorRecord | null): HomepageThem
     };
   }
 
+  const allowedSectionKeys = new Set(defaultSections.map((section) => section.section_key));
+
   return {
     name: record.theme.name,
     slug: record.theme.slug,
@@ -139,15 +137,17 @@ function normalizeInput(record?: HomepageThemeEditorRecord | null): HomepageThem
     status: record.theme.status,
     is_active: record.theme.is_active,
     settings_json: record.theme.settings_json,
-    sections: record.sections.map((section) => ({
-      id: section.id,
-      section_key: section.section_key,
-      section_type: section.section_type,
-      component_name: section.component_name,
-      sort_order: section.sort_order,
-      is_enabled: section.is_enabled,
-      layout_settings: section.layout_settings,
-    })),
+    sections: record.sections
+      .filter((section) => allowedSectionKeys.has(section.section_key))
+      .map((section) => ({
+        id: section.id,
+        section_key: section.section_key,
+        section_type: section.section_type,
+        component_name: section.component_name,
+        sort_order: section.sort_order,
+        is_enabled: section.is_enabled,
+        layout_settings: section.layout_settings,
+      })),
   };
 }
 

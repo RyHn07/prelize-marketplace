@@ -218,7 +218,7 @@ function calculateCndsCost(
   return cndsProfile.pricing_type === "unit" ? quantity * matchedTier.price : matchedTier.price;
 }
 
-function StarRating() {
+function StarRating({ activeCount = 5 }: { activeCount?: number }) {
   return (
     <div className="flex items-center gap-1 text-amber-400">
       {Array.from({ length: 5 }).map((_, index) => (
@@ -226,7 +226,7 @@ function StarRating() {
           key={index}
           aria-hidden="true"
           viewBox="0 0 20 20"
-          className="h-4 w-4 fill-current"
+          className={`h-4 w-4 ${index < activeCount ? "fill-current" : "fill-slate-200"}`}
         >
           <path d="M10 1.8 12.5 7l5.7.8-4.1 4 1 5.6L10 14.7l-5.1 2.7 1-5.6-4.1-4 5.7-.8L10 1.8Z" />
         </svg>
@@ -288,6 +288,38 @@ function LinkIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+function CheckCircleIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-12 w-12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    >
+      <circle cx="12" cy="12" r="8" />
+      <path d="m8.5 12 2.3 2.3L15.7 9.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M6 6 18 18" strokeLinecap="round" />
+      <path d="M18 6 6 18" strokeLinecap="round" />
     </svg>
   );
 }
@@ -354,8 +386,16 @@ export default function ProductDetailsPurchasePanel({
 }) {
   const router = useRouter();
   const reviewCount = product.reviews?.length ?? 0;
+  const averageRating =
+    reviewCount > 0
+      ? (product.reviews ?? []).reduce((sum, review) => sum + (typeof review.rating === "number" ? review.rating : 0), 0) / reviewCount
+      : 0;
+  const roundedAverageRating = Math.max(0, Math.min(5, Math.round(averageRating)));
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [showCartPopup, setShowCartPopup] = useState(false);
+  const [lastAddedOptionCount, setLastAddedOptionCount] = useState(0);
+  const [cartErrorMessage, setCartErrorMessage] = useState("");
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState<string>(
     internationalShippingMethods[0]?.id ?? "",
@@ -531,16 +571,22 @@ export default function ProductDetailsPurchasePanel({
       ...current,
       [optionId]: Math.min(trackedStock ?? MAX_QUANTITY, MAX_QUANTITY, Math.max(0, nextQuantity)),
     }));
+    setCartErrorMessage("");
   };
 
-  const handleAddToCart = () => {
-    const selectedOptions = productOptions.filter((option) => (quantities[option.id] ?? 0) > 0);
+  const getSelectedOptions = () => {
+    return productOptions.filter((option) => (quantities[option.id] ?? 0) > 0);
+  };
+
+  const addSelectedOptionsToCart = () => {
+    const selectedOptions = getSelectedOptions();
 
     if (selectedOptions.length === 0) {
-      window.alert("Please select quantity");
-      return;
+      setCartErrorMessage("Please select quantity first.");
+      return 0;
     }
 
+    setCartErrorMessage("");
     selectedOptions.forEach((option) => {
       addToQuote({
         productId: product.id,
@@ -556,8 +602,39 @@ export default function ProductDetailsPurchasePanel({
       });
     });
 
+    setLastAddedOptionCount(selectedOptions.length);
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
+    return selectedOptions.length;
+  };
+
+  const handleAddToCart = () => {
+    const addedOptionCount = addSelectedOptionsToCart();
+
+    if (addedOptionCount === 0) {
+      return;
+    }
+
+    setShowCartPopup(true);
+  };
+
+  const handleBuyNow = () => {
+    const addedOptionCount = addSelectedOptionsToCart();
+
+    if (addedOptionCount === 0) {
+      return;
+    }
+
+    setShowCartPopup(false);
     router.push("/cart");
+  };
+
+  const handleGoToCart = () => {
+    setShowCartPopup(false);
+    router.push("/cart");
+  };
+
+  const handleContinueShopping = () => {
+    setShowCartPopup(false);
   };
 
   return (
@@ -569,8 +646,10 @@ export default function ProductDetailsPurchasePanel({
             <p className="text-sm font-medium text-slate-500">Vendor: {product.vendorName}</p>
           ) : null}
           <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-            <StarRating />
-            <span className="text-[#615FFF]">({reviewCount} Reviews)</span>
+            <StarRating activeCount={reviewCount > 0 ? roundedAverageRating : 0} />
+            <span className="text-[#615FFF]">
+              {reviewCount > 0 ? `${averageRating.toFixed(1)} · ${reviewCount} Reviews` : "0 Reviews"}
+            </span>
             <span className="text-slate-300">|</span>
             <span>Sold: 26</span>
           </div>
@@ -795,16 +874,67 @@ export default function ProductDetailsPurchasePanel({
           </button>
           <button
             type="button"
+            onClick={handleBuyNow}
             className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
           >
             Buy Now
           </button>
         </div>
 
+        {cartErrorMessage ? (
+          <p className="text-sm font-medium text-rose-500">{cartErrorMessage}</p>
+        ) : null}
+
         <p className="text-sm leading-6 text-slate-500">
           Bangladesh shipping cost is estimated and confirmed after order review.
         </p>
       </div>
+
+      {showCartPopup ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
+          <div className="relative w-full max-w-[760px] rounded-[16px] bg-white px-6 py-8 shadow-[0_30px_90px_rgba(15,23,42,0.24)] sm:px-10 sm:py-10">
+            <button
+              type="button"
+              onClick={handleContinueShopping}
+              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close popup"
+            >
+              <CloseIcon />
+            </button>
+
+            <div className="flex flex-col items-center text-center">
+              <div className="text-[#22C55E]">
+                <CheckCircleIcon />
+              </div>
+              <p className="mt-5 text-lg font-medium text-slate-900">
+                {lastAddedOptionCount > 1
+                  ? `${lastAddedOptionCount} selected variants have been added to your cart!`
+                  : "Your selected item has been added to your cart!"}
+              </p>
+              <p className="mt-3 text-base text-slate-600">
+                {lastAddedOptionCount} item{lastAddedOptionCount > 1 ? "s" : ""} in the cart
+              </p>
+
+              <div className="mt-8 flex w-full max-w-[520px] flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={handleContinueShopping}
+                  className="inline-flex flex-1 items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                >
+                  Continue Shopping
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGoToCart}
+                  className="inline-flex flex-1 items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                >
+                  View Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

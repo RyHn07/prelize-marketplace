@@ -17,6 +17,7 @@ import {
   getResolvedProductPricingMapByProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { listProductReviews, mapReviewRowToStorefrontReview } from "@/lib/reviews";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type { ProductSpecification } from "@/types/product";
@@ -60,12 +61,13 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }] = await Promise.all([
+  const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }, { data: productReviews }] = await Promise.all([
     getProductImagesByProductId(productRow.id),
     getProductSpecsByProductId(productRow.id),
     getResolvedProductPricingMapByProducts([productRow], supabase),
     getActiveCndsShippingProfileById(productRow.cnds_profile_id),
     getActiveInternationalShippingMethodsForServer(),
+    listProductReviews(productRow.id, supabase),
   ]);
   const productPricingConfig = resolvedPricingMap.get(productRow.id) ?? {
     source: null,
@@ -97,6 +99,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
     image: gallery[0] ?? baseProduct.image,
     gallery: gallery.length > 0 ? gallery : [baseProduct.image],
     specifications,
+    reviews: productReviews.map(mapReviewRowToStorefrontReview),
   };
   const category = getCategoryById(productRow.category_id, categoryOptions);
   const relatedProductRows = publicProducts

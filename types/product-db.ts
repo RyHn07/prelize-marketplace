@@ -124,6 +124,43 @@ export type ProductReview = {
   [key: string]: JsonValue | undefined;
 };
 
+export type ProductReviewRow = {
+  id: string;
+  product_id: string;
+  vendor_id: string | null;
+  order_id: string;
+  order_item_id: string | null;
+  user_id: string;
+  user_email: string | null;
+  rating: number;
+  title: string | null;
+  comment: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReviewEligibilityItem = {
+  order_id: string;
+  order_item_id: string;
+  product_id: string;
+  product_name: string;
+  product_image: string | null;
+  vendor_id: string | null;
+  quantity: number;
+  variant_name: string | null;
+  variant_value: string | null;
+  can_review: boolean;
+  review: ProductReviewRow | null;
+};
+
+export type VendorReviewNotificationStateRow = {
+  user_id: string;
+  vendor_id: string;
+  last_read_at: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ProductPricingTierRow = {
   id: string;
   product_id: string;

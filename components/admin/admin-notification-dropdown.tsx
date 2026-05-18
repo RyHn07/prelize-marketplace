@@ -51,6 +51,8 @@ function getCategoryLabel(category: AdminNotificationItem["category"]) {
       return "Order";
     case "products":
       return "Product";
+    case "reviews":
+      return "Review";
     case "vendors":
       return "Vendor";
     case "brands":
@@ -77,6 +79,11 @@ function getCategoryTone(category: AdminNotificationItem["category"]) {
       return {
         badge: "bg-sky-100 text-sky-700",
         icon: "bg-sky-500",
+      };
+    case "reviews":
+      return {
+        badge: "bg-rose-100 text-rose-700",
+        icon: "bg-rose-500",
       };
     case "vendors":
       return {

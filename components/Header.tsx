@@ -6,6 +6,9 @@ import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 import HeaderQuoteButton from "@/components/quote/header-quote-button";
 import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
 import HeaderMobileSearchRow from "@/components/header-mobile-search-row";
+import { HeaderCategoriesDesktop } from "@/components/header-categories-dropdown";
+import HeaderServicesDropdown from "@/components/header-services-dropdown";
+import { getProductCategoryOptions } from "@/lib/products/queries";
 
 const topBarLinks = [
   { href: "https://facebook.com", label: "Facebook" },
@@ -218,13 +221,41 @@ function WhatsAppIcon() {
   );
 }
 
+function createSlugFallback(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
 export default async function Header() {
-  const settings = await getResolvedPlatformSettings();
+  const [settings, categoryResult] = await Promise.all([
+    getResolvedPlatformSettings(),
+    getProductCategoryOptions(),
+  ]);
   const logoUrl = settings.logo_url.trim();
   const siteShortTitle =
     settings.site_short_title.trim() ||
     settings.marketplace_name.trim() ||
     DEFAULT_PLATFORM_SETTINGS.site_short_title;
+  const categoryOptions = categoryResult.data;
+  const topLevelCategories = categoryOptions
+    .filter((category) => !category.parent_id)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug ?? createSlugFallback(category.name),
+      children: categoryOptions
+        .filter((child) => child.parent_id === category.id)
+        .map((child) => ({
+          id: child.id,
+          name: child.name,
+          slug: child.slug ?? createSlugFallback(child.name),
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
 
   return (
     <header className="border-b border-slate-200/80 bg-white">
@@ -323,28 +354,26 @@ export default async function Header() {
               categoriesIcon={<GridIcon />}
               dropdownIcon={<span className="hidden lg:inline-flex"><ChevronDownIcon /></span>}
               searchIcon={<SearchIcon className="h-5 w-5 text-white" />}
+              categories={topLevelCategories}
             />
 
-            <button
-              type="button"
-              className="hidden h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 lg:inline-flex"
-            >
-              <GridIcon />
-              <span>Categories</span>
-              <ChevronDownIcon />
-            </button>
+            <HeaderCategoriesDesktop
+              categories={topLevelCategories}
+              triggerIcon={<GridIcon />}
+              triggerChevron={<ChevronDownIcon />}
+            />
 
             <form className="hidden flex-1 lg:block" role="search" action="/products" method="GET">
               <label htmlFor="header-search" className="sr-only">
                 Search products
               </label>
-              <div className="flex h-[3.2rem] items-center rounded-full border border-slate-200/90 bg-white pl-5 pr-2 shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition-all focus-within:border-[#615FFF]/50 focus-within:ring-4 focus-within:ring-[#615FFF]/10">
+              <div className="flex h-11 items-center rounded-full border border-slate-200/90 bg-white pl-5 pr-[2px] shadow-[0_8px_24px_rgba(15,23,42,0.06)] transition-all focus-within:border-[#615FFF]/50 focus-within:ring-4 focus-within:ring-[#615FFF]/10">
                 <input
                   id="header-search"
                   name="search"
                   type="search"
                   placeholder="Search for products"
-                  className="w-full border-0 bg-transparent py-3 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  className="w-full border-0 bg-transparent py-2.5 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
                 <button
                   type="submit"
@@ -357,13 +386,7 @@ export default async function Header() {
             </form>
 
             <div className="hidden flex-wrap items-center gap-3.5 lg:flex lg:flex-none lg:justify-end">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 px-2 text-sm font-semibold text-[#615FFF] transition-colors hover:text-[#5552e6] lg:ml-1"
-              >
-                <span>Services</span>
-                <ChevronDownIcon />
-              </button>
+              <HeaderServicesDropdown triggerChevron={<ChevronDownIcon />} />
 
               <HeaderWishlistButton />
 

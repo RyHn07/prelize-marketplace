@@ -5,6 +5,7 @@ export type AdminNotificationItem = {
   category:
     | "orders"
     | "products"
+    | "reviews"
     | "vendors"
     | "brands"
     | "categories"
@@ -44,6 +45,16 @@ function normalizeTimestamp(value: string | null | undefined) {
 
 function sortNotificationsByDate(left: NotificationSourceRow, right: NotificationSourceRow) {
   return new Date(right.occurredAt ?? 0).getTime() - new Date(left.occurredAt ?? 0).getTime();
+}
+
+function isMissingRelationError(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("relation") ||
+    normalizedMessage.includes("does not exist") ||
+    normalizedMessage.includes("could not find")
+  );
 }
 
 function mapRowsToNotifications(rows: NotificationSourceRow[], lastReadAt: string) {
@@ -140,6 +151,54 @@ async function getProductNotifications(supabase: SupabaseClient) {
       body: `${row.name?.trim() || "Untitled product"} is now ${row.status?.trim() || "draft"} in the catalog.`,
       href: `/admin/products/${row.id}/edit`,
       occurredAt: wasUpdated ? row.updated_at : row.created_at,
+    } satisfies NotificationSourceRow;
+  });
+}
+
+async function getReviewNotifications(supabase: SupabaseClient) {
+  const [reviewsResult, productsResult, vendorsResult] = await Promise.all([
+    supabase
+      .from("product_reviews")
+      .select("id, product_id, vendor_id, rating, comment, created_at")
+      .order("created_at", { ascending: false })
+      .limit(8),
+    supabase.from("products").select("id, name"),
+    supabase.from("vendors").select("id, name"),
+  ]);
+
+  const productsById = new Map(
+    ((productsResult.data ?? []) as Array<{ id: string; name: string | null }>).map((product) => [product.id, product]),
+  );
+  const vendorsById = new Map(
+    ((vendorsResult.data ?? []) as Array<{ id: string; name: string | null }>).map((vendor) => [vendor.id, vendor]),
+  );
+
+  if (reviewsResult.error && isMissingRelationError(reviewsResult.error.message)) {
+    return [] as NotificationSourceRow[];
+  }
+
+  return ((reviewsResult.data ?? []) as Array<{
+    id: string;
+    product_id: string;
+    vendor_id: string | null;
+    rating: number | null;
+    comment: string | null;
+    created_at: string | null;
+  }>).map((row) => {
+    const product = productsById.get(row.product_id);
+    const vendor = row.vendor_id ? vendorsById.get(row.vendor_id) ?? null : null;
+    const previewComment =
+      typeof row.comment === "string" && row.comment.trim().length > 0
+        ? row.comment.trim().slice(0, 72)
+        : "A customer left feedback.";
+
+    return {
+      id: `review:${row.id}`,
+      category: "reviews" as const,
+      title: "New product review",
+      body: `${product?.name?.trim() || "A product"} received ${row.rating ?? 5}/5 feedback${vendor?.name ? ` for ${vendor.name}` : ""}: ${previewComment}`,
+      href: "/admin/reviews",
+      occurredAt: row.created_at,
     } satisfies NotificationSourceRow;
   });
 }
@@ -315,7 +374,8 @@ export async function listAdminNotifications(supabase: SupabaseClient, userId: s
   const stateResult = await getAdminNotificationState(supabase, userId);
   const lastReadAt = stateResult.data.last_read_at;
 
-  const [orders, products, vendors, brands, categories, homepage, settings] = await Promise.all([
+  const [reviews, orders, products, vendors, brands, categories, homepage, settings] = await Promise.all([
+    getReviewNotifications(supabase),
     getOrderNotifications(supabase),
     getProductNotifications(supabase),
     getVendorNotifications(supabase),
@@ -326,7 +386,7 @@ export async function listAdminNotifications(supabase: SupabaseClient, userId: s
   ]);
 
   const notifications = mapRowsToNotifications(
-    [...orders, ...products, ...vendors, ...brands, ...categories, ...homepage, ...settings].slice(0, 80),
+    [...reviews, ...orders, ...products, ...vendors, ...brands, ...categories, ...homepage, ...settings].slice(0, 80),
     lastReadAt,
   ).slice(0, 24);
 

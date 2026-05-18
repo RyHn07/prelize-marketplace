@@ -13,6 +13,7 @@ type VendorLayoutProps = {
 const NAV_ITEMS = [
   { href: "/vendor", label: "Dashboard" },
   { href: "/vendor/orders", label: "Orders" },
+  { href: "/vendor/reviews", label: "Reviews" },
   { href: "/vendor/products", label: "Products" },
   { href: "/vendor/pricing-tiers", label: "Pricing Tiers" },
   { href: "/vendor/media", label: "Media" },

@@ -56,6 +56,11 @@ export const adminNavigation: AdminNavItem[] = [
         href: "/admin/brands",
         description: "Manage reusable product brands and brand assets.",
       },
+      {
+        label: "Product Reviews",
+        href: "/admin/reviews",
+        description: "Moderate customer product feedback across the marketplace.",
+      },
     ],
   },
   {

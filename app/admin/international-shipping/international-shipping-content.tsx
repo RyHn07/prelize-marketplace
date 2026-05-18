@@ -80,6 +80,24 @@ function formatDeliveryWindow(method: InternationalShippingMethodRow) {
   return "Not set";
 }
 
+function formatCreatedAt(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Unknown";
+  }
+
+  return parsedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 function mapMethodToForm(method: InternationalShippingMethodRow): MethodFormValue {
   return {
     name: method.name,
@@ -90,15 +108,16 @@ function mapMethodToForm(method: InternationalShippingMethodRow): MethodFormValu
     minimum_weight_kg: method.minimum_weight_kg.toString(),
     sort_order: method.sort_order.toString(),
     is_active: method.is_active,
-    tiers: method.tiers.length > 0
-      ? method.tiers.map((tier, index) => ({
-          id: tier.id || `tier-${index}`,
-          min_weight_kg: tier.min_weight_kg.toString(),
-          max_weight_kg: tier.max_weight_kg?.toString() ?? "",
-          price_per_kg: tier.price_per_kg.toString(),
-          sort_order: tier.sort_order.toString(),
-        }))
-      : [createEmptyTier()],
+    tiers:
+      method.tiers.length > 0
+        ? method.tiers.map((tier, index) => ({
+            id: tier.id || `tier-${index}`,
+            min_weight_kg: tier.min_weight_kg.toString(),
+            max_weight_kg: tier.max_weight_kg?.toString() ?? "",
+            price_per_kg: tier.price_per_kg.toString(),
+            sort_order: tier.sort_order.toString(),
+          }))
+        : [createEmptyTier()],
   };
 }
 
@@ -121,15 +140,30 @@ function buildPayload(formValues: MethodFormValue) {
   };
 }
 
+function SearchIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export default function InternationalShippingContent() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [methods, setMethods] = useState<InternationalShippingMethodRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [formValues, setFormValues] = useState<MethodFormValue>(createEmptyMethodForm());
   const [isSaving, setIsSaving] = useState(false);
 
@@ -162,9 +196,7 @@ export default function InternationalShippingContent() {
         setMethods(result.methods);
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(
-            error instanceof Error ? error.message : "Unable to load international shipping methods.",
-          );
+          setErrorMessage(error instanceof Error ? error.message : "Unable to load international shipping methods.");
         }
       } finally {
         if (isMounted) {
@@ -184,6 +216,14 @@ export default function InternationalShippingContent() {
     const query = searchQuery.trim().toLowerCase();
 
     return methods.filter((method) => {
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" ? method.is_active : !method.is_active);
+
+      if (!matchesStatus) {
+        return false;
+      }
+
       if (!query) {
         return true;
       }
@@ -194,27 +234,43 @@ export default function InternationalShippingContent() {
         (method.description ?? "").toLowerCase().includes(query)
       );
     });
-  }, [methods, searchQuery]);
+  }, [methods, searchQuery, statusFilter]);
 
-  const activeCount = useMemo(() => methods.filter((method) => method.is_active).length, [methods]);
+  const selectedMethod = useMemo(
+    () => methods.find((method) => method.id === editingMethodId) ?? null,
+    [editingMethodId, methods],
+  );
+
+  const accentBorder = "focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10";
+
+  const refreshMethods = async () => {
+    const result = await fetchAdminInternationalShippingMethods();
+    setMethods(result.methods);
+  };
 
   const resetForm = () => {
     setEditingMethodId(null);
     setFormValues(createEmptyMethodForm());
   };
 
-  const upsertMethod = (method: InternationalShippingMethodRow) => {
-    setMethods((current) => {
-      const existingIndex = current.findIndex((entry) => entry.id === method.id);
+  const closeEditor = () => {
+    setIsEditorOpen(false);
+    resetForm();
+  };
 
-      if (existingIndex === -1) {
-        return [...current, method].sort((left, right) => left.sort_order - right.sort_order);
-      }
+  const startCreateMode = () => {
+    resetForm();
+    setErrorMessage("");
+    setSuccessMessage("");
+    setIsEditorOpen(true);
+  };
 
-      const nextMethods = [...current];
-      nextMethods[existingIndex] = method;
-      return nextMethods.sort((left, right) => left.sort_order - right.sort_order);
-    });
+  const handleEdit = (method: InternationalShippingMethodRow) => {
+    setEditingMethodId(method.id);
+    setFormValues(mapMethodToForm(method));
+    setSuccessMessage("");
+    setErrorMessage("");
+    setIsEditorOpen(true);
   };
 
   const handleInputChange = (field: keyof Omit<MethodFormValue, "tiers" | "is_active">, value: string) => {
@@ -253,28 +309,24 @@ export default function InternationalShippingContent() {
     }));
   };
 
-  const handleEdit = (method: InternationalShippingMethodRow) => {
-    setEditingMethodId(method.id);
-    setFormValues(mapMethodToForm(method));
-    setSuccessMessage("");
-    setErrorMessage("");
-  };
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async () => {
     setIsSaving(true);
     setErrorMessage("");
     setSuccessMessage("");
 
     try {
       const payload = buildPayload(formValues);
-      const method = editingMethodId
-        ? await updateAdminInternationalShippingMethodRequest(editingMethodId, payload)
-        : await createAdminInternationalShippingMethodRequest(payload);
 
-      upsertMethod(method);
-      resetForm();
-      setSuccessMessage(editingMethodId ? "Shipping method updated." : "Shipping method created.");
+      if (editingMethodId) {
+        await updateAdminInternationalShippingMethodRequest(editingMethodId, payload);
+        setSuccessMessage("Shipping method updated.");
+      } else {
+        await createAdminInternationalShippingMethodRequest(payload);
+        setSuccessMessage("Shipping method created.");
+      }
+
+      await refreshMethods();
+      closeEditor();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save the shipping method.");
     } finally {
@@ -287,13 +339,13 @@ export default function InternationalShippingContent() {
     setSuccessMessage("");
 
     try {
-      const updatedMethod = await updateAdminInternationalShippingMethodRequest(method.id, {
+      await updateAdminInternationalShippingMethodRequest(method.id, {
         ...mapMethodToForm(method),
         is_active: !method.is_active,
       });
 
-      upsertMethod(updatedMethod);
-      setSuccessMessage(updatedMethod.is_active ? "Shipping method activated." : "Shipping method deactivated.");
+      await refreshMethods();
+      setSuccessMessage(method.is_active ? "Shipping method deactivated." : "Shipping method activated.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update method status.");
     }
@@ -332,292 +384,134 @@ export default function InternationalShippingContent() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6">
-      <div className="space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Admin Dashboard</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">International Shipping</h1>
-        <p className="max-w-2xl text-sm text-slate-500">
-          Manage China to Bangladesh shipping methods separately from CNDS. Vendors only enter product weight.
-        </p>
-      </div>
-
-      {errorMessage ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
-          {successMessage}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Methods</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{methods.length}</p>
-        </div>
-        <div className="rounded-2xl border border-[#615FFF]/10 bg-[#615FFF]/5 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-[#615FFF]">Active</p>
-          <p className="mt-2 text-2xl font-semibold text-[#615FFF]">{activeCount}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Tiers</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">
-            {methods.reduce((sum, method) => sum + method.tiers.length, 0)}
-          </p>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">
-                {editingMethodId ? "Edit Method" : "Add Method"}
-              </p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-900">
-                {editingMethodId ? "Update shipping method" : "Create shipping method"}
-              </h2>
-            </div>
-
-            {editingMethodId ? (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:text-slate-900"
-              >
-                Cancel
-              </button>
-            ) : null}
+    <section className="w-full space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white">
+        <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800">Bangladesh Shipping List</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Review China to Bangladesh shipping methods separately from CNDS from one workspace.
+            </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Method Name</label>
-              <input
-                type="text"
-                value={formValues.name}
-                onChange={(event) => handleInputChange("name", event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                placeholder="Air Shipping"
-              />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg bg-[#615FFF]/8 px-3 py-2 text-sm font-medium text-[#615FFF]">
+              {filteredMethods.length} visible
             </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Slug</label>
-              <input
-                type="text"
-                value={formValues.slug}
-                onChange={(event) => handleInputChange("slug", slugify(event.target.value))}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                placeholder="air-shipping"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>
-              <textarea
-                value={formValues.description}
-                onChange={(event) => handleInputChange("description", event.target.value)}
-                className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                placeholder="Method notes or delivery context"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Delivery Min Days</label>
-              <input
-                type="number"
-                min="0"
-                value={formValues.delivery_min_days}
-                onChange={(event) => handleInputChange("delivery_min_days", event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Delivery Max Days</label>
-              <input
-                type="number"
-                min="0"
-                value={formValues.delivery_max_days}
-                onChange={(event) => handleInputChange("delivery_max_days", event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Minimum Weight (kg)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formValues.minimum_weight_kg}
-                onChange={(event) => handleInputChange("minimum_weight_kg", event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Sort Order</label>
-              <input
-                type="number"
-                min="0"
-                value={formValues.sort_order}
-                onChange={(event) => handleInputChange("sort_order", event.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-              />
-            </div>
-          </div>
-
-          <label className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-slate-700">
-            <input
-              type="checkbox"
-              checked={formValues.is_active}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  is_active: event.target.checked,
-                }))
-              }
-              className="h-4 w-4 rounded border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
-            />
-            Active method
-          </label>
-
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">Weight Tiers</p>
-                <p className="mt-1 text-sm text-slate-500">Define price per kg by total shipping weight.</p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAddTier}
-                className="rounded-xl border border-[#615FFF]/20 bg-white px-4 py-2 text-sm font-semibold text-[#615FFF] transition-colors hover:border-[#615FFF]/40"
-              >
-                Add Tier
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {formValues.tiers.map((tier) => (
-                <div key={tier.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="grid gap-3 sm:grid-cols-4">
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                        Min Weight
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={tier.min_weight_kg}
-                        onChange={(event) => handleTierChange(tier.id, "min_weight_kg", event.target.value)}
-                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                        Max Weight
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={tier.max_weight_kg}
-                        onChange={(event) => handleTierChange(tier.id, "max_weight_kg", event.target.value)}
-                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                        placeholder="No limit"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                        Price / kg
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={tier.price_per_kg}
-                        onChange={(event) => handleTierChange(tier.id, "price_per_kg", event.target.value)}
-                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                        Sort Order
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={tier.sort_order}
-                        onChange={(event) => handleTierChange(tier.id, "sort_order", event.target.value)}
-                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveTier(tier.id)}
-                      disabled={formValues.tiers.length === 1}
-                      className="text-sm font-medium text-rose-500 transition-colors hover:text-rose-600 disabled:cursor-not-allowed disabled:text-slate-300"
-                    >
-                      Remove tier
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 flex justify-end">
             <button
-              type="submit"
-              disabled={isSaving}
-              className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+              type="button"
+              onClick={startCreateMode}
+              className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
-              {isSaving ? "Saving..." : editingMethodId ? "Update Method" : "Create Method"}
+              Add Shipping Method
             </button>
           </div>
-        </form>
+        </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">Method List</p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-900">Configured methods</h2>
-            </div>
-
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full max-w-[420px]">
+            <label htmlFor="shipping-search" className="sr-only">
+              Search shipping methods
+            </label>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+              <SearchIcon />
+            </span>
             <input
+              id="shipping-search"
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search methods"
-              className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF] sm:max-w-sm"
+              placeholder="Search by method name, slug, or description"
+              className={`h-11 w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 outline-none transition-colors ${accentBorder}`}
             />
           </div>
 
-          {filteredMethods.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-              No international shipping methods found.
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-40">
+              <label htmlFor="shipping-status-filter" className="sr-only">
+                Filter by status
+              </label>
+              <select
+                id="shipping-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
+                className={`h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors ${accentBorder}`}
+              >
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredMethods.map((method) => (
-                <article key={method.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-slate-900">{method.name}</p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("all");
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+
+        {successMessage ? (
+          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 sm:px-6">
+            {successMessage}
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600 sm:px-6">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {methods.length === 0 ? (
+          <div className="p-6">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              No Bangladesh shipping methods yet. Create your first shipping method.
+            </div>
+          </div>
+        ) : filteredMethods.length === 0 ? (
+          <div className="p-6">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              No matching shipping methods found.
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-full overflow-x-auto">
+            <div className="min-w-[1080px]">
+              <table className="min-w-full">
+                <thead className="border-b border-gray-100">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 sm:px-6">Method</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Slug</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Delivery</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Minimum Weight</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Tiers</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Created At</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredMethods.map((method) => (
+                    <tr key={method.id} className={editingMethodId === method.id ? "bg-[#615FFF]/5" : ""}>
+                      <td className="px-5 py-5 text-left sm:px-6">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-gray-800">{method.name}</p>
+                          <span className="mt-1 block truncate text-xs text-gray-500">
+                            {method.description || "No description added"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-5 text-sm text-gray-500">{method.slug}</td>
+                      <td className="px-4 py-5 text-sm text-gray-500">{formatDeliveryWindow(method)}</td>
+                      <td className="px-4 py-5 text-sm text-gray-500">{method.minimum_weight_kg} kg</td>
+                      <td className="px-4 py-5 text-sm font-semibold text-[#615FFF]">{method.tiers.length}</td>
+                      <td className="px-4 py-5">
                         <span
                           className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                             method.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
@@ -625,40 +519,247 @@ export default function InternationalShippingContent() {
                         >
                           {method.is_active ? "Active" : "Inactive"}
                         </span>
-                      </div>
-                      <p className="text-xs text-slate-500">Slug: {method.slug}</p>
-                      <p className="text-xs text-slate-500">
-                        Delivery: {formatDeliveryWindow(method)} | Minimum: {method.minimum_weight_kg} kg
-                      </p>
-                      {method.description ? (
-                        <p className="text-sm text-slate-500">{method.description}</p>
-                      ) : null}
-                      <p className="text-xs text-slate-500">{method.tiers.length} tier(s)</p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(method)}
-                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:text-slate-900"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleToggleActive(method)}
-                        className="rounded-xl border border-[#615FFF]/20 bg-[#615FFF]/5 px-4 py-2 text-sm font-medium text-[#615FFF] transition-colors hover:bg-[#615FFF]/10"
-                      >
-                        {method.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
+                      </td>
+                      <td className="px-4 py-5 text-sm text-gray-500">{formatCreatedAt(method.created_at)}</td>
+                      <td className="px-4 py-5">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(method)}
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleToggleActive(method)}
+                            className="inline-flex items-center justify-center rounded-lg border border-[#615FFF]/20 bg-[#615FFF]/5 px-4 py-2 text-sm font-medium text-[#615FFF] transition-colors hover:bg-[#615FFF]/10"
+                          >
+                            {method.is_active ? "Deactivate" : "Activate"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
+      {isEditorOpen ? (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-slate-950/50 px-4 py-8 backdrop-blur-[2px]">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-2xl">
+            <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-base font-medium text-gray-800">
+                  {selectedMethod ? `Edit ${selectedMethod.name}` : "Create Shipping Method"}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Configure delivery window, minimum weight, and per-kg Bangladesh shipping tiers.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeEditor}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-lg text-slate-500 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+                aria-label="Close editor"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Method Name</label>
+                  <input
+                    type="text"
+                    value={formValues.name}
+                    onChange={(event) => handleInputChange("name", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                    placeholder="Air Shipping"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Slug</label>
+                  <input
+                    type="text"
+                    value={formValues.slug}
+                    onChange={(event) => handleInputChange("slug", slugify(event.target.value))}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                    placeholder="air-shipping"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>
+                  <textarea
+                    value={formValues.description}
+                    onChange={(event) => handleInputChange("description", event.target.value)}
+                    rows={4}
+                    className={`w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                    placeholder="Method notes or delivery context"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Delivery Min Days</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formValues.delivery_min_days}
+                    onChange={(event) => handleInputChange("delivery_min_days", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Delivery Max Days</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formValues.delivery_max_days}
+                    onChange={(event) => handleInputChange("delivery_max_days", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Minimum Weight (kg)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formValues.minimum_weight_kg}
+                    onChange={(event) => handleInputChange("minimum_weight_kg", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Sort Order</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formValues.sort_order}
+                    onChange={(event) => handleInputChange("sort_order", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  />
+                </div>
+              </div>
+
+              <label className="mt-4 inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={formValues.is_active}
+                  onChange={(event) =>
+                    setFormValues((current) => ({
+                      ...current,
+                      is_active: event.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
+                />
+                Active Method
+              </label>
+
+              <div className="mt-6 rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Weight Tiers</p>
+                    <p className="text-xs text-slate-500">Define price per kg by total shipping weight.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddTier}
+                    className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                  >
+                    Add Tier
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {formValues.tiers.map((tier, index) => (
+                    <div key={tier.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveTier(tier.id)}
+                          disabled={formValues.tiers.length === 1}
+                          className="text-sm font-medium text-rose-500 disabled:cursor-not-allowed disabled:text-slate-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tier.min_weight_kg}
+                          onChange={(event) => handleTierChange(tier.id, "min_weight_kg", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Min Weight"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tier.max_weight_kg}
+                          onChange={(event) => handleTierChange(tier.id, "max_weight_kg", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Max Weight"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tier.price_per_kg}
+                          onChange={(event) => handleTierChange(tier.id, "price_per_kg", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Price / kg"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={tier.sort_order}
+                          onChange={(event) => handleTierChange(tier.id, "sort_order", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Sort Order"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  disabled={isSaving}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? "Saving..." : selectedMethod ? "Update Method" : "Create Method"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

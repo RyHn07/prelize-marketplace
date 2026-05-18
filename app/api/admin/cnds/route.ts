@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { listAdminCndsProfiles } from "@/lib/cnds/admin";
+import {
+  createAdminCndsProfile,
+  listAdminCndsProfiles,
+  parseCndsProfileInput,
+  validateCndsProfileInput,
+} from "@/lib/cnds/admin";
 import { requireAdminRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
 
 export async function GET(request: Request) {
@@ -36,12 +41,31 @@ export async function POST(request: Request) {
     return auth.errorResponse;
   }
 
-  void request;
+  try {
+    const payload = parseCndsProfileInput(await request.json().catch(() => null));
+    const validationError = validateCndsProfileInput(payload);
 
-  return NextResponse.json(
-    {
-      error: "Global CNDS profiles are disabled. Vendors must create CNDS profiles inside the vendor dashboard.",
-    },
-    { status: 400 },
-  );
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    const supabase = getSupabaseServiceRoleClient();
+    const result = await createAdminCndsProfile(supabase, payload);
+
+    if (result.error || !result.data) {
+      return NextResponse.json(
+        { error: result.error?.message ?? "Unable to create the CNDS shipping profile." },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({ profile: result.data });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unable to create the CNDS shipping profile.",
+      },
+      { status: 500 },
+    );
+  }
 }

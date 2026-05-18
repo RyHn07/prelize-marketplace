@@ -330,6 +330,12 @@ export default function VendorDashboardPage() {
       tone: "blue",
     },
     {
+      title: "Read customer reviews",
+      description: "See delivered-order feedback for the products your vendor account has already shipped.",
+      href: "/vendor/reviews",
+      tone: "slate",
+    },
+    {
       title: "Update shipping setup",
       description: "Keep your CNDS profiles accurate so checkout calculations stay reliable.",
       href: "/vendor/cnds",

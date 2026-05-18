@@ -6,10 +6,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
+import OrderReviewSection from "@/components/orders/order-review-section";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
 
 const ORDER_STEPS = ["Pending", "Confirmed", "Processing", "Shipped", "Delivered"] as const;
+type OrderStatus = (typeof ORDER_STEPS)[number] | "Cancelled";
 
 type OrderSummary = {
   quantity?: number;
@@ -32,7 +34,7 @@ type OrderRow = {
   order_number: string;
   user_id: string;
   user_email: string;
-  status: "Pending";
+  status: OrderStatus;
   payment_method: string | null;
   payment_status: string | null;
   created_at: string;
@@ -336,6 +338,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
     return Array.from(groups.values());
   }, [items, order, vendorNamesById]);
 
+  const currentOrderStepIndex = order ? ORDER_STEPS.indexOf(order.status as (typeof ORDER_STEPS)[number]) : -1;
+
   if (!hasLoaded || !isAuthorized) {
     return (
       <main className="min-h-screen bg-white">
@@ -405,12 +409,15 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
             <section className="rounded-xl border border-slate-200 bg-white p-5">
               <h2 className="text-lg font-semibold text-slate-900">Order Status</h2>
               <p className="mt-2 text-sm text-slate-500">
-                Your order has been placed and is waiting for confirmation.
+                {order?.status === "Delivered"
+                  ? "Your order has been delivered and is now eligible for product reviews."
+                  : `Your order is currently in ${order?.status ?? "Pending"} status.`}
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-5">
                 {ORDER_STEPS.map((step) => {
-                  const isActive = step === "Pending";
+                  const stepIndex = ORDER_STEPS.indexOf(step);
+                  const isActive = currentOrderStepIndex >= stepIndex && currentOrderStepIndex !== -1;
 
                   return (
                     <div
@@ -460,6 +467,8 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                 )}
               </div>
             </section>
+
+            {order ? <OrderReviewSection orderId={order.id} orderStatus={order.status} /> : null}
 
           </div>
 

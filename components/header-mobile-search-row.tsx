@@ -3,12 +3,18 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import {
+  HeaderCategoriesMobile,
+  type HeaderCategoryItem,
+} from "@/components/header-categories-dropdown";
+
 type HeaderMobileSearchRowProps = {
   categoriesLabel: string;
   searchPlaceholder: string;
   categoriesIcon: ReactNode;
   dropdownIcon: ReactNode;
   searchIcon: ReactNode;
+  categories: HeaderCategoryItem[];
 };
 
 export default function HeaderMobileSearchRow({
@@ -17,20 +23,19 @@ export default function HeaderMobileSearchRow({
   categoriesIcon,
   dropdownIcon,
   searchIcon,
+  categories,
 }: HeaderMobileSearchRowProps) {
   const [isSearchActive, setIsSearchActive] = useState(false);
 
   return (
     <div className="flex items-center gap-3 lg:hidden">
       {!isSearchActive ? (
-        <button
-          type="button"
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-950 px-4 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
-        >
-          {categoriesIcon}
-          <span>{categoriesLabel}</span>
-          {dropdownIcon}
-        </button>
+        <HeaderCategoriesMobile
+          categoriesLabel={categoriesLabel}
+          categories={categories}
+          categoriesIcon={categoriesIcon}
+          dropdownIcon={dropdownIcon}
+        />
       ) : null}
 
       <form
