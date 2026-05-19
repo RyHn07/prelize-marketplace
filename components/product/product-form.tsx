@@ -470,6 +470,21 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
   };
 }
 
+function resolveSubmittedStatus(fallbackStatus: ProductStatus): ProductStatus {
+  if (typeof document === "undefined") {
+    return fallbackStatus;
+  }
+
+  const checkedStatus = document.querySelector<HTMLInputElement>('input[name="status"]:checked')?.dataset
+    .productStatusOption;
+
+  if (checkedStatus === "active" || checkedStatus === "disabled" || checkedStatus === "draft") {
+    return checkedStatus;
+  }
+
+  return fallbackStatus;
+}
+
 function applyForcedVendorId(payload: ProductUpsertPayload, forcedVendorId?: string | null) {
   if (!forcedVendorId) {
     return payload;
@@ -1861,11 +1876,20 @@ function ProductForm({
       return;
     }
 
+    const submittedStatus = resolveSubmittedStatus(values.status);
+    const submitValues =
+      submittedStatus === values.status
+        ? values
+        : {
+            ...values,
+            status: submittedStatus,
+          };
+
     const savePayload: ProductEditorSavePayload = {
-      product: applyForcedVendorId(buildProductPayload(values), forcedVendorId),
-      variants: values.product_type === "variable" ? buildVariantPayloads(values) : [],
-      pricing_tiers: values.product_type === "single" ? buildPricingTierPayloads(values) : [],
-      pricing_tier_sets: values.product_type === "variable" ? buildPricingTierSetPayloads(values) : [],
+      product: applyForcedVendorId(buildProductPayload(submitValues), forcedVendorId),
+      variants: submitValues.product_type === "variable" ? buildVariantPayloads(submitValues) : [],
+      pricing_tiers: submitValues.product_type === "single" ? buildPricingTierPayloads(submitValues) : [],
+      pricing_tier_sets: submitValues.product_type === "variable" ? buildPricingTierSetPayloads(submitValues) : [],
     };
 
     setIsSubmitting(true);
