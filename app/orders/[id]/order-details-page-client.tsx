@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import OrderReviewSection from "@/components/orders/order-review-section";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -190,8 +190,9 @@ function OrderProductGroup({ group }: { group: GroupedOrderItem }) {
   );
 }
 
-export default function OrderDetailsPageClient({ params }: { params: Promise<{ id: string }> }) {
+export default function OrderDetailsPageClient() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const [orderId, setOrderId] = useState("");
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [items, setItems] = useState<OrderItemRow[]>([]);
@@ -202,11 +203,19 @@ export default function OrderDetailsPageClient({ params }: { params: Promise<{ i
   useEffect(() => {
     let isMounted = true;
     const supabase = getSupabaseClient();
+    const currentOrderId = typeof params?.id === "string" ? params.id : "";
+
+    if (!currentOrderId) {
+      setHasLoaded(true);
+      setIsAuthorized(true);
+      setOrder(null);
+      setItems([]);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const loadOrder = async () => {
-      const resolvedParams = await params;
-      const currentOrderId = resolvedParams.id;
-
       if (!isMounted) {
         return;
       }
@@ -316,7 +325,7 @@ export default function OrderDetailsPageClient({ params }: { params: Promise<{ i
     return () => {
       isMounted = false;
     };
-  }, [params]);
+  }, [params?.id]);
 
   useEffect(() => {
     if (hasLoaded && !isAuthorized) {
