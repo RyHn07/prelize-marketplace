@@ -15,7 +15,7 @@ function normalizeBadge(value: string | null): ProductBadge | undefined {
 
 function normalizeWeight(weight: ProductDbWeight) {
   if (weight === null || weight === undefined || weight === "") {
-    return "Weight on request";
+    return "";
   }
 
   return String(weight);

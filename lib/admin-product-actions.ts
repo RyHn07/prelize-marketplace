@@ -67,6 +67,12 @@ export async function updateAdminProductRecord(id: string, payload: ProductEdito
   });
 }
 
+export async function deleteAdminProductRecord(id: string) {
+  return authorizedAdminProductFetch<ProductDbRow>(`/api/admin/products/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getAdminProductEditorRecord(id: string) {
   return authorizedAdminProductFetch<ProductEditorRecord>(`/api/admin/products/${id}`, {
     method: "GET",

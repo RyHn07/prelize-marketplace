@@ -33,6 +33,7 @@ type ProductOption = {
   price: number;
   moq: number;
   stock: number;
+  weight: number | null;
   attributeValues: Record<string, string>;
 };
 
@@ -122,6 +123,7 @@ function buildProductOptions(
           getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
         moq: variant.moq,
         stock: Math.max(0, variant.stock ?? 0),
+        weight: typeof variant.weight === "number" && Number.isFinite(variant.weight) ? variant.weight : null,
         attributeValues: Object.fromEntries(
           Object.entries(variant.attribute_values ?? {}).map(([key, value]) => [key, String(value)]),
         ),
@@ -139,6 +141,12 @@ function buildProductOptions(
       price: getEffectivePrice(productRecord.regular_price ?? productRecord.price, productRecord.discount_price ?? null),
       moq: productRecord.moq,
       stock: 0,
+      weight:
+        productRecord.weight == null
+          ? null
+          : Number.isFinite(Number(productRecord.weight))
+            ? Number(productRecord.weight)
+            : null,
       attributeValues: {},
     },
   ];
@@ -216,6 +224,18 @@ function calculateCndsCost(
   }
 
   return cndsProfile.pricing_type === "unit" ? quantity * matchedTier.price : matchedTier.price;
+}
+
+function setStorefrontProductImage(imageUrl: string) {
+  if (typeof window === "undefined" || !imageUrl.trim()) {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent("prelize:set-storefront-product-image", {
+      detail: { imageUrl },
+    }),
+  );
 }
 
 function StarRating({ activeCount = 5 }: { activeCount?: number }) {
@@ -394,6 +414,7 @@ export default function ProductDetailsPurchasePanel({
   const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [showCartPopup, setShowCartPopup] = useState(false);
+  const [isProcessingCartAction, setIsProcessingCartAction] = useState(false);
   const [lastAddedOptionCount, setLastAddedOptionCount] = useState(0);
   const [cartErrorMessage, setCartErrorMessage] = useState("");
   const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>({});
@@ -513,17 +534,12 @@ export default function ProductDetailsPurchasePanel({
     const productPrice = pricing.totalPrice;
     const cndsCost = calculateCndsCost(quantity, cndsProfile);
     const payNow = productPrice + cndsCost;
-    const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg([
-      {
-        weight:
-          productRecord.weight == null
-            ? null
-            : Number.isFinite(Number(productRecord.weight))
-              ? Number(productRecord.weight)
-              : null,
-        quantity,
-      },
-    ]);
+    const { totalWeightKg, hasUnknownWeight } = calculateTotalWeightKg(
+      productOptions.map((option) => ({
+        weight: option.weight,
+        quantity: quantities[option.id] ?? 0,
+      })),
+    );
     const internationalShipping = calculateInternationalShippingEstimate(
       selectedShippingMethod,
       totalWeightKg,
@@ -539,7 +555,7 @@ export default function ProductDetailsPurchasePanel({
       totalWeightKg,
       internationalShipping,
     };
-  }, [cndsProfile, product.id, product.name, productOptions, productPricingConfig, productRecord.id, productRecord.weight, quantities, selectedShippingMethod]);
+  }, [cndsProfile, product.id, product.name, productOptions, productPricingConfig, productRecord.id, quantities, selectedShippingMethod]);
   const unitPriceByOptionId = useMemo(
     () =>
       new Map(
@@ -599,6 +615,7 @@ export default function ProductDetailsPurchasePanel({
         variantValue: option.variantValue,
         price: option.price,
         quantity: quantities[option.id] ?? 0,
+        weight: option.weight,
       });
     });
 
@@ -608,19 +625,32 @@ export default function ProductDetailsPurchasePanel({
   };
 
   const handleAddToCart = () => {
+    if (isProcessingCartAction) {
+      return;
+    }
+
+    setIsProcessingCartAction(true);
     const addedOptionCount = addSelectedOptionsToCart();
 
     if (addedOptionCount === 0) {
+      setIsProcessingCartAction(false);
       return;
     }
 
     setShowCartPopup(true);
+    setIsProcessingCartAction(false);
   };
 
   const handleBuyNow = () => {
+    if (isProcessingCartAction) {
+      return;
+    }
+
+    setIsProcessingCartAction(true);
     const addedOptionCount = addSelectedOptionsToCart();
 
     if (addedOptionCount === 0) {
+      setIsProcessingCartAction(false);
       return;
     }
 
@@ -692,11 +722,16 @@ export default function ProductDetailsPurchasePanel({
                       <button
                         key={`${attribute.name}-${value}`}
                         type="button"
-                        onClick={() =>
-                          setSelectedAttributes((current) => ({
-                            ...current,
-                            [attribute.name]: value,
-                          }))
+                      onClick={() =>
+                          {
+                            setSelectedAttributes((current) => ({
+                              ...current,
+                              [attribute.name]: value,
+                            }));
+                            if (imageUrl) {
+                              setStorefrontProductImage(imageUrl);
+                            }
+                          }
                         }
                         className={
                           isSelected
@@ -868,16 +903,18 @@ export default function ProductDetailsPurchasePanel({
           <button
             type="button"
             onClick={handleAddToCart}
-            className="inline-flex items-center justify-center rounded-full bg-[#615FFF] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
+            disabled={isProcessingCartAction}
+            className="inline-flex items-center justify-center rounded-full bg-[#615FFF] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Add to Cart
+            {isProcessingCartAction ? "Processing..." : "Add to Cart"}
           </button>
           <button
             type="button"
             onClick={handleBuyNow}
-            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
+            disabled={isProcessingCartAction}
+            className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Buy Now
+            {isProcessingCartAction ? "Processing..." : "Buy Now"}
           </button>
         </div>
 

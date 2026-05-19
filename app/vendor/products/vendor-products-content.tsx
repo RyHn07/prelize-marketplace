@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import ConfirmationDialog from "@/components/confirmation-dialog";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getProductsForVendors } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import { deleteVendorProductRecord } from "@/lib/vendor-product-actions";
 import type { ProductDbRow, ProductStatus, ProductType } from "@/types/product-db";
 
 function formatPrice(amount: number) {
@@ -58,8 +60,11 @@ export default function VendorProductsContent() {
   const [activeVendorId, setActiveVendorId] = useState<string | null>(null);
   const [products, setProducts] = useState<ProductDbRow[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [pendingDeleteProduct, setPendingDeleteProduct] = useState<ProductDbRow | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -138,6 +143,33 @@ export default function VendorProductsContent() {
     return "";
   }, [searchParams]);
 
+  const handleDeleteProduct = async () => {
+    if (!pendingDeleteProduct) {
+      return;
+    }
+
+    setDeletingProductId(pendingDeleteProduct.id);
+    setErrorMessage("");
+    setActionMessage("");
+
+    try {
+      const result = await deleteVendorProductRecord(pendingDeleteProduct.id);
+
+      if (result.error) {
+        setErrorMessage(result.error.message);
+        return;
+      }
+
+      setProducts((current) => current.filter((currentProduct) => currentProduct.id !== pendingDeleteProduct.id));
+      setActionMessage("Product deleted successfully.");
+      setPendingDeleteProduct(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to delete the product.");
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
   const activeCount = useMemo(
     () => products.filter((product) => getProductStatus(product) === "active").length,
     [products],
@@ -188,6 +220,28 @@ export default function VendorProductsContent() {
 
   return (
     <section className="mx-auto max-w-7xl">
+      <ConfirmationDialog
+        open={pendingDeleteProduct !== null}
+        title="Delete Product?"
+        description={
+          pendingDeleteProduct
+            ? `Delete "${pendingDeleteProduct.name}" permanently from your vendor products?`
+            : ""
+        }
+        confirmLabel="Delete Product"
+        cancelLabel="Keep Product"
+        tone="danger"
+        isConfirming={pendingDeleteProduct ? deletingProductId === pendingDeleteProduct.id : false}
+        onConfirm={() => void handleDeleteProduct()}
+        onCancel={() => {
+          if (deletingProductId) {
+            return;
+          }
+
+          setPendingDeleteProduct(null);
+        }}
+      />
+
       <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">Vendor Dashboard</p>
@@ -249,9 +303,9 @@ export default function VendorProductsContent() {
         </div>
       </div>
 
-      {successMessage ? (
+      {successMessage || actionMessage ? (
         <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
-          {successMessage}
+          {actionMessage || successMessage}
         </div>
       ) : null}
 
@@ -359,6 +413,14 @@ export default function VendorProductsContent() {
                       >
                         Edit Product
                       </Link>
+                      <button
+                        type="button"
+                        onClick={() => setPendingDeleteProduct(product)}
+                        disabled={deletingProductId === product.id}
+                        className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-600 transition-colors hover:border-rose-300 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {deletingProductId === product.id ? "Deleting..." : "Delete Product"}
+                      </button>
                     </div>
                   </div>
                 </article>

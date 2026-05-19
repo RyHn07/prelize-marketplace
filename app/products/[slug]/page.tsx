@@ -1,8 +1,8 @@
-import Image from "next/image";
 import { notFound } from "next/navigation";
 
 import Header from "@/components/Header";
 import ProductCard from "@/components/product/product-card";
+import ProductImageGallery from "@/components/product/product-image-gallery";
 import ProductDetailsPurchasePanel from "@/components/product/product-details-purchase-panel";
 import ProductDetailsTabs from "@/components/product/product-details-tabs";
 import { getActiveCndsShippingProfileById } from "@/lib/cnds/server";
@@ -139,36 +139,12 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
         </div>
 
         <div className="grid gap-8 xl:grid-cols-[1.15fr_0.95fr_0.8fr]">
-          <div className="space-y-4">
-            <div className="overflow-hidden rounded-lg bg-slate-100">
-              <div className="relative aspect-square">
-                <Image
-                  src={product.image}
-                  alt={product.name}
-                  fill
-                  sizes="(min-width: 1280px) 36vw, 100vw"
-                  className="object-cover"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              {product.gallery.slice(0, 3).map((image, index) => (
-                <div
-                  key={`${product.id}-gallery-${index}`}
-                  className="overflow-hidden rounded-md bg-slate-100"
-                >
-                  <Image
-                    src={image}
-                    alt={`${product.name} thumbnail ${index + 1}`}
-                    width={96}
-                    height={96}
-                    className="h-20 w-20 object-cover sm:h-24 sm:w-24"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
+          <ProductImageGallery
+            productId={product.id}
+            productName={product.name}
+            mainImage={product.image}
+            galleryImages={product.gallery}
+          />
 
           <ProductDetailsPurchasePanel
           product={product}
@@ -180,7 +156,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
         />
         </div>
 
-        <ProductDetailsTabs product={product} />
+        <ProductDetailsTabs product={product} variants={variants} />
 
         {relatedProducts.length > 0 ? (
           <section className="mt-10 space-y-5">

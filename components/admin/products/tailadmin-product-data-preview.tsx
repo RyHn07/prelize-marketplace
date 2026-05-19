@@ -33,6 +33,7 @@ type PreviewVariation = {
   pricingTierSetId: string;
   moq: string;
   stock: string;
+  weight: string;
   summary: string;
   imageUrl: string;
 };
@@ -43,6 +44,7 @@ type VariationStateBridgeVariation = {
   pricing_tier_set_id: string;
   moq: string;
   stock: string;
+  weight: string;
   summary: string;
   image_url: string;
 };
@@ -441,6 +443,35 @@ export default function TailadminProductDataPreview() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleProductTypeStateUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        productType?: "single" | "variable";
+      }>;
+
+      const nextType = customEvent.detail?.productType === "variable" ? "variable" : "simple";
+
+      setProductType(nextType);
+      setActiveTab((current) => {
+        if (nextType === "simple" && current === "variations") {
+          return "inventory";
+        }
+
+        return current;
+      });
+    };
+
+    window.addEventListener("prelize:product-type-state-updated", handleProductTypeStateUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener("prelize:product-type-state-updated", handleProductTypeStateUpdated as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof document === "undefined") {
       return;
     }
@@ -456,6 +487,7 @@ export default function TailadminProductDataPreview() {
         const pricingTierSetSelect = document.getElementById(`variation-tier-set-${variationId}`) as HTMLSelectElement | null;
         const moqInput = document.getElementById(`variation-moq-${variationId}`) as HTMLInputElement | null;
         const stockInput = document.getElementById(`variation-stock-${variationId}`) as HTMLInputElement | null;
+        const weightInput = document.getElementById(`variation-weight-${variationId}`) as HTMLInputElement | null;
 
         return {
           id: variationId,
@@ -463,6 +495,7 @@ export default function TailadminProductDataPreview() {
           pricingTierSetId: pricingTierSetSelect?.value ?? "",
           moq: moqInput?.value ?? "1",
           stock: stockInput?.value ?? "0",
+          weight: weightInput?.value ?? "",
           summary: row.dataset.productVariationSummary ?? "",
           imageUrl: row.dataset.productVariationImage ?? "",
         };
@@ -482,6 +515,7 @@ export default function TailadminProductDataPreview() {
           pricingTierSetId: variation.pricing_tier_set_id,
           moq: variation.moq,
           stock: variation.stock,
+          weight: variation.weight,
           summary: variation.summary,
           imageUrl: variation.image_url,
         })) ?? [];
@@ -505,11 +539,13 @@ export default function TailadminProductDataPreview() {
         const pricingTierSetSelect = document.getElementById(`variation-tier-set-${variationId}`) as HTMLSelectElement | null;
         const moqInput = document.getElementById(`variation-moq-${variationId}`) as HTMLInputElement | null;
         const stockInput = document.getElementById(`variation-stock-${variationId}`) as HTMLInputElement | null;
+        const weightInput = document.getElementById(`variation-weight-${variationId}`) as HTMLInputElement | null;
 
         nameInput?.addEventListener("input", syncVariationsFromRealForm);
         pricingTierSetSelect?.addEventListener("change", syncVariationsFromRealForm);
         moqInput?.addEventListener("input", syncVariationsFromRealForm);
         stockInput?.addEventListener("input", syncVariationsFromRealForm);
+        weightInput?.addEventListener("input", syncVariationsFromRealForm);
       });
 
       return () => {
@@ -524,11 +560,13 @@ export default function TailadminProductDataPreview() {
           const pricingTierSetSelect = document.getElementById(`variation-tier-set-${variationId}`) as HTMLSelectElement | null;
           const moqInput = document.getElementById(`variation-moq-${variationId}`) as HTMLInputElement | null;
           const stockInput = document.getElementById(`variation-stock-${variationId}`) as HTMLInputElement | null;
+          const weightInput = document.getElementById(`variation-weight-${variationId}`) as HTMLInputElement | null;
 
           nameInput?.removeEventListener("input", syncVariationsFromRealForm);
           pricingTierSetSelect?.removeEventListener("change", syncVariationsFromRealForm);
           moqInput?.removeEventListener("input", syncVariationsFromRealForm);
           stockInput?.removeEventListener("input", syncVariationsFromRealForm);
+          weightInput?.removeEventListener("input", syncVariationsFromRealForm);
         });
       };
     };
@@ -1063,7 +1101,7 @@ export default function TailadminProductDataPreview() {
                   />
                 </div>
               </div>
-              <div className="grid gap-6 xl:grid-cols-2">
+              <div className="grid gap-6 xl:grid-cols-3">
                 <div>
                   <Label htmlFor="preview-stock-qty">Stock quantity</Label>
                   <InputField id="preview-stock-qty" type="number" value="24" onChange={() => undefined} />
@@ -1076,7 +1114,27 @@ export default function TailadminProductDataPreview() {
                     value={weightValue}
                     onChange={(value) => {
                       setWeightValue(value);
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("prelize:set-product-weight", {
+                            detail: { weight: value },
+                          }),
+                        );
+                      }
                       syncInputField("product-weight", value);
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="preview-inventory-moq">MOQ</Label>
+                  <InputField
+                    id="preview-inventory-moq"
+                    type="number"
+                    value={moqValue}
+                    onChange={(value) => {
+                      setMoqValue(value);
+                      syncInputField("product-moq", value);
+                      pushPricingStateToRealForm({ moq: value });
                     }}
                   />
                 </div>
@@ -1123,7 +1181,7 @@ export default function TailadminProductDataPreview() {
                   ) : null}
 
                   <div className="space-y-6 px-5 py-5 sm:px-6">
-                    <div className="grid gap-6 xl:grid-cols-3">
+                    <div className={`grid gap-6 ${productType === "variable" ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
                       {productType === "variable" && activeTierSet ? (
                         <div>
                           <Label htmlFor={`preview-tier-set-name-${activeTierSet.id}`}>Tier Set Name</Label>
@@ -1172,19 +1230,6 @@ export default function TailadminProductDataPreview() {
                             pushPricingStateToRealForm({ discountPrice: value });
                           }}
                           placeholder="Optional"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="preview-moq">MOQ</Label>
-                        <InputField
-                          id="preview-moq"
-                          type="number"
-                          value={moqValue}
-                          onChange={(value) => {
-                            setMoqValue(value);
-                            syncInputField("product-moq", value);
-                            pushPricingStateToRealForm({ moq: value });
-                          }}
                         />
                       </div>
                     </div>
@@ -1574,7 +1619,7 @@ export default function TailadminProductDataPreview() {
                         </button>
                       </div>
 
-                      <div className="grid gap-4 md:grid-cols-[72px_minmax(0,1.3fr)_minmax(0,1.3fr)_170px_170px] md:items-end">
+                      <div className="grid gap-4 md:grid-cols-[72px_minmax(0,1.2fr)_minmax(0,1.2fr)_110px_110px_130px] md:items-end">
                         <div>
                           <button
                             type="button"
@@ -1695,6 +1740,32 @@ export default function TailadminProductDataPreview() {
                             value={variation.stock}
                             onChange={(value) => {
                               const realInput = document.getElementById(`variation-stock-${variation.id}`) as HTMLInputElement | null;
+                              if (!realInput) {
+                                return;
+                              }
+                              realInput.value = value;
+                              realInput.dispatchEvent(new Event("input", { bubbles: true }));
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`preview-variation-weight-${variation.id}`}>Weight (kg)</Label>
+                          <InputField
+                            id={`preview-variation-weight-${variation.id}`}
+                            type="number"
+                            value={variation.weight}
+                            onChange={(value) => {
+                              if (typeof window !== "undefined") {
+                                window.dispatchEvent(
+                                  new CustomEvent("prelize:set-variation-weight", {
+                                    detail: {
+                                      variationId: variation.id,
+                                      weight: value,
+                                    },
+                                  }),
+                                );
+                              }
+                              const realInput = document.getElementById(`variation-weight-${variation.id}`) as HTMLInputElement | null;
                               if (!realInput) {
                                 return;
                               }

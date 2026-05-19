@@ -61,6 +61,30 @@ function normalizeProductPricingSource(value: unknown): ProductPricingSource {
 function normalizeProduct(row: ProductDbRow): ProductDbRow {
   const parsedPrice = Number(row.price);
   const parsedMoq = Number(row.moq);
+  const parsedRegularPrice =
+    row.regular_price === null || row.regular_price === undefined ? null : Number(row.regular_price);
+  const parsedDiscountPrice =
+    row.discount_price === null || row.discount_price === undefined ? null : Number(row.discount_price);
+  const normalizedRegularPrice =
+    Number.isFinite(parsedRegularPrice) && (parsedRegularPrice as number) > 0 ? (parsedRegularPrice as number) : null;
+  const normalizedDiscountPrice =
+    Number.isFinite(parsedDiscountPrice) && (parsedDiscountPrice as number) > 0 ? (parsedDiscountPrice as number) : null;
+  const normalizedBasePrice = Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
+  const effectivePrice =
+    normalizedBasePrice ??
+    (normalizedDiscountPrice !== null && normalizedRegularPrice !== null
+      ? Math.min(normalizedDiscountPrice, normalizedRegularPrice)
+      : normalizedDiscountPrice ?? normalizedRegularPrice ?? 0);
+  const normalizedWeight =
+    row.weight === null || row.weight === undefined
+      ? null
+      : typeof row.weight === "number"
+        ? Number.isFinite(row.weight)
+          ? row.weight
+          : null
+        : typeof row.weight === "string"
+          ? row.weight.trim()
+          : null;
 
   return {
     ...row,
@@ -73,12 +97,15 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
     cnds_profile_id: typeof row.cnds_profile_id === "string" ? row.cnds_profile_id : null,
     pricing_tier_profile_id:
       typeof row.pricing_tier_profile_id === "string" ? row.pricing_tier_profile_id : null,
-    price: Number.isFinite(parsedPrice) ? parsedPrice : 0,
+    price: effectivePrice,
     moq: Number.isFinite(parsedMoq) && parsedMoq > 0 ? parsedMoq : 1,
+    weight: normalizedWeight,
     is_active: typeof row.is_active === "boolean" ? row.is_active : true,
     status: normalizeStatus(row.status, row.is_active),
     product_type: normalizeProductType(row.product_type),
     pricing_source: normalizeProductPricingSource(row.pricing_source),
+    regular_price: normalizedRegularPrice,
+    discount_price: normalizedDiscountPrice,
     gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images : [],
     attributes: Array.isArray(row.attributes) ? row.attributes : [],
     specifications: Array.isArray(row.specifications) ? row.specifications : [],
@@ -374,6 +401,52 @@ export async function getProductsByIds(ids: string[], client?: SupabaseClient) {
   return {
     data: ((data ?? []) as ProductDbRow[]).map(normalizeProduct),
     error,
+  };
+}
+
+export async function getProductVariantMapByProductIds(productIds: string[], client?: SupabaseClient) {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
+
+  if (uniqueIds.length === 0) {
+    return {
+      data: new Map<string, ProductDbVariantRow[]>(),
+      error: null,
+    };
+  }
+
+  const supabase = resolveSupabaseClient(client);
+  const { data, error } = await supabase
+    .from("product_variants")
+    .select("*")
+    .in("product_id", uniqueIds)
+    .order("created_at", { ascending: true });
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: new Map<string, ProductDbVariantRow[]>(),
+      error: null,
+    };
+  }
+
+  if (error) {
+    return {
+      data: new Map<string, ProductDbVariantRow[]>(),
+      error,
+    };
+  }
+
+  const variantsByProductId = new Map<string, ProductDbVariantRow[]>();
+
+  ((data ?? []) as ProductDbVariantRow[]).forEach((rawVariant) => {
+    const variant = normalizeVariant(rawVariant);
+    const current = variantsByProductId.get(variant.product_id) ?? [];
+    current.push(variant);
+    variantsByProductId.set(variant.product_id, current);
+  });
+
+  return {
+    data: variantsByProductId,
+    error: null,
   };
 }
 

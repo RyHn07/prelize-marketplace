@@ -3,25 +3,56 @@
 import { useState } from "react";
 
 import type { Product } from "@/types/product";
+import type { ProductDbVariantRow } from "@/types/product-db";
 
 type ProductDetailsTabsProps = {
   product: Product;
+  variants?: ProductDbVariantRow[];
 };
 
-type TabKey = "specifications" | "description" | "reviews";
+type TabKey = "specifications" | "product-weight" | "description" | "reviews";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "specifications", label: "Product Specifications" },
+  { key: "product-weight", label: "Product Weight" },
   { key: "description", label: "Product Description" },
   { key: "reviews", label: "Customer Review" },
 ];
 
-export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps) {
+export default function ProductDetailsTabs({ product, variants = [] }: ProductDetailsTabsProps) {
   const hasSpecifications = product.specifications.length > 0;
+  const normalizedProductWeight = product.weight.trim();
+  const weightRows = variants
+    .filter((variant) => typeof variant.weight === "number" && Number.isFinite(variant.weight) && variant.weight > 0)
+    .map((variant) => ({
+      id: variant.id,
+      label: variant.value ?? variant.name,
+      weight: variant.weight as number,
+    }));
+  const hasProductWeight = normalizedProductWeight.length > 0 || weightRows.length > 0;
   const [activeTab, setActiveTab] = useState<TabKey>("specifications");
   const reviews = product.reviews ?? [];
-  const visibleTabs = hasSpecifications ? tabs : tabs.filter((tab) => tab.key !== "specifications");
-  const effectiveActiveTab = !hasSpecifications && activeTab === "specifications" ? "description" : activeTab;
+  const visibleTabs = tabs.filter((tab) => {
+    if (tab.key === "specifications") {
+      return hasSpecifications;
+    }
+
+    if (tab.key === "product-weight") {
+      return hasProductWeight;
+    }
+
+    return true;
+  });
+  const effectiveActiveTab =
+    activeTab === "specifications" && !hasSpecifications
+      ? hasProductWeight
+        ? "product-weight"
+        : "description"
+      : activeTab === "product-weight" && !hasProductWeight
+        ? hasSpecifications
+          ? "specifications"
+          : "description"
+          : activeTab;
 
   return (
     <div className="mt-10 space-y-6">
@@ -54,6 +85,34 @@ export default function ProductDetailsTabs({ product }: ProductDetailsTabsProps)
                       {specification.label}
                     </th>
                     <td className="px-5 py-4 text-slate-600">{specification.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {hasProductWeight && effectiveActiveTab === "product-weight" ? (
+        <section className="bg-white">
+          <h2 className="text-xl font-semibold text-slate-900">Product Weight</h2>
+          <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {normalizedProductWeight.length > 0 ? (
+                  <tr>
+                    <th className="w-40 bg-slate-50 px-5 py-4 font-semibold text-slate-700 sm:w-56">
+                      Product Weight
+                    </th>
+                    <td className="px-5 py-4 text-slate-600">{normalizedProductWeight}</td>
+                  </tr>
+                ) : null}
+                {weightRows.map((variation) => (
+                  <tr key={variation.id}>
+                    <th className="w-40 bg-slate-50 px-5 py-4 font-semibold text-slate-700 sm:w-56">
+                      {variation.label}
+                    </th>
+                    <td className="px-5 py-4 text-slate-600">{variation.weight} kg</td>
                   </tr>
                 ))}
               </tbody>

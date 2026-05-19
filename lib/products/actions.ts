@@ -18,6 +18,7 @@ export type ProductVariantUpsertPayload = {
   price: number;
   moq: number;
   stock: number;
+  weight: number | null;
   image_url: string | null;
   pricing_tier_set_id: string | null;
   attribute_values: Record<string, string>;
@@ -72,6 +73,7 @@ const REMOVABLE_VARIANT_COLUMNS = new Set([
 const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
   "price",
   "moq",
+  "weight",
   "brand_id",
   "image_url",
   "status",
@@ -101,6 +103,13 @@ function buildSchemaErrorMessage(message: string) {
     (normalizedMessage.includes("product_variants") && normalizedMessage.includes("pricing_tier_set_id"))
   ) {
     return "The product_variants table is missing the pricing_tier_set_id column. Run the latest variable pricing tier migration or save without per-variant tier set links.";
+  }
+
+  if (
+    missingVariantColumn === "weight" ||
+    (normalizedMessage.includes("product_variants") && normalizedMessage.includes("weight"))
+  ) {
+    return `The product_variants table is missing the "weight" column. Run the latest variable product weight migration, then try saving again. Original error: ${message}`;
   }
 
   if (missingProductColumn && PRODUCT_EDITOR_SCHEMA_COLUMNS.has(missingProductColumn)) {
@@ -806,6 +815,51 @@ export async function createProductEditorRecordWithClient(
 export async function createProductEditorRecord(payload: ProductEditorSavePayload) {
   const supabase = getSupabaseClient();
   return createProductEditorRecordWithClient(supabase, payload);
+}
+
+function buildDeleteProductErrorMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  if (normalizedMessage.includes("foreign key")) {
+    return "This product cannot be deleted because other records still depend on it.";
+  }
+
+  if (normalizedMessage.includes("order")) {
+    return "This product cannot be deleted because it is already connected to existing order records.";
+  }
+
+  return buildSchemaErrorMessage(message);
+}
+
+export async function deleteProductRecordWithClient(
+  supabase: SupabaseClient,
+  id: string,
+) {
+  const { data, error } = await supabase.from("products").delete().eq("id", id).select("*").maybeSingle();
+
+  if (error) {
+    return {
+      data: null as ProductDbRow | null,
+      error: {
+        ...error,
+        message: buildDeleteProductErrorMessage(error.message ?? "Unable to delete the product."),
+      },
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null as ProductDbRow | null,
+      error: {
+        message: "Product not found or already deleted.",
+      },
+    };
+  }
+
+  return {
+    data: data as ProductDbRow,
+    error: null,
+  };
 }
 
 export async function updateProductEditorRecordWithClient(

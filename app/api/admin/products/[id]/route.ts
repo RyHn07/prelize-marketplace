@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { updateProductEditorRecordWithClient, type ProductEditorSavePayload } from "@/lib/products/actions";
+import {
+  deleteProductRecordWithClient,
+  updateProductEditorRecordWithClient,
+  type ProductEditorSavePayload,
+} from "@/lib/products/actions";
 import { getProductEditorRecord } from "@/lib/products/queries";
 import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
 
@@ -53,6 +57,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unable to update the product.",
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdminRequest(request);
+
+  if (auth.errorResponse) {
+    return auth.errorResponse;
+  }
+
+  try {
+    const { id } = await params;
+    const supabase = getSupabaseServiceRoleClient();
+    const result = await deleteProductRecordWithClient(supabase, id);
+
+    if (result.error) {
+      return NextResponse.json({ error: result.error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ data: result.data });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unable to delete the product.",
       },
       { status: 500 },
     );

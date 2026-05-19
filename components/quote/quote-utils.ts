@@ -9,6 +9,7 @@ export type QuoteItem = {
   variantValue?: string | null;
   price: number;
   quantity: number;
+  weight?: number | null;
 };
 
 export const QUOTE_STORAGE_KEY = "prelize_quote";
@@ -37,7 +38,8 @@ function isQuoteItem(value: unknown): value is QuoteItem {
     typeof item.price === "number" &&
     Number.isFinite(item.price) &&
     typeof item.quantity === "number" &&
-    Number.isFinite(item.quantity)
+    Number.isFinite(item.quantity) &&
+    (item.weight === undefined || item.weight === null || (typeof item.weight === "number" && Number.isFinite(item.weight)))
   );
 }
 
@@ -71,6 +73,7 @@ function readQuoteItems() {
         variantId: item.variantId ?? null,
         variantName: item.variantName ?? null,
         variantValue: item.variantValue ?? null,
+        weight: typeof item.weight === "number" && Number.isFinite(item.weight) ? item.weight : null,
         quantity: Math.max(0, Math.floor(item.quantity)),
       }))
       .filter((item) => item.quantity > 0);
@@ -108,6 +111,7 @@ export function addToQuote(item: QuoteItem) {
   if (existingItemIndex >= 0) {
     items[existingItemIndex] = {
       ...items[existingItemIndex],
+      ...nextItem,
       quantity: items[existingItemIndex].quantity + nextItem.quantity,
     };
   } else {

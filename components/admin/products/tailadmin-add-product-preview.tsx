@@ -668,11 +668,16 @@ export default function TailadminAddProductPreview() {
   const [mainImage, setMainImage] = useState("");
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [openMediaTarget, setOpenMediaTarget] = useState<"gallery" | "main-image" | `variation:${string}` | null>(null);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [pendingSubmitStatus, setPendingSubmitStatus] = useState<"active" | "draft" | null>(null);
+  const [draggedGalleryIndex, setDraggedGalleryIndex] = useState<number | null>(null);
 
   const submitRealProductForm = (status: "active" | "draft") => {
-    if (typeof document === "undefined" || typeof window === "undefined") {
+    if (typeof document === "undefined" || typeof window === "undefined" || isSubmittingProduct) {
       return;
     }
+
+    setPendingSubmitStatus(status);
 
     window.dispatchEvent(
       new CustomEvent("prelize:set-product-status", {
@@ -698,6 +703,34 @@ export default function TailadminAddProductPreview() {
 
     input.value = value;
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  const syncGalleryImageOrder = (nextImages: string[]) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:set-gallery-images-order", {
+        detail: {
+          images: nextImages,
+        },
+      }),
+    );
+  };
+
+  const syncSpecificationsState = (nextSpecifications: SpecificationPreviewRow[]) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:set-specifications-state", {
+        detail: {
+          specifications: nextSpecifications,
+        },
+      }),
+    );
   };
 
   useEffect(() => {
@@ -833,6 +866,29 @@ export default function TailadminAddProductPreview() {
 
     return () => {
       window.removeEventListener("prelize:open-media-modal", handleOpenMediaModal as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleProductSubmitStateUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isSubmitting?: boolean }>;
+      const nextIsSubmitting = Boolean(customEvent.detail?.isSubmitting);
+
+      setIsSubmittingProduct(nextIsSubmitting);
+
+      if (!nextIsSubmitting) {
+        setPendingSubmitStatus(null);
+      }
+    };
+
+    window.addEventListener("prelize:product-submit-state-updated", handleProductSubmitStateUpdated as EventListener);
+
+    return () => {
+      window.removeEventListener("prelize:product-submit-state-updated", handleProductSubmitStateUpdated as EventListener);
     };
   }, []);
 
@@ -1188,7 +1244,29 @@ export default function TailadminAddProductPreview() {
                   {galleryImages.map((imageUrl, index) => (
                     <div
                       key={`${imageUrl}-${index}`}
-                      className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gray-50"
+                      draggable
+                      onDragStart={() => setDraggedGalleryIndex(index)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                      }}
+                      onDrop={() => {
+                        if (draggedGalleryIndex === null || draggedGalleryIndex === index) {
+                          setDraggedGalleryIndex(null);
+                          return;
+                        }
+
+                        const nextImages = [...galleryImages];
+                        const [draggedImage] = nextImages.splice(draggedGalleryIndex, 1);
+
+                        nextImages.splice(index, 0, draggedImage);
+                        setGalleryImages(nextImages);
+                        syncGalleryImageOrder(nextImages);
+                        setDraggedGalleryIndex(null);
+                      }}
+                      onDragEnd={() => setDraggedGalleryIndex(null)}
+                      className={`group relative overflow-hidden rounded-xl border bg-gray-50 ${
+                        draggedGalleryIndex === index ? "border-[#615FFF] opacity-70" : "border-gray-200"
+                      }`}
                     >
                       <div
                         role="img"
@@ -1196,6 +1274,9 @@ export default function TailadminAddProductPreview() {
                         className="aspect-square bg-cover bg-center"
                         style={{ backgroundImage: `url("${imageUrl}")` }}
                       />
+                      <div className="pointer-events-none absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
+                        Drag
+                      </div>
                       <button
                         type="button"
                         onClick={() => {
@@ -1246,6 +1327,7 @@ export default function TailadminAddProductPreview() {
               <button
                 type="button"
                 onClick={() => {
+                  syncSpecificationsState(specifications);
                   const realAddButton = document.getElementById("product-specifications-add") as HTMLButtonElement | null;
                   realAddButton?.click();
                 }}
@@ -1271,12 +1353,12 @@ export default function TailadminAddProductPreview() {
                         value={specification.label}
                         onChange={(event) => {
                           const nextValue = event.target.value;
-
-                          setSpecifications((current) =>
-                            current.map((item) =>
-                              item.id === specification.id ? { ...item, label: nextValue } : item,
-                            ),
+                          const nextSpecifications = specifications.map((item) =>
+                            item.id === specification.id ? { ...item, label: nextValue } : item,
                           );
+
+                          setSpecifications(nextSpecifications);
+                          syncSpecificationsState(nextSpecifications);
                           syncFieldValue(`product-spec-label-${specification.id}`, nextValue);
                         }}
                         placeholder="Material, Origin, Packaging"
@@ -1293,12 +1375,12 @@ export default function TailadminAddProductPreview() {
                         value={specification.value}
                         onChange={(event) => {
                           const nextValue = event.target.value;
-
-                          setSpecifications((current) =>
-                            current.map((item) =>
-                              item.id === specification.id ? { ...item, value: nextValue } : item,
-                            ),
+                          const nextSpecifications = specifications.map((item) =>
+                            item.id === specification.id ? { ...item, value: nextValue } : item,
                           );
+
+                          setSpecifications(nextSpecifications);
+                          syncSpecificationsState(nextSpecifications);
                           syncFieldValue(`product-spec-value-${specification.id}`, nextValue);
                         }}
                         placeholder="Cotton, China, 12 pcs per carton"
@@ -1316,6 +1398,7 @@ export default function TailadminAddProductPreview() {
                       <button
                         type="button"
                         onClick={() => {
+                          syncSpecificationsState(specifications);
                           const realRemoveButton = document.querySelector<HTMLButtonElement>(
                             `[data-product-spec-remove-id='${specification.id}']`,
                           );
@@ -1339,16 +1422,18 @@ export default function TailadminAddProductPreview() {
           <button
             type="button"
             onClick={() => submitRealProductForm("draft")}
-            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            disabled={isSubmittingProduct}
+            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Draft
+            {pendingSubmitStatus === "draft" ? "Saving..." : "Draft"}
           </button>
           <button
             type="button"
             onClick={() => submitRealProductForm("active")}
-            className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-5 py-3 text-sm font-medium text-white shadow-sm hover:opacity-90"
+            disabled={isSubmittingProduct}
+            className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-5 py-3 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Publish Product
+            {pendingSubmitStatus === "active" ? "Saving..." : "Publish Product"}
           </button>
         </div>
       </div>

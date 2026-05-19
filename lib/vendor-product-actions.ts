@@ -62,6 +62,12 @@ export async function updateVendorProductRecord(id: string, payload: ProductEdit
   });
 }
 
+export async function deleteVendorProductRecord(id: string) {
+  return authorizedProductFetch<ProductDbRow>(`/api/vendor/products/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getVendorProductEditorRecord(id: string) {
   return authorizedProductFetch<ProductEditorRecord>(`/api/vendor/products/${id}`, {
     method: "GET",

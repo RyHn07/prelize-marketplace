@@ -23,11 +23,17 @@ import {
 } from "@/lib/international-shipping/utils";
 import { calculateProductGroupPricing } from "@/lib/product-pricing";
 import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
-import { getProductsByIds } from "@/lib/products/queries";
+import { getProductVariantMapByProductIds, getProductsByIds } from "@/lib/products/queries";
 import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
-import type { CndsShippingProfileOption, InternationalShippingMethodRow, ProductDbRow, ResolvedProductPricingConfig } from "@/types/product-db";
+import type {
+  CndsShippingProfileOption,
+  InternationalShippingMethodRow,
+  ProductDbRow,
+  ProductDbVariantRow,
+  ResolvedProductPricingConfig,
+} from "@/types/product-db";
 
 const MAX_QUANTITY = 9999;
 const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
@@ -264,11 +270,13 @@ export default function CartPage() {
   const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [productRecords, setProductRecords] = useState<ProductDbRow[]>([]);
+  const [productVariantsByProductId, setProductVariantsByProductId] = useState<Map<string, ProductDbVariantRow[]>>(new Map());
   const [pricingConfigByProductId, setPricingConfigByProductId] = useState<Record<string, ResolvedProductPricingConfig>>({});
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileOption>>({});
   const [vendorNamesById, setVendorNamesById] = useState<Record<string, string>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
+  const [isContinuingToCheckout, setIsContinuingToCheckout] = useState(false);
   const hasInitializedSelection = useRef(false);
   const previousItemKeys = useRef<string[]>([]);
 
@@ -395,6 +403,7 @@ export default function CartPage() {
       if (!currentUser) {
         if (isMounted) {
           setProductRecords([]);
+          setProductVariantsByProductId(new Map());
           setPricingConfigByProductId({});
           setCndsProfilesById({});
           setVendorNamesById({});
@@ -410,6 +419,13 @@ export default function CartPage() {
         }
 
         setProductRecords(result.data);
+        const variantsResult = await getProductVariantMapByProductIds(result.data.map((product) => product.id));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setProductVariantsByProductId(variantsResult.data);
         const pricingTierResult = await fetchResolvedProductPricingMap(result.data.map((product) => product.id));
 
         if (!isMounted) {
@@ -469,6 +485,7 @@ export default function CartPage() {
         }
 
         setProductRecords([]);
+        setProductVariantsByProductId(new Map());
         setPricingConfigByProductId({});
         setCndsProfilesById({});
         setVendorNamesById({});
@@ -486,6 +503,10 @@ export default function CartPage() {
   const productRecordMap = useMemo(
     () => new Map(productRecords.map((product) => [product.id, product])),
     [productRecords],
+  );
+  const productVariantRecordMap = useMemo(
+    () => buildVariantRecordMap(productVariantsByProductId),
+    [productVariantsByProductId],
   );
 
   useEffect(() => {
@@ -626,9 +647,7 @@ export default function CartPage() {
                 tiers: assignedTierSet.tiers,
               }
             : null,
-          weight: parseWeight(
-            productMatch?.weight == null ? undefined : String(productMatch.weight)
-          ),
+          weight: resolveItemWeight(item, productMatch, productVariantRecordMap),
           shippingProfile: {
             id: selectedShippingProfile.id,
             name: selectedShippingProfile.name,
@@ -652,7 +671,7 @@ export default function CartPage() {
 
       return result;
     }, {});
-  }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, pricingConfigByProductId, productGroups, productRecordMap, selectedKeySet]);
+  }, [cndsProfilesById, effectiveSelectedShippingProfiles, itemAvailabilityIssues, pricingConfigByProductId, productGroups, productRecordMap, productVariantRecordMap, selectedKeySet]);
 
   const totals = useMemo(() => calculateCartTotals(selectedGroupedItems), [selectedGroupedItems]);
   const pricingByProductId = useMemo(
@@ -775,6 +794,10 @@ export default function CartPage() {
   };
 
   const handleContinueToCheckout = () => {
+    if (isContinuingToCheckout) {
+      return;
+    }
+
     if (selectedCartItems.length === 0) {
       setActionMessage(
         hasUnavailableItems
@@ -783,6 +806,8 @@ export default function CartPage() {
       );
       return;
     }
+
+    setIsContinuingToCheckout(true);
 
     const checkoutDraft: CheckoutDraft = {
       selectedKeys,
@@ -945,9 +970,7 @@ export default function CartPage() {
                             : item.price * item.quantity;
                         const productMatch = productRecordMap.get(item.productId);
                         const availabilityIssue = itemAvailabilityIssues.get(variantKey);
-                        const parsedWeight = parseWeight(
-                              productMatch?.weight == null ? undefined : String(productMatch.weight)
-                            );
+                        const parsedWeight = resolveItemWeight(item, productMatch, productVariantRecordMap);
 
                         return (
                           <div key={variantKey} className="px-4 py-4 sm:px-5">
@@ -1194,11 +1217,11 @@ export default function CartPage() {
               <div className="space-y-3">
                 <button
                   type="button"
-                  disabled={selectedCartItems.length === 0 || !currentUser || !hasCheckedAuth}
+                  disabled={selectedCartItems.length === 0 || !currentUser || !hasCheckedAuth || isContinuingToCheckout}
                   onClick={handleContinueToCheckout}
                   className="inline-flex w-full items-center justify-center rounded-full bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
                 >
-                  Continue to Checkout
+                  {isContinuingToCheckout ? "Continuing..." : "Continue to Checkout"}
                 </button>
                 <Link
                   href="/products"
@@ -1228,5 +1251,37 @@ export default function CartPage() {
         )}
       </section>
   );
+}
+
+function buildVariantRecordMap(variantsByProductId: Map<string, ProductDbVariantRow[]>) {
+  const variantMap = new Map<string, ProductDbVariantRow>();
+
+  variantsByProductId.forEach((variants) => {
+    variants.forEach((variant) => {
+      variantMap.set(variant.id, variant);
+    });
+  });
+
+  return variantMap;
+}
+
+function resolveItemWeight(
+  item: QuoteItem,
+  product: ProductDbRow | undefined,
+  variantRecordMap: Map<string, ProductDbVariantRow>,
+) {
+  if (typeof item.weight === "number" && Number.isFinite(item.weight) && item.weight > 0) {
+    return item.weight;
+  }
+
+  if (item.variantId) {
+    const variantWeight = variantRecordMap.get(item.variantId)?.weight;
+
+    if (typeof variantWeight === "number" && Number.isFinite(variantWeight) && variantWeight > 0) {
+      return variantWeight;
+    }
+  }
+
+  return parseWeight(product?.weight == null ? undefined : String(product.weight));
 }
 

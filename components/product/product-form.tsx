@@ -81,8 +81,15 @@ type VariationBridgeVariation = {
   pricing_tier_set_id: string;
   moq: string;
   stock: string;
+  weight: string;
   summary: string;
   image_url: string;
+};
+
+type SpecificationBridgeSpecification = {
+  id: string;
+  label: string;
+  value: string;
 };
 
 function createId(prefix: string) {
@@ -114,6 +121,7 @@ function createEmptyVariation(): ProductVariationFormValue {
     discount_price: "",
     moq: "1",
     stock: "0",
+    weight: "",
     image_url: "",
     pricing_tier_set_id: "",
     attribute_values: {},
@@ -193,6 +201,7 @@ function buildGeneratedVariationsFromAttributes(
       discount_price: "",
       moq: moq || "1",
       stock: "0",
+      weight: "",
       image_url: "",
       pricing_tier_set_id: pricingTierSets[0]?.id ?? "",
       attribute_values: attributeValues,
@@ -368,6 +377,7 @@ function getInitialValues(
         discount_price: variant.discount_price !== null ? String(variant.discount_price) : "",
         moq: String(variant.moq),
         stock: String(variant.stock ?? 0),
+        weight: variant.weight !== null && variant.weight !== undefined ? String(variant.weight) : "",
         image_url: variant.image_url ?? "",
         pricing_tier_set_id: variant.pricing_tier_set_id ?? defaultTierSetId,
         attribute_values: variant.attribute_values ?? {},
@@ -521,6 +531,7 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
       price: getEffectivePrice(regularPrice, discountPrice),
       moq,
       stock,
+      weight: parseNumber(variation.weight),
       image_url: normalizeOptionalText(variation.image_url),
       pricing_tier_set_id: variation.pricing_tier_set_id || null,
       attribute_values: variation.attribute_values,
@@ -605,6 +616,7 @@ function buildVariationBridgeState(variations: ProductVariationFormValue[]): Var
     pricing_tier_set_id: variation.pricing_tier_set_id,
     moq: variation.moq,
     stock: variation.stock,
+    weight: variation.weight,
     summary: Object.entries(variation.attribute_values)
       .map(([key, value]) => `${key}: ${value}`)
       .join(" | "),
@@ -1162,6 +1174,20 @@ function ProductForm({
       return;
     }
 
+    window.dispatchEvent(
+      new CustomEvent("prelize:product-type-state-updated", {
+        detail: {
+          productType: values.product_type,
+        },
+      }),
+    );
+  }, [values.product_type]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
     const handleAddGalleryImages = (event: Event) => {
       const customEvent = event as CustomEvent<{ images?: string[] }>;
       const nextImages = (customEvent.detail?.images ?? []).filter((image) => image.trim().length > 0);
@@ -1179,9 +1205,9 @@ function ProductForm({
       }));
     };
 
-    const handleRemoveGalleryImage = (event: Event) => {
-      const customEvent = event as CustomEvent<{ imageUrl?: string }>;
-      const imageUrl = customEvent.detail?.imageUrl?.trim();
+      const handleRemoveGalleryImage = (event: Event) => {
+        const customEvent = event as CustomEvent<{ imageUrl?: string }>;
+        const imageUrl = customEvent.detail?.imageUrl?.trim();
 
       if (!imageUrl) {
         return;
@@ -1189,9 +1215,24 @@ function ProductForm({
 
       setValues((current) => ({
         ...current,
-        gallery_images: current.gallery_images.filter((currentImage) => currentImage !== imageUrl),
-      }));
-    };
+          gallery_images: current.gallery_images.filter((currentImage) => currentImage !== imageUrl),
+        }));
+      };
+
+      const handleSetGalleryImagesOrder = (event: Event) => {
+        const customEvent = event as CustomEvent<{ images?: string[] }>;
+        const nextImages =
+          customEvent.detail?.images?.filter((image) => typeof image === "string" && image.trim().length > 0) ?? null;
+
+        if (!nextImages) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          gallery_images: nextImages,
+        }));
+      };
 
       const handleSetMainImage = (event: Event) => {
         const customEvent = event as CustomEvent<{ imageUrl?: string | null }>;
@@ -1265,6 +1306,29 @@ function ProductForm({
         setErrorMessage("");
       };
 
+      const handleSetSpecificationsState = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          specifications?: SpecificationBridgeSpecification[];
+        }>;
+
+        const nextSpecifications =
+          customEvent.detail?.specifications?.map((specification) => ({
+            id: specification.id,
+            label: specification.label,
+            value: specification.value,
+          })) ?? null;
+
+        if (!nextSpecifications) {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          specifications: nextSpecifications,
+        }));
+        setErrorMessage("");
+      };
+
       const handleSetProductTypeFromBridge = (event: Event) => {
         const customEvent = event as CustomEvent<{
           productType?: "single" | "variable";
@@ -1313,6 +1377,22 @@ function ProductForm({
         setValues((current) => ({
           ...current,
           name: customEvent.detail?.name ?? "",
+        }));
+        setErrorMessage("");
+      };
+
+      const handleSetProductWeightFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          weight?: string;
+        }>;
+
+        if (typeof customEvent.detail?.weight !== "string") {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          weight: customEvent.detail?.weight ?? "",
         }));
         setErrorMessage("");
       };
@@ -1403,32 +1483,63 @@ function ProductForm({
         setErrorMessage("");
       };
 
+      const handleSetVariationWeightFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          variationId?: string;
+          weight?: string;
+        }>;
+
+        const variationId = customEvent.detail?.variationId?.trim();
+
+        if (!variationId || typeof customEvent.detail?.weight !== "string") {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          variations: current.variations.map((variation) =>
+            variation.id === variationId
+              ? { ...variation, weight: customEvent.detail?.weight ?? "" }
+              : variation,
+          ),
+        }));
+        setErrorMessage("");
+      };
+
       window.addEventListener("prelize:add-gallery-images", handleAddGalleryImages as EventListener);
       window.addEventListener("prelize:remove-gallery-image", handleRemoveGalleryImage as EventListener);
+      window.addEventListener("prelize:set-gallery-images-order", handleSetGalleryImagesOrder as EventListener);
       window.addEventListener("prelize:set-main-image", handleSetMainImage as EventListener);
       window.addEventListener("prelize:set-pricing-state", handleSetPricingState as EventListener);
       window.addEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
+      window.addEventListener("prelize:set-specifications-state", handleSetSpecificationsState as EventListener);
       window.addEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
       window.addEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
       window.addEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+      window.addEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
       window.addEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
       window.addEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
       window.addEventListener("prelize:remove-variation", handleRemoveVariationFromBridge as EventListener);
       window.addEventListener("prelize:set-variation-image", handleSetVariationImageFromBridge as EventListener);
+      window.addEventListener("prelize:set-variation-weight", handleSetVariationWeightFromBridge as EventListener);
 
       return () => {
         window.removeEventListener("prelize:add-gallery-images", handleAddGalleryImages as EventListener);
         window.removeEventListener("prelize:remove-gallery-image", handleRemoveGalleryImage as EventListener);
+        window.removeEventListener("prelize:set-gallery-images-order", handleSetGalleryImagesOrder as EventListener);
         window.removeEventListener("prelize:set-main-image", handleSetMainImage as EventListener);
         window.removeEventListener("prelize:set-pricing-state", handleSetPricingState as EventListener);
         window.removeEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
+        window.removeEventListener("prelize:set-specifications-state", handleSetSpecificationsState as EventListener);
         window.removeEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+        window.removeEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
         window.removeEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
         window.removeEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
         window.removeEventListener("prelize:remove-variation", handleRemoveVariationFromBridge as EventListener);
         window.removeEventListener("prelize:set-variation-image", handleSetVariationImageFromBridge as EventListener);
+        window.removeEventListener("prelize:set-variation-weight", handleSetVariationWeightFromBridge as EventListener);
       };
   }, [values.moq, values.pricing_tier_sets, values.variations]);
 
@@ -1966,6 +2077,20 @@ function ProductForm({
     });
   }, [pathname, router, searchParams, searchParamsString]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:product-submit-state-updated", {
+        detail: {
+          isSubmitting,
+        },
+      }),
+    );
+  }, [isSubmitting]);
+
   return (
     <form id="product-editor-form" noValidate onSubmit={handleSubmit} className="space-y-6">
       {errorMessage ? (
@@ -2085,6 +2210,7 @@ function ProductForm({
                         <input
                           type="radio"
                           name="product_type"
+                          value={type}
                           checked={isSelected}
                           onChange={() => updateField("product_type", type)}
                           className="mt-1 h-4 w-4 border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
@@ -2542,7 +2668,7 @@ function ProductForm({
                                 This variation will use the selected tier set and its own fallback price.
                               </p>
                             </div>
-                            <div className="grid gap-4 sm:grid-cols-3">
+                          <div className="grid gap-4 sm:grid-cols-3">
                               <NumberField
                                 id={`variation-moq-${variation.id}`}
                                 label="MOQ"
@@ -2561,6 +2687,15 @@ function ProductForm({
                                 placeholder="0"
                                 min="0"
                                 step="1"
+                              />
+                              <NumberField
+                                id={`variation-weight-${variation.id}`}
+                                label="Weight (kg)"
+                                value={variation.weight}
+                                onChange={(value) => handleVariationChange(variation.id, "weight", value)}
+                                placeholder="0.5"
+                                min="0"
+                                step="0.01"
                               />
                             </div>
 

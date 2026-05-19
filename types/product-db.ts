@@ -340,6 +340,7 @@ export type ProductVariationFormValue = {
   discount_price: string;
   moq: string;
   stock: string;
+  weight: string;
   image_url: string;
   pricing_tier_set_id: string;
   attribute_values: ProductVariantAttributeValues;

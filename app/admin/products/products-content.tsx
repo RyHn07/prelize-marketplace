@@ -7,6 +7,8 @@ import { useSearchParams } from "next/navigation";
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { AdminDropdown } from "@/components/admin/admin-dropdown";
 import { AdminDropdownItem } from "@/components/admin/admin-dropdown-item";
+import ConfirmationDialog from "@/components/confirmation-dialog";
+import { deleteAdminProductRecord } from "@/lib/admin-product-actions";
 import { getProductManagementAccessState } from "@/lib/marketplace-access";
 import { getProductCategoryOptions, getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -107,9 +109,12 @@ export default function ProductsContent() {
   const [vendorOptions, setVendorOptions] = useState<ProductVendorOption[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<ProductCategoryOption[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ProductStatus>("all");
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [pendingDeleteProduct, setPendingDeleteProduct] = useState<ProductDbRow | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -198,6 +203,33 @@ export default function ProductsContent() {
     return "";
   }, [searchParams]);
 
+  const handleDeleteProduct = async () => {
+    if (!pendingDeleteProduct) {
+      return;
+    }
+
+    setDeletingProductId(pendingDeleteProduct.id);
+    setErrorMessage("");
+    setActionMessage("");
+
+    try {
+      const result = await deleteAdminProductRecord(pendingDeleteProduct.id);
+
+      if (result.error) {
+        setErrorMessage(result.error.message);
+        return;
+      }
+
+      setProducts((current) => current.filter((currentProduct) => currentProduct.id !== pendingDeleteProduct.id));
+      setActionMessage("Product deleted successfully.");
+      setPendingDeleteProduct(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to delete the product.");
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
   const activeCount = useMemo(
     () => products.filter((product) => getProductStatus(product) === "active").length,
     [products],
@@ -253,6 +285,28 @@ export default function ProductsContent() {
 
   return (
     <section className="w-full space-y-6">
+      <ConfirmationDialog
+        open={pendingDeleteProduct !== null}
+        title="Delete Product?"
+        description={
+          pendingDeleteProduct
+            ? `Delete "${pendingDeleteProduct.name}" permanently from the product list?`
+            : ""
+        }
+        confirmLabel="Delete Product"
+        cancelLabel="Keep Product"
+        tone="danger"
+        isConfirming={pendingDeleteProduct ? deletingProductId === pendingDeleteProduct.id : false}
+        onConfirm={() => void handleDeleteProduct()}
+        onCancel={() => {
+          if (deletingProductId) {
+            return;
+          }
+
+          setPendingDeleteProduct(null);
+        }}
+      />
+
       <div className="rounded-2xl border border-gray-200 bg-white">
         <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -324,8 +378,8 @@ export default function ProductsContent() {
           </div>
         </div>
 
-        {successMessage ? (
-          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 sm:px-6">{successMessage}</div>
+        {successMessage || actionMessage ? (
+          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 sm:px-6">{actionMessage || successMessage}</div>
         ) : null}
 
         {errorMessage ? (
@@ -460,6 +514,16 @@ export default function ProductsContent() {
                                 className="flex rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                               >
                                 View Storefront
+                              </AdminDropdownItem>
+                              <AdminDropdownItem
+                                onClick={() => {
+                                  setPendingDeleteProduct(product);
+                                  setOpenActionMenuId(null);
+                                }}
+                                onItemClick={() => setOpenActionMenuId(null)}
+                                className="flex rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                              >
+                                {deletingProductId === product.id ? "Deleting..." : "Delete Product"}
                               </AdminDropdownItem>
                             </AdminDropdown>
                           </div>
