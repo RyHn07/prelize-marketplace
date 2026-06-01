@@ -464,8 +464,7 @@ async function syncProductRelationTables(
   productId: string,
   payload: ProductUpsertPayload,
 ) {
-  const imageRows = payload.gallery_images
-    .filter(Boolean)
+  const imageRows = Array.from(new Set(payload.gallery_images.map((imageUrl) => imageUrl.trim()).filter(Boolean)))
     .map((imageUrl, index) => ({
       product_id: productId,
       image_url: imageUrl,

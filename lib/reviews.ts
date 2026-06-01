@@ -121,6 +121,52 @@ export async function listProductReviewsByProductIds(productIds: string[], clien
   };
 }
 
+export async function getProductReviewSummaryMap(productIds: string[], client?: SupabaseClient) {
+  const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
+
+  if (uniqueIds.length === 0) {
+    return {
+      data: new Map<string, { averageRating: number; reviewCount: number }>(),
+      error: null,
+    };
+  }
+
+  const supabase = resolveSupabaseClient(client);
+  const { data, error } = await supabase
+    .from("product_reviews")
+    .select("product_id, rating")
+    .in("product_id", uniqueIds);
+
+  if (error && isMissingRelationError(error.message)) {
+    return {
+      data: new Map<string, { averageRating: number; reviewCount: number }>(),
+      error: null,
+    };
+  }
+
+  const totals = new Map<string, { ratingTotal: number; reviewCount: number }>();
+
+  ((data ?? []) as Array<{ product_id: string; rating: number }>).forEach((row) => {
+    const current = totals.get(row.product_id) ?? { ratingTotal: 0, reviewCount: 0 };
+    current.ratingTotal += normalizeRating(row.rating) ?? 0;
+    current.reviewCount += 1;
+    totals.set(row.product_id, current);
+  });
+
+  return {
+    data: new Map(
+      Array.from(totals.entries()).map(([productId, total]) => [
+        productId,
+        {
+          averageRating: total.reviewCount > 0 ? total.ratingTotal / total.reviewCount : 0,
+          reviewCount: total.reviewCount,
+        },
+      ]),
+    ),
+    error,
+  };
+}
+
 export async function listOrderReviewEligibility(
   userId: string,
   userEmail: string | null,

@@ -8,6 +8,7 @@ import {
   getPublicProducts,
 } from "@/lib/products/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type { Category, Product } from "@/types/product";
 import type {
@@ -204,6 +205,7 @@ function sortByCreatedAtDescending(left: ProductDbRow, right: ProductDbRow) {
 function mapProductsToStorefront(
   products: ProductDbRow[],
   imageMap: Map<string, string[]>,
+  reviewSummaryMap: Map<string, { averageRating: number; reviewCount: number }>,
   categories: ProductCategoryOption[],
   vendors: ProductVendorOption[],
 ): Product[] {
@@ -221,6 +223,7 @@ function mapProductsToStorefront(
       },
       categories,
       vendors,
+      reviewSummaryMap.get(product.id),
     ),
   );
 }
@@ -294,9 +297,13 @@ async function resolveHomepageProductSectionProducts(
   }
 
   const limitedProducts = scopedProducts.slice(0, section.limit_count);
-  const { data: imageMap } = await getProductImageMapByProductIds(limitedProducts.map((product) => product.id));
+  const productIds = limitedProducts.map((product) => product.id);
+  const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
+    getProductImageMapByProductIds(productIds),
+    getProductReviewSummaryMap(productIds),
+  ]);
 
-  return mapProductsToStorefront(limitedProducts, imageMap, categoryOptions, vendorOptions);
+  return mapProductsToStorefront(limitedProducts, imageMap, reviewSummaryMap, categoryOptions, vendorOptions);
 }
 
 export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClient) {

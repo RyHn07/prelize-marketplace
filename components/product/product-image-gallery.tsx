@@ -106,13 +106,14 @@ export default function ProductImageGallery({
   const showFloatingArrows = images.length > VISIBLE_THUMBNAILS;
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="overflow-hidden rounded-lg bg-slate-100">
         <div className="relative aspect-square">
           <Image
             src={activeImage}
             alt={productName}
             fill
+            loading="eager"
             sizes="(min-width: 1280px) 36vw, 100vw"
             className="object-cover"
           />

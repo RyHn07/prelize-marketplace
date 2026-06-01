@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import ProductCard from "@/components/product/product-card";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getProductReviewSummaryMap } from "@/lib/reviews";
 import {
   getProductCategoryOptions,
   getProductImageMapByProductIds,
@@ -45,7 +46,11 @@ export default async function VendorStorefrontPage({ params }: VendorStorefrontP
     getProductCategoryOptions(),
     getVendorOptions(),
   ]);
-  const { data: imageMap } = await getProductImageMapByProductIds(products.map((product) => product.id));
+  const productIds = products.map((product) => product.id);
+  const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
+    getProductImageMapByProductIds(productIds),
+    getProductReviewSummaryMap(productIds),
+  ]);
 
   const storefrontProducts = products.map((product) =>
     mapProductDbToStorefrontProduct(
@@ -57,6 +62,7 @@ export default async function VendorStorefrontPage({ params }: VendorStorefrontP
       },
       categoryOptions,
       vendorOptions,
+      reviewSummaryMap.get(product.id),
     ),
   );
 

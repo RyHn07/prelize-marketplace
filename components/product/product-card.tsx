@@ -68,17 +68,11 @@ function Badge({ label }: { label: NonNullable<Product["badge"]> }) {
   );
 }
 
-function getCardMeta(productId: string) {
+function getDeliveryWindow(productId: string) {
   const seed = Number(productId.replace(/\D/g, "")) || 1;
-  const ratings = ["4.8", "4.7", "4.9", "4.6"];
-  const reviewCounts = [18, 26, 34, 12];
   const deliveryWindows = ["20-25 days", "18-22 days", "15-20 days", "22-28 days"];
 
-  return {
-    rating: ratings[(seed - 1) % ratings.length],
-    reviewCount: reviewCounts[(seed - 1) % reviewCounts.length],
-    delivery: deliveryWindows[(seed - 1) % deliveryWindows.length],
-  };
+  return deliveryWindows[(seed - 1) % deliveryWindows.length];
 }
 
 function formatPriceLabel(price: string | number) {
@@ -86,7 +80,10 @@ function formatPriceLabel(price: string | number) {
 }
 
 export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
-  const meta = getCardMeta(product.id);
+  const averageRating = product.averageRating ?? 0;
+  const reviewCount = product.reviewCount ?? 0;
+  const roundedRating = Math.max(0, Math.min(5, Math.round(averageRating)));
+  const deliveryWindow = getDeliveryWindow(product.id);
   const isListView = viewMode === "list";
   const [isWishlisted, setIsWishlisted] = useState(false);
 
@@ -186,9 +183,10 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
         <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 sm:text-xs">
           <div className="flex items-center gap-1.5">
             <span className="-mt-0.5 text-[11px] leading-none tracking-tight text-amber-400 sm:text-[19px]">
-              ★★★★★
+              {"★".repeat(roundedRating)}
+              <span className="text-slate-200">{"★".repeat(5 - roundedRating)}</span>
             </span>
-            <span className="font-medium text-slate-600">{meta.rating} ({meta.reviewCount})</span>
+            <span className="font-medium text-slate-600">{averageRating.toFixed(1)} ({reviewCount})</span>
           </div>
           <span>MOQ: {product.moq}</span>
         </div>
@@ -196,7 +194,7 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
         <div className="mt-auto flex flex-wrap items-center gap-1.5 text-[8px] text-slate-500 sm:text-[11px]">
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 font-medium text-slate-600">
             <DeliveryIcon />
-            <span>CN to BD · {meta.delivery}</span>
+            <span>CN to BD · {deliveryWindow}</span>
           </span>
         </div>
       </div>

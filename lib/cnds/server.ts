@@ -29,18 +29,25 @@ export async function getActiveCndsShippingProfileById(profileId: string | null 
     };
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const { data, error } = await supabase
-    .from("cnds_shipping_profiles")
-    .select(
-      "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
-    )
-    .eq("id", profileId)
-    .eq("is_active", true)
-    .maybeSingle();
+  try {
+    const supabase = getSupabaseServiceRoleClient();
+    const { data, error } = await supabase
+      .from("cnds_shipping_profiles")
+      .select(
+        "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
+      )
+      .eq("id", profileId)
+      .eq("is_active", true)
+      .maybeSingle();
 
-  return {
-    data: data ? normalizeCndsProfile(data as RawCndsProfileLookupRow) : null,
-    error,
-  };
+    return {
+      data: data ? normalizeCndsProfile(data as RawCndsProfileLookupRow) : null,
+      error,
+    };
+  } catch (error) {
+    return {
+      data: null as CndsShippingProfileRow | null,
+      error: error instanceof Error ? error : new Error("Unable to load CNDS shipping profile."),
+    };
+  }
 }

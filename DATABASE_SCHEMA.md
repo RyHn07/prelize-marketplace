@@ -38,7 +38,7 @@ Current fields inferred from the code:
 | `product_type` | text nullable | No | `single` or `variable` |
 | `regular_price` | numeric nullable | No | Editor-facing base price |
 | `discount_price` | numeric nullable | No | Optional discounted price |
-| `gallery_images` | text[] or jsonb nullable | No | Gallery images used by the editor |
+| `gallery_images` | jsonb nullable | No | Legacy compatibility copy of gallery URLs; normalized rows live in `product_images` |
 | `attributes` | jsonb nullable | No | Attribute definitions for variable products |
 | `cdd_shipping_profile` | text nullable | No | Shipping profile used by current buying flow |
 | `created_at` | timestamp | Yes | Creation timestamp |
@@ -50,6 +50,24 @@ Current gaps:
 - No reviews field yet
 - Vendor identity is not surfaced on public storefront pages yet
 - Product ownership and order-time vendor persistence now exist, but buyer-facing vendor exposure is still incomplete
+
+### Product image storage and normalization
+
+Image files are stored in the public Supabase Storage bucket named `product-media`. PostgreSQL stores image URLs and media metadata, not image binaries.
+
+The normalized product gallery source is `product_images`:
+
+| Column | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `id` | uuid | Yes | Primary key |
+| `product_id` | uuid | Yes | References `products.id` with cascade delete |
+| `image_url` | text | Yes | Public storage URL |
+| `sort_order` | integer nullable | No | Gallery display order |
+| `created_at` | timestamptz | Yes | Creation timestamp |
+
+`20260520_normalize_product_images.sql` backfills legacy `products.gallery_images` values into `product_images`, inserts `products.image_url` when a product has no gallery rows, removes duplicate rows, and adds a unique `(product_id, image_url)` index.
+
+The legacy `products.gallery_images` field remains temporarily for compatibility. New product saves synchronize the relational `product_images` rows, and storefront reads prefer those normalized rows.
 
 ### 2. `orders`
 
@@ -412,6 +430,7 @@ Recommended access rules:
 - [~] Replace hardcoded admin email access with role tables
 - [x] Add `vendors` and `vendor_members` when multivendor implementation begins
 - [x] Wire checkout and vendor/admin order views to `vendor_orders`, `order_items.vendor_id`, and `order_items.vendor_order_id`
+- [x] Normalize legacy product gallery URLs into `product_images`
 - [ ] Expose vendor-aware order structure clearly in customer order history
 
 ## Notes for Current Implementation
@@ -426,6 +445,7 @@ Important current assumptions in code:
 - Vendor order pages and admin vendor-order monitoring are implemented
 - RLS policies exist for multivendor tables, and the recursion-safe `public.is_platform_admin()` helper is part of the current direction
 - Seller wording is now neutral in customer-facing flows, but vendor identity is still not shown on buyer-facing pages
+- Product gallery reads prefer normalized `product_images` rows, with `products.gallery_images` retained as a temporary compatibility fallback
 - The app already expects `payment_method`, `payment_status`, and `admin_note` to exist or be added to `orders`
 
 Because of that, the next implementation step should be:

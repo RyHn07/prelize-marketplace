@@ -143,6 +143,7 @@ export function mapProductDbToStorefrontProduct(
   product: ProductDbRow,
   categories: ProductCategoryOption[] = [],
   vendors: ProductVendorOption[] = [],
+  reviewSummary?: { averageRating: number; reviewCount: number },
 ): Product {
   const category = getCategoryById(product.category_id, categories);
   const gallery = buildGallery(product);
@@ -161,6 +162,8 @@ export function mapProductDbToStorefrontProduct(
     description: product.description ?? "Product description will be updated soon.",
     specifications: buildSpecifications(product),
     reviews: buildReviews(product),
+    averageRating: reviewSummary?.averageRating ?? 0,
+    reviewCount: reviewSummary?.reviewCount ?? 0,
     buyerNotes: buildBuyerNotes(product),
     category: category?.slug ?? "uncategorized",
     vendorName: getVendorName(product, vendors),

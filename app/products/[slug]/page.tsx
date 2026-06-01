@@ -13,12 +13,12 @@ import {
   getProductImageMapByProductIds,
   getProductSpecsByProductId,
   getPublicProductDetailBySlug,
+  getPublicProductSoldCount,
   getPublicProducts,
   getResolvedProductPricingMapByProducts,
 } from "@/lib/products/queries";
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
-import { listProductReviews, mapReviewRowToStorefrontReview } from "@/lib/reviews";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getProductReviewSummaryMap, listProductReviews, mapReviewRowToStorefrontReview } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type { ProductSpecification } from "@/types/product";
 
@@ -48,11 +48,10 @@ type ProductDetailsPageProps = {
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
-  const supabase = getSupabaseServiceRoleClient();
   const [{ data: categoryOptions }, { data: vendorOptions }, { data: productDetail }, { data: publicProducts }] = await Promise.all([
     getProductCategoryOptions(),
     getVendorOptions(),
-    getPublicProductDetailBySlug(slug, supabase),
+    getPublicProductDetailBySlug(slug),
     getPublicProducts(),
   ]);
 
@@ -61,13 +60,14 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   }
 
   const { product: productRow, variants } = productDetail;
-  const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }, { data: productReviews }] = await Promise.all([
+  const [{ data: productImages }, { data: productSpecs }, { data: resolvedPricingMap }, { data: cndsProfile }, { data: internationalShippingMethods }, { data: productReviews }, { data: soldCount }] = await Promise.all([
     getProductImagesByProductId(productRow.id),
     getProductSpecsByProductId(productRow.id),
-    getResolvedProductPricingMapByProducts([productRow], supabase),
+    getResolvedProductPricingMapByProducts([productRow]),
     getActiveCndsShippingProfileById(productRow.cnds_profile_id),
     getActiveInternationalShippingMethodsForServer(),
-    listProductReviews(productRow.id, supabase),
+    listProductReviews(productRow.id),
+    getPublicProductSoldCount(productRow.id),
   ]);
   const productPricingConfig = resolvedPricingMap.get(productRow.id) ?? {
     source: null,
@@ -105,9 +105,11 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
   const relatedProductRows = publicProducts
     .filter((item) => item.category_id === productRow.category_id && item.slug !== productRow.slug)
     .slice(0, 4);
-  const { data: relatedImageMap } = await getProductImageMapByProductIds(
-    relatedProductRows.map((item) => item.id),
-  );
+  const relatedProductIds = relatedProductRows.map((item) => item.id);
+  const [{ data: relatedImageMap }, { data: relatedReviewSummaryMap }] = await Promise.all([
+    getProductImageMapByProductIds(relatedProductIds),
+    getProductReviewSummaryMap(relatedProductIds),
+  ]);
   const relatedProducts = relatedProductRows.map((item) =>
     mapProductDbToStorefrontProduct(
       {
@@ -118,6 +120,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
       },
       categoryOptions,
       vendorOptions,
+      relatedReviewSummaryMap.get(item.id),
     ),
   );
 
@@ -138,7 +141,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
           </nav>
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-[1.15fr_0.95fr_0.8fr]">
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.95fr)_minmax(0,0.8fr)]">
           <ProductImageGallery
             productId={product.id}
             productName={product.name}
@@ -153,6 +156,7 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
           productPricingConfig={productPricingConfig}
           cndsProfile={cndsProfile}
           internationalShippingMethods={internationalShippingMethods}
+          soldCount={soldCount}
         />
         </div>
 

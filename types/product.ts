@@ -31,6 +31,8 @@ export interface Product {
   description: string;
   specifications: ProductSpecification[];
   reviews?: ProductReview[];
+  averageRating?: number;
+  reviewCount?: number;
   buyerNotes: BuyerNote[];
   category: string;
   vendorName?: string | null;

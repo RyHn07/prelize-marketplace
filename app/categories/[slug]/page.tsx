@@ -9,6 +9,7 @@ import {
   type ProductBrowseSort,
 } from "@/lib/products/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 
 type CategoryPageProps = {
@@ -51,7 +52,11 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     ...filters,
     category: slug,
   });
-  const { data: imageMap } = await getProductImageMapByProductIds(scopedProducts.map((product) => product.id));
+  const productIds = scopedProducts.map((product) => product.id);
+  const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
+    getProductImageMapByProductIds(productIds),
+    getProductReviewSummaryMap(productIds),
+  ]);
   const storefrontProducts = scopedProducts.map((product) =>
     mapProductDbToStorefrontProduct(
       {
@@ -62,6 +67,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
       },
       categoryOptions,
       vendorOptions,
+      reviewSummaryMap.get(product.id),
     ),
   );
 

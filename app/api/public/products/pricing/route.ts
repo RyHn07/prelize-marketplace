@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import { getProductsByIds, getResolvedProductPricingMapByProducts } from "@/lib/products/queries";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
 
 export async function GET(request: Request) {
   try {
@@ -13,15 +12,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ data: {} });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const productsResult = await getProductsByIds(ids, supabase);
+    const productsResult = await getProductsByIds(ids);
 
     if (productsResult.error) {
       return NextResponse.json({ error: productsResult.error.message }, { status: 500 });
     }
 
     const publicProducts = productsResult.data.filter((product) => product.is_active && product.status === "active");
-    const pricingResult = await getResolvedProductPricingMapByProducts(publicProducts, supabase);
+    const pricingResult = await getResolvedProductPricingMapByProducts(publicProducts);
 
     if (pricingResult.error) {
       return NextResponse.json({ error: pricingResult.error.message }, { status: 500 });

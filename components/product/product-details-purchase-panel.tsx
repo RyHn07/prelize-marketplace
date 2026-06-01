@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { addToQuote } from "@/components/quote/quote-utils";
@@ -104,6 +105,12 @@ function buildProductOptions(
     return variants.map((variant) => {
       const assignedTierSet =
         variant.pricing_tier_set_id ? tierSetById.get(variant.pricing_tier_set_id) ?? null : null;
+      const variantRegularPrice =
+        variant.regular_price && variant.regular_price > 0
+          ? variant.regular_price
+          : variant.price > 0
+            ? variant.price
+            : productRecord.regular_price ?? productRecord.price;
 
       return {
         id: variant.id,
@@ -120,7 +127,7 @@ function buildProductOptions(
         ) || variant.name,
         price:
           assignedTierSet?.fallback_price ??
-          getEffectivePrice(variant.regular_price ?? variant.price, variant.discount_price),
+          getEffectivePrice(variantRegularPrice, variant.discount_price),
         moq: variant.moq,
         stock: Math.max(0, variant.stock ?? 0),
         weight: typeof variant.weight === "number" && Number.isFinite(variant.weight) ? variant.weight : null,
@@ -396,6 +403,7 @@ export default function ProductDetailsPurchasePanel({
   productPricingConfig,
   cndsProfile,
   internationalShippingMethods,
+  soldCount,
 }: {
   product: Product;
   productRecord: ProductDbRow;
@@ -403,6 +411,7 @@ export default function ProductDetailsPurchasePanel({
   productPricingConfig: ResolvedProductPricingConfig;
   cndsProfile: CndsShippingProfileRow | null;
   internationalShippingMethods: InternationalShippingMethodRow[];
+  soldCount: number;
 }) {
   const router = useRouter();
   const reviewCount = product.reviews?.length ?? 0;
@@ -411,7 +420,6 @@ export default function ProductDetailsPurchasePanel({
       ? (product.reviews ?? []).reduce((sum, review) => sum + (typeof review.rating === "number" ? review.rating : 0), 0) / reviewCount
       : 0;
   const roundedAverageRating = Math.max(0, Math.min(5, Math.round(averageRating)));
-  const [showAllVariants, setShowAllVariants] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [showCartPopup, setShowCartPopup] = useState(false);
   const [isProcessingCartAction, setIsProcessingCartAction] = useState(false);
@@ -463,7 +471,6 @@ export default function ProductDetailsPurchasePanel({
   useEffect(() => {
     setSelectedAttributes(buildDefaultSelectedAttributes(optionAttributes, attributeImageMap));
     setQuantities(Object.fromEntries(productOptions.map((option) => [option.id, 0])));
-    setShowAllVariants(false);
     setSelectedShippingMethodId(internationalShippingMethods[0]?.id ?? "");
   }, [attributeImageMap, internationalShippingMethods, optionAttributes, product.id, productOptions]);
 
@@ -483,9 +490,6 @@ export default function ProductDetailsPurchasePanel({
       ),
     );
   }, [productOptions, selectedAttributes]);
-
-  const visibleOptions = showAllVariants ? filteredOptions : filteredOptions.slice(0, 4);
-  const shouldShowSeeAll = filteredOptions.length > 4;
 
   const totals = useMemo(() => {
     const quantity = productOptions.reduce((sum, option) => sum + (quantities[option.id] ?? 0), 0);
@@ -681,7 +685,7 @@ export default function ProductDetailsPurchasePanel({
               {reviewCount > 0 ? `${averageRating.toFixed(1)} · ${reviewCount} Reviews` : "0 Reviews"}
             </span>
             <span className="text-slate-300">|</span>
-            <span>Sold: 26</span>
+            <span>Sold: {soldCount.toLocaleString()}</span>
           </div>
         </div>
 
@@ -755,10 +759,10 @@ export default function ProductDetailsPurchasePanel({
           ) : null}
 
           <div className="space-y-4">
-            <div className="flex items-center gap-4 text-base font-semibold text-slate-900">
+            <div className="flex items-center gap-3 text-base font-semibold text-slate-900">
               <div className="min-w-0 flex-1">{optionColumnLabel}</div>
-              <div className="w-20 text-left">Price</div>
-              <div className="w-[140px] text-left">Quantity</div>
+              <div className="w-16 shrink-0 text-right">Price</div>
+              <div className="w-[140px] shrink-0 text-left">Quantity</div>
             </div>
 
             {filteredOptions.length === 0 ? (
@@ -766,19 +770,37 @@ export default function ProductDetailsPurchasePanel({
                 No matching variants found for the selected options.
               </div>
             ) : (
-              <div className="space-y-4">
-                {visibleOptions.map((option) => (
-                  <div key={option.id} className="flex items-center gap-4 text-sm">
-                    <div className="min-w-0 flex-1 self-center">
-                      <span className="block text-slate-900">
-                        {option.attributeValues[optionColumnLabel] ?? option.label}
-                      </span>
-                      <span className="mt-1 block text-xs text-slate-500">
-                        MOQ: {option.moq}
-                        {option.stock > 0 ? ` | Stock: ${option.stock}` : ""}
-                      </span>
+              <div className="max-h-[368px] space-y-4 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {filteredOptions.map((option) => (
+                  <div key={option.id} className="flex items-center gap-3 text-sm">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 self-center">
+                      {productRecord.product_type === "variable" ? (
+                        <button
+                          type="button"
+                          onClick={() => setStorefrontProductImage(option.image)}
+                          className="shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 transition-colors hover:border-[#615FFF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#615FFF]/40"
+                          aria-label={`Show ${option.label} product image`}
+                        >
+                          <Image
+                            src={option.image}
+                            alt={`${option.label} variation`}
+                            width={48}
+                            height={48}
+                            className="h-12 w-12 object-cover"
+                          />
+                        </button>
+                      ) : null}
+                      <div className="min-w-0">
+                        <span className="block break-words leading-5 text-slate-900">
+                          {option.attributeValues[optionColumnLabel] ?? option.label}
+                        </span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          MOQ: {option.moq}
+                          {option.stock > 0 ? ` | Stock: ${option.stock}` : ""}
+                        </span>
+                      </div>
                     </div>
-                    <div className="w-20 self-center text-left">
+                    <div className="w-16 shrink-0 self-center text-right">
                       <span className="font-semibold text-[#615FFF]">
                       {formatCurrency(displayPriceByOptionId.get(option.id) ?? option.price)}
                       </span>
@@ -796,15 +818,6 @@ export default function ProductDetailsPurchasePanel({
               </div>
             )}
 
-            {shouldShowSeeAll ? (
-              <button
-                type="button"
-                onClick={() => setShowAllVariants((current) => !current)}
-                className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-800"
-              >
-                {showAllVariants ? "Hide" : "See all"}
-              </button>
-            ) : null}
           </div>
         </div>
       </div>

@@ -73,6 +73,8 @@ Defined in `types/product-db.ts`:
 
 There is also `ProductDbVariantRow` for variant records, and the public product detail purchase flow now uses it.
 
+Product gallery URLs are now normalized into `product_images`. The legacy `products.gallery_images` JSON field remains as a compatibility fallback while existing environments apply `20260520_normalize_product_images.sql`.
+
 ### Quote/cart snapshot shape
 
 Defined in `components/quote/quote-utils.ts`:
@@ -109,6 +111,7 @@ The database is used to enrich and validate:
 - Public product listing already maps DB rows into storefront UI shape
 - Related products already use Supabase-backed category relationships
 - Admin product management already writes and reads Supabase product records
+- Product saves synchronize normalized `product_images` rows and deduplicate gallery URLs
 - Cart and checkout already enrich quote items with live product records using `getProductsByIds`
 
 ## Main Gaps

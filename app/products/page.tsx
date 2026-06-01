@@ -7,6 +7,7 @@ import {
   type ProductBrowseSort,
 } from "@/lib/products/queries";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
+import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 
 type ProductsPageProps = {
@@ -44,7 +45,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       getProductCategoryOptions(),
       getVendorOptions(),
     ]);
-  const { data: imageMap } = await getProductImageMapByProductIds(publicProducts.map((product) => product.id));
+  const productIds = publicProducts.map((product) => product.id);
+  const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
+    getProductImageMapByProductIds(productIds),
+    getProductReviewSummaryMap(productIds),
+  ]);
 
   const storefrontProducts = publicProducts.map((product) =>
     mapProductDbToStorefrontProduct(
@@ -56,6 +61,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       },
       categoryOptions,
       vendorOptions,
+      reviewSummaryMap.get(product.id),
     ),
   );
 

@@ -462,6 +462,19 @@ export async function getPublicProductBySlug(slug: string, client?: SupabaseClie
   };
 }
 
+export async function getPublicProductSoldCount(productId: string, client?: SupabaseClient) {
+  const supabase = resolveSupabaseClient(client);
+  const { data, error } = await supabase.rpc("get_public_product_sold_count", {
+    check_product_id: productId,
+  });
+  const soldCount = Number(data);
+
+  return {
+    data: Number.isFinite(soldCount) && soldCount >= 0 ? soldCount : 0,
+    error,
+  };
+}
+
 function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
   const parsedPrice = Number(row.price);
   const parsedMoq = Number(row.moq);
