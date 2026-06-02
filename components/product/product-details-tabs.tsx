@@ -12,11 +12,11 @@ type ProductDetailsTabsProps = {
 
 type TabKey = "specifications" | "product-weight" | "description" | "reviews";
 
-const tabs: Array<{ key: TabKey; label: string }> = [
-  { key: "specifications", label: "Product Specifications" },
-  { key: "product-weight", label: "Product Weight" },
-  { key: "description", label: "Product Description" },
-  { key: "reviews", label: "Customer Review" },
+const tabs: Array<{ key: TabKey; label: string; mobileLabel: string }> = [
+  { key: "specifications", label: "Product Specifications", mobileLabel: "Specifications" },
+  { key: "product-weight", label: "Product Weight", mobileLabel: "Weight" },
+  { key: "description", label: "Product Description", mobileLabel: "Description" },
+  { key: "reviews", label: "Customer Review", mobileLabel: "Review" },
 ];
 
 export default function ProductDetailsTabs({ product, variants = [] }: ProductDetailsTabsProps) {
@@ -56,7 +56,7 @@ export default function ProductDetailsTabs({ product, variants = [] }: ProductDe
 
   return (
     <div className="mt-10 space-y-6">
-      <nav className="flex flex-wrap gap-6 border-b border-slate-200">
+      <nav className="flex flex-wrap gap-4 border-b border-slate-200 sm:gap-6">
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
@@ -68,7 +68,8 @@ export default function ProductDetailsTabs({ product, variants = [] }: ProductDe
                 : "border-b-2 border-transparent px-0 py-3 text-sm font-semibold text-slate-600 transition-colors hover:text-slate-900"
             }
           >
-            {tab.label}
+            <span className="sm:hidden">{tab.mobileLabel}</span>
+            <span className="hidden sm:inline">{tab.label}</span>
           </button>
         ))}
       </nav>

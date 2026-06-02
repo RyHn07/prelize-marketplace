@@ -111,7 +111,7 @@ function StatCard({
           : "border-slate-200 bg-white";
 
   return (
-    <article className={`rounded-[28px] border p-5 shadow-sm ${classes}`}>
+    <article className={`rounded-2xl border p-5 shadow-sm ${classes}`}>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
       <p className="mt-2 text-sm leading-6 text-slate-600">{hint}</p>
@@ -132,7 +132,7 @@ function QuickActionCard({ action }: { action: QuickAction }) {
   return (
     <Link
       href={action.href}
-      className={`group rounded-3xl border border-slate-200 bg-gradient-to-br ${toneClasses} p-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#615FFF]/30`}
+      className={`group rounded-2xl border border-slate-200 bg-gradient-to-br ${toneClasses} p-5 shadow-sm transition-transform duration-200 hover:-translate-y-0.5 hover:border-[#615FFF]/30`}
     >
       <p className="text-lg font-semibold text-slate-950">{action.title}</p>
       <p className="mt-2 text-sm leading-6 text-slate-600">{action.description}</p>
@@ -459,15 +459,30 @@ export default function VendorDashboardPage() {
   const storefrontInitials = initialsFromName(vendorName);
 
   return (
-    <section className="mx-auto max-w-7xl space-y-6">
-      <div className="space-y-2">
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Vendor Dashboard</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{vendorName}</h1>
-        <p className="max-w-3xl text-sm text-slate-500">{vendorDescription}</p>
+    <section className="grid w-full grid-cols-12 gap-4 md:gap-6">
+      <div className="col-span-12 flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#615FFF]">Vendor Dashboard</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">{vendorName}</h1>
+          <p className="mt-2 max-w-3xl text-sm text-slate-500">{vendorDescription}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/vendor/products/new"
+            className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Add Product
+          </Link>
+          <Link
+            href="/vendor/orders"
+            className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+          >
+            Open Orders
+          </Link>
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:items-start">
-        <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <aside className="col-span-12 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
           <div className="space-y-5">
             <div>
               {dashboard.vendor?.logo_url ? (
@@ -511,21 +526,6 @@ export default function VendorDashboardPage() {
             </div>
 
             <div className="space-y-3">
-              <Link
-                href="/vendor/products/new"
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-              >
-                Add Product
-              </Link>
-              <Link
-                href="/vendor/orders"
-                className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
-              >
-                Open Orders
-              </Link>
-            </div>
-
-            <div className="space-y-3">
               {setupChecklist.map((item) => (
                 <Link
                   key={item.title}
@@ -543,10 +543,10 @@ export default function VendorDashboardPage() {
               ))}
             </div>
           </div>
-        </aside>
+      </aside>
 
-        <div className="space-y-4">
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="col-span-12 space-y-4 xl:col-span-8">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm text-slate-500">
@@ -585,7 +585,7 @@ export default function VendorDashboardPage() {
             />
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Quick Actions</p>
@@ -601,7 +601,7 @@ export default function VendorDashboardPage() {
           </section>
 
           <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Recent Orders</p>
@@ -643,7 +643,7 @@ export default function VendorDashboardPage() {
               )}
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Operational Snapshot</p>
               <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Where the business stands today</h2>
 
@@ -686,7 +686,6 @@ export default function VendorDashboardPage() {
               </div>
             </div>
           </section>
-        </div>
       </div>
     </section>
   );

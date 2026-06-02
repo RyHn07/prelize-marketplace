@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import Header from "@/components/Header";
 import AuthPageHeaderFallback from "@/components/auth/auth-page-header-fallback";
+import GoogleAuthButton from "@/components/auth/google-auth-button";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function SignupPage() {
@@ -136,6 +137,10 @@ export default function SignupPage() {
               {isSubmitting ? "Creating account..." : "Sign Up"}
             </button>
           </form>
+
+          <div className="mt-5">
+            <GoogleAuthButton />
+          </div>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Already have an account?{" "}

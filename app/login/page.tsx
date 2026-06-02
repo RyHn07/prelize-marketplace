@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import Header from "@/components/Header";
 import AuthPageHeaderFallback from "@/components/auth/auth-page-header-fallback";
+import GoogleAuthButton from "@/components/auth/google-auth-button";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function LoginPage() {
@@ -104,12 +105,14 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="login-password"
-                className="mb-1.5 block text-sm font-medium text-slate-700"
-              >
-                Password
-              </label>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-[#615FFF] hover:text-[#5552e6]">
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 id="login-password"
                 type="password"
@@ -137,6 +140,10 @@ export default function LoginPage() {
               {isSubmitting ? "Logging in..." : "Login"}
             </button>
           </form>
+
+          <div className="mt-5">
+            <GoogleAuthButton />
+          </div>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             Need an account?{" "}

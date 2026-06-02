@@ -4,56 +4,58 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import VendorUserDropdown from "@/components/vendor/vendor-user-dropdown";
+import WorkspaceShell from "@/components/workspace/workspace-shell";
+import type { WorkspaceNavItem } from "@/components/workspace/workspace-navigation";
 import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 
 type VendorLayoutProps = {
   children: React.ReactNode;
 };
 
-const NAV_ITEMS = [
-  { href: "/vendor", label: "Dashboard" },
-  { href: "/vendor/orders", label: "Orders" },
-  { href: "/vendor/reviews", label: "Reviews" },
-  { href: "/vendor/products", label: "Products" },
-  { href: "/vendor/pricing-tiers", label: "Pricing Tiers" },
-  { href: "/vendor/media", label: "Media" },
-  { href: "/vendor/cnds", label: "CNDS" },
-  { href: "/vendor/categories", label: "Categories" },
-  { href: "/vendor/shop-settings", label: "Shop Settings" },
-] as const;
-
-function isActivePath(pathname: string, href: string) {
-  if (href === "/vendor") {
-    return pathname === "/vendor";
-  }
-
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function SidebarLink({
-  href,
-  label,
-  pathname,
-}: {
-  href: string;
-  label: string;
-  pathname: string;
-}) {
-  const isActive = isActivePath(pathname, href);
-
-  return (
-    <Link
-      href={href}
-      className={`inline-flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-        isActive
-          ? "bg-emerald-500 text-slate-950 shadow-sm"
-          : "text-slate-300 hover:bg-slate-900 hover:text-white"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-}
+const VENDOR_NAVIGATION: WorkspaceNavItem[] = [
+  {
+    name: "Dashboard",
+    path: "/vendor",
+    icon: "grid",
+  },
+  {
+    name: "Products",
+    icon: "package",
+    subItems: [
+      { label: "All Products", href: "/vendor/products" },
+      { label: "Add Product", href: "/vendor/products/new" },
+      { label: "Categories", href: "/vendor/categories" },
+      { label: "Media Library", href: "/vendor/media" },
+      { label: "Product Reviews", href: "/vendor/reviews" },
+    ],
+  },
+  {
+    name: "Orders",
+    icon: "shoppingBag",
+    subItems: [
+      { label: "All Orders", href: "/vendor/orders" },
+      { label: "Pending Orders", href: "/vendor/orders?status=Pending" },
+      { label: "Completed Orders", href: "/vendor/orders?status=Delivered" },
+      { label: "Cancelled Orders", href: "/vendor/orders?status=Cancelled" },
+    ],
+  },
+  {
+    name: "Pricing Tiers",
+    path: "/vendor/pricing-tiers",
+    icon: "creditCard",
+  },
+  {
+    name: "Shipping",
+    icon: "truck",
+    subItems: [{ label: "China Domestic Delivery", href: "/vendor/cnds" }],
+  },
+  {
+    name: "Shop Settings",
+    path: "/vendor/shop-settings",
+    icon: "settings",
+  },
+];
 
 export default function VendorLayout({ children }: VendorLayoutProps) {
   const pathname = usePathname();
@@ -62,7 +64,6 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [vendorName, setVendorName] = useState("Vendor");
   const [vendorRole, setVendorRole] = useState<string | null>(null);
-  const [vendorId, setVendorId] = useState<string | null>(null);
   const [canAccessVendorWorkspace, setCanAccessVendorWorkspace] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
   const [hasVendorMembership, setHasVendorMembership] = useState(false);
@@ -84,7 +85,6 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
         setHasPendingInvitation(onboardingStatus.hasPendingInvitation);
         setHasVendorMembership(onboardingStatus.hasVendorMembership);
         setVendorRole(onboardingStatus.vendorRole);
-        setVendorId(onboardingStatus.vendorId);
         setVendorStatus(onboardingStatus.vendorStatus);
 
         if (onboardingStatus.vendorName) {
@@ -151,63 +151,15 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 md:flex">
-      <aside className="hidden h-screen w-[260px] shrink-0 border-r border-slate-800 bg-slate-950 text-white md:sticky md:top-0 md:flex md:flex-col">
-        <div className="border-b border-slate-800 px-6 py-6">
-          <Link href="/vendor" className="block">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-400">
-              Vendor Workspace
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">{vendorName}</h1>
-            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">
-              {vendorRole ?? "vendor"}
-            </p>
-            {vendorId ? <p className="mt-2 text-xs text-slate-500">Vendor ID: {vendorId}</p> : null}
-          </Link>
-        </div>
-
-        <nav className="flex flex-1 flex-col gap-2 px-4 py-5">
-          {NAV_ITEMS.map((item) => (
-            <SidebarLink key={item.href} href={item.href} label={item.label} pathname={pathname} />
-          ))}
-
-          <div className="mt-auto border-t border-slate-800 pt-4">
-            <Link
-              href="/"
-              className="inline-flex items-center rounded-xl px-4 py-3 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-900 hover:text-white"
-            >
-              Back to Website
-            </Link>
-          </div>
-        </nav>
-      </aside>
-
-      <div className="min-w-0 flex-1">
-        <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur md:hidden">
-          <div className="px-4 py-4">
-            <Link href="/vendor" className="block">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600">
-                Vendor Dashboard
-              </p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{vendorName}</p>
-            </Link>
-          </div>
-
-          <nav className="flex gap-2 overflow-x-auto px-4 pb-4">
-            {NAV_ITEMS.map((item) => (
-              <SidebarLink key={item.href} href={item.href} label={item.label} pathname={pathname} />
-            ))}
-            <Link
-              href="/"
-              className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-slate-900"
-            >
-              Back to Website
-            </Link>
-          </nav>
-        </div>
-
-        <div className="p-4 sm:p-6 lg:p-8">{children}</div>
-      </div>
-    </div>
+    <WorkspaceShell
+      homeHref="/vendor"
+      navigation={VENDOR_NAVIGATION}
+      searchAction="/vendor/products"
+      searchPlaceholder="Search your products..."
+      notificationHref="/vendor/reviews"
+      userMenu={<VendorUserDropdown email={userEmail} vendorName={vendorName} vendorRole={vendorRole} />}
+    >
+      {children}
+    </WorkspaceShell>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
+import { uploadCustomerAvatar } from "@/lib/account/avatar-storage";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 type AccountOrderSummary = {
@@ -31,6 +32,7 @@ type OrderFilterKey =
   | "unpaid";
 
 type AccountView = "dashboard" | "messages" | "orders" | "coupons" | "settings";
+type SettingsTab = "personal-details" | "password";
 
 const ORDER_FILTERS: Array<{ key: OrderFilterKey; label: string }> = [
   { key: "all", label: "All" },
@@ -150,6 +152,11 @@ function getAvatarUrl(user: User) {
   return "";
 }
 
+function getUserMetadataValue(user: User, key: "phone" | "address") {
+  const value = user.user_metadata?.[key];
+  return typeof value === "string" ? value : "";
+}
+
 function matchesOrderFilter(order: AccountOrder, filter: OrderFilterKey) {
   const status = (order.status ?? "").trim().toLowerCase();
   const paymentStatus = (order.payment_status ?? "").trim().toLowerCase();
@@ -174,14 +181,34 @@ function matchesOrderFilter(order: AccountOrder, filter: OrderFilterKey) {
 
 export default function AccountPageClient() {
   const router = useRouter();
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [user, setUser] = useState<User | null>(null);
   const [orders, setOrders] = useState<AccountOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterKey, setFilterKey] = useState<OrderFilterKey>("all");
   const [activeView, setActiveView] = useState<AccountView>("dashboard");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("personal-details");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profilePhone, setProfilePhone] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [profileAddress, setProfileAddress] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [settingsErrorMessage, setSettingsErrorMessage] = useState("");
+  const [settingsSuccessMessage, setSettingsSuccessMessage] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const syncSettingsFields = (currentUser: User) => {
+    setProfileName(getDisplayName(currentUser));
+    setProfilePhone(getUserMetadataValue(currentUser, "phone"));
+    setProfileEmail(currentUser.email ?? "");
+    setProfileAddress(getUserMetadataValue(currentUser, "address"));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -214,6 +241,8 @@ export default function AccountPageClient() {
         setLoading(false);
         return;
       }
+
+      syncSettingsFields(currentUser);
 
       const { data: userIdOrders, error: userIdOrdersError } = await supabase
         .from("orders")
@@ -280,6 +309,141 @@ export default function AccountPageClient() {
     }
   };
 
+  const handleProfileUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!user) {
+      return;
+    }
+
+    setSettingsErrorMessage("");
+    setSettingsSuccessMessage("");
+    setIsSavingProfile(true);
+
+    try {
+      const normalizedName = profileName.trim();
+      const normalizedEmail = profileEmail.trim();
+      const emailChanged = normalizedEmail !== (user.email ?? "");
+      const { data, error } = await getSupabaseClient().auth.updateUser({
+        email: normalizedEmail,
+        data: {
+          ...user.user_metadata,
+          full_name: normalizedName,
+          name: normalizedName,
+          phone: profilePhone.trim(),
+          address: profileAddress.trim(),
+        },
+      });
+
+      if (error) {
+        setSettingsErrorMessage(error.message);
+        return;
+      }
+
+      if (data.user) {
+        setUser(data.user);
+        syncSettingsFields(data.user);
+      }
+
+      setSettingsSuccessMessage(
+        emailChanged
+          ? "Profile saved. Check your inbox if email confirmation is required."
+          : "Profile saved successfully.",
+      );
+    } catch (error) {
+      setSettingsErrorMessage(error instanceof Error ? error.message : "Unable to save your profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handlePasswordUpdate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSettingsErrorMessage("");
+    setSettingsSuccessMessage("");
+
+    if (newPassword !== confirmPassword) {
+      setSettingsErrorMessage("New password and confirm password must match.");
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+
+    try {
+      const { error } = await getSupabaseClient().auth.updateUser({ password: newPassword });
+
+      if (error) {
+        setSettingsErrorMessage(error.message);
+        return;
+      }
+
+      setNewPassword("");
+      setConfirmPassword("");
+      setSettingsSuccessMessage("Password updated successfully.");
+    } catch (error) {
+      setSettingsErrorMessage(error instanceof Error ? error.message : "Unable to update your password.");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleAvatarUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!user || !file) {
+      return;
+    }
+
+    setSettingsErrorMessage("");
+    setSettingsSuccessMessage("");
+
+    if (!file.type.startsWith("image/")) {
+      setSettingsErrorMessage("Please choose an image file.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setSettingsErrorMessage("Profile photo must be 5 MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+
+    try {
+      const uploaded = await uploadCustomerAvatar(user.id, file);
+
+      if (uploaded.error || !uploaded.data) {
+        setSettingsErrorMessage(uploaded.error?.message ?? "Unable to upload your profile photo.");
+        return;
+      }
+
+      const { data, error } = await getSupabaseClient().auth.updateUser({
+        data: {
+          ...user.user_metadata,
+          avatar_url: uploaded.data,
+        },
+      });
+
+      if (error) {
+        setSettingsErrorMessage(error.message);
+        return;
+      }
+
+      if (data.user) {
+        setUser(data.user);
+      }
+
+      setSettingsSuccessMessage("Profile photo updated successfully.");
+    } catch (error) {
+      setSettingsErrorMessage(error instanceof Error ? error.message : "Unable to upload your profile photo.");
+    } finally {
+      setIsUploadingAvatar(false);
+      event.target.value = "";
+    }
+  };
+
   const filteredOrders = useMemo(
     () => orders.filter((order) => matchesOrderFilter(order, filterKey)),
     [filterKey, orders],
@@ -330,7 +494,7 @@ export default function AccountPageClient() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
         <div className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:items-start">
-          <aside className="flex p-5 lg:sticky lg:top-6 lg:box-border lg:h-[calc(100vh-3rem)]">
+          <aside className="flex box-border p-5 lg:sticky lg:top-6 lg:h-[calc(100dvh-13rem)]">
             <div className="flex h-full w-full flex-col gap-8">
               <div className="space-y-8">
                 <div>
@@ -634,9 +798,207 @@ export default function AccountPageClient() {
             ) : null}
 
             {activeView === "settings" ? (
-              <section className="rounded-[8px] border border-white/80 bg-white px-6 py-16 text-center shadow-[0_24px_60px_rgba(15,23,42,0.05)] sm:px-7">
-                <h2 className="text-[22px] font-semibold text-slate-950">Account Settings</h2>
-                <p className="mt-3 text-sm text-slate-500">Settings form is not wired yet, but the dashboard layout is ready for it.</p>
+              <section className="rounded-[8px] border border-white/80 bg-white px-6 py-6 shadow-[0_24px_60px_rgba(15,23,42,0.05)] sm:px-7">
+                <div>
+                  <h2 className="text-[22px] font-semibold text-slate-950">Account Settings</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Keep your contact details, profile photo, and account access up to date.
+                  </p>
+                </div>
+
+                <nav className="mt-7 flex gap-7 border-b border-slate-200">
+                  {[
+                    { key: "personal-details" as const, label: "Personal Details" },
+                    { key: "password" as const, label: "Password" },
+                  ].map((tab) => {
+                    const isActive = settingsTab === tab.key;
+
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => {
+                          setSettingsTab(tab.key);
+                          setSettingsErrorMessage("");
+                          setSettingsSuccessMessage("");
+                        }}
+                        className={`border-b-2 px-0 py-3 text-sm font-semibold transition-colors ${
+                          isActive
+                            ? "border-[#615FFF] text-[#615FFF]"
+                            : "border-transparent text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                {settingsErrorMessage ? (
+                  <div className="mt-6 rounded-[8px] border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {settingsErrorMessage}
+                  </div>
+                ) : null}
+
+                {settingsSuccessMessage ? (
+                  <div className="mt-6 rounded-[8px] border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {settingsSuccessMessage}
+                  </div>
+                ) : null}
+
+                {settingsTab === "personal-details" ? (
+                  <div className="mt-8 grid gap-8 xl:grid-cols-[220px_minmax(0,1fr)]">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">Profile photo</p>
+                      <div className="mt-4 flex flex-col items-start gap-4">
+                        <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#615FFF] via-[#7a78ff] to-[#19d3c5] text-3xl font-semibold text-white shadow-[0_20px_40px_rgba(97,95,255,0.2)]">
+                          {avatarUrl ? (
+                            <Image src={avatarUrl} alt={displayName} fill sizes="112px" className="object-cover" />
+                          ) : (
+                            <span>{getUserInitial(user)}</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => avatarInputRef.current?.click()}
+                          disabled={isUploadingAvatar}
+                          className="inline-flex items-center justify-center rounded-[8px] bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5552f0] disabled:cursor-not-allowed disabled:bg-slate-300"
+                        >
+                          {isUploadingAvatar ? "Uploading..." : "Upload from device"}
+                        </button>
+                        <input
+                          ref={avatarInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          onChange={handleAvatarUpload}
+                        />
+                        <p className="text-xs leading-5 text-slate-500">
+                          Choose one JPG, PNG, WEBP, or GIF image from your device. Maximum size: 5 MB.
+                        </p>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleProfileUpdate} className="space-y-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-950">Personal details</h3>
+                        <p className="mt-1 text-sm text-slate-500">Update the information attached to your customer account.</p>
+                      </div>
+
+                      <div className="grid gap-5 md:grid-cols-2">
+                        <div>
+                          <label htmlFor="account-name" className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Name
+                          </label>
+                          <input
+                            id="account-name"
+                            type="text"
+                            value={profileName}
+                            onChange={(event) => setProfileName(event.target.value)}
+                            className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label htmlFor="account-phone" className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Phone number
+                          </label>
+                          <input
+                            id="account-phone"
+                            type="tel"
+                            value={profilePhone}
+                            onChange={(event) => setProfilePhone(event.target.value)}
+                            className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            placeholder="+880..."
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label htmlFor="account-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Email
+                          </label>
+                          <input
+                            id="account-email"
+                            type="email"
+                            value={profileEmail}
+                            onChange={(event) => setProfileEmail(event.target.value)}
+                            className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            required
+                          />
+                        </div>
+
+                        <div className="md:col-span-2">
+                          <label htmlFor="account-address" className="mb-1.5 block text-sm font-medium text-slate-700">
+                            Address
+                          </label>
+                          <textarea
+                            id="account-address"
+                            value={profileAddress}
+                            onChange={(event) => setProfileAddress(event.target.value)}
+                            className="min-h-28 w-full resize-y rounded-[8px] border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                            placeholder="Street address, area, and landmarks"
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSavingProfile}
+                        className="inline-flex items-center justify-center rounded-[8px] bg-[#615FFF] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#5552f0] disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        {isSavingProfile ? "Saving..." : "Save profile"}
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <form onSubmit={handlePasswordUpdate} className="mt-8 max-w-3xl space-y-5">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-950">Change password</h3>
+                      <p className="mt-1 text-sm text-slate-500">Choose a new password for your account.</p>
+                    </div>
+
+                    <div className="grid gap-5 md:grid-cols-2">
+                      <div>
+                        <label htmlFor="account-new-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                          New password
+                        </label>
+                        <input
+                          id="account-new-password"
+                          type="password"
+                          value={newPassword}
+                          onChange={(event) => setNewPassword(event.target.value)}
+                          className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                          minLength={6}
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="account-confirm-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                          Confirm new password
+                        </label>
+                        <input
+                          id="account-confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                          minLength={6}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isUpdatingPassword}
+                      className="inline-flex items-center justify-center rounded-[8px] border border-slate-900 bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300"
+                    >
+                      {isUpdatingPassword ? "Updating..." : "Update password"}
+                    </button>
+                  </form>
+                )}
               </section>
             ) : null}
           </div>

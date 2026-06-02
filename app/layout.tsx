@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import "./globals.css";
+import PasswordRecoveryRedirect from "@/components/auth/password-recovery-redirect";
 import { DEFAULT_PLATFORM_SETTINGS } from "@/lib/platform-settings";
 import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 
@@ -66,7 +67,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      <body className="min-h-full flex flex-col font-sans antialiased">{children}</body>
+      <body className="min-h-full flex flex-col font-sans antialiased">
+        <PasswordRecoveryRedirect />
+        {children}
+      </body>
     </html>
   );
 }
