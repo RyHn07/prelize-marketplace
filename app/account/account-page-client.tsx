@@ -18,6 +18,7 @@ type AccountOrder = {
   order_number: string;
   status: string | null;
   payment_status?: string | null;
+  user_email?: string | null;
   created_at: string;
   summary?: AccountOrderSummary | null;
 };
@@ -115,6 +116,29 @@ function formatOrderDate(value: string) {
 
 function formatBDT(amount: number) {
   return `৳${amount.toLocaleString()}`;
+}
+
+function getStatusBadgeClass(status: string | null) {
+  const normalizedStatus = (status ?? "pending").trim().toLowerCase();
+
+  if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "cancel") {
+    return "bg-rose-50 text-rose-600";
+  }
+
+  if (normalizedStatus === "delivered" || normalizedStatus === "confirmed" || normalizedStatus === "completed") {
+    return "bg-emerald-50 text-emerald-600";
+  }
+
+  return "bg-amber-50 text-amber-600";
+}
+
+function formatOrderStatus(status: string | null) {
+  const fallbackStatus = status?.trim() || "Pending";
+
+  return fallbackStatus
+    .split(/[\s_-]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function getDisplayName(user: User) {
@@ -291,7 +315,7 @@ export default function AccountPageClient() {
 
       const { data: userIdOrders, error: userIdOrdersError } = await supabase
         .from("orders")
-        .select("id, order_number, status, payment_status, created_at, summary")
+        .select("id, order_number, status, payment_status, user_email, created_at, summary")
         .eq("user_id", currentUser.id)
         .order("created_at", { ascending: false });
 
@@ -311,7 +335,7 @@ export default function AccountPageClient() {
       if (fetchedOrders.length === 0 && currentUser.email) {
         const { data: emailOrders, error: emailOrdersError } = await supabase
           .from("orders")
-          .select("id, order_number, status, payment_status, created_at, summary")
+          .select("id, order_number, status, payment_status, user_email, created_at, summary")
           .eq("user_email", currentUser.email)
           .order("created_at", { ascending: false });
 
@@ -537,7 +561,7 @@ export default function AccountPageClient() {
   const coupons = 0;
   const avatarUrl = user ? getAvatarUrl(user) : "";
   const displayName = user ? getDisplayName(user) : "";
-  const recentOrders = orders.slice(0, 4);
+  const recentOrders = orders.slice(0, 5);
   const skipCurrentPasswordForInitialSet = user ? canSetInitialPasswordWithoutCurrentPassword(user) : false;
   const passwordHeading = skipCurrentPasswordForInitialSet ? "Set password" : "Change password";
   const passwordHelpText = skipCurrentPasswordForInitialSet
@@ -550,6 +574,62 @@ export default function AccountPageClient() {
         ? "bg-[#615FFF] font-semibold text-white"
         : "text-slate-700 hover:bg-slate-50"
     }`;
+
+  const renderOrdersTable = (orderList: AccountOrder[]) => (
+    <div className="mt-6 overflow-hidden rounded-[8px] border border-slate-100">
+      <div className="hidden grid-cols-[1.25fr_1.45fr_0.55fr_0.65fr] border-b border-slate-100 px-5 py-4 text-xs font-medium text-slate-500 md:grid">
+        <span>Order</span>
+        <span>Customer</span>
+        <span>Amount</span>
+        <span>Status</span>
+      </div>
+
+      <div className="divide-y divide-slate-100">
+        {orderList.map((order) => {
+          const customerEmail = order.user_email || user?.email || "Customer";
+
+          return (
+            <Link
+              key={order.id}
+              href={`/orders/${order.id}`}
+              className="grid gap-4 px-5 py-5 transition hover:bg-slate-50 md:grid-cols-[1.25fr_1.45fr_0.55fr_0.65fr] md:items-center"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-950">{order.order_number || order.id.slice(0, 8)}</p>
+                <p className="mt-1 text-sm text-slate-500">{formatOrderDate(order.created_at)}</p>
+              </div>
+
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#615FFF] via-[#7a78ff] to-[#19d3c5] text-sm font-semibold text-white">
+                  {avatarUrl ? (
+                    <Image src={avatarUrl} alt={displayName} fill sizes="40px" className="object-cover" />
+                  ) : (
+                    <span>{displayName.charAt(0).toUpperCase() || "U"}</span>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:hidden">Customer</p>
+                  <p className="truncate text-sm text-slate-600">{customerEmail}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:hidden">Amount</p>
+                <p className="text-sm font-medium text-slate-700">{formatBDT(order.summary?.payNow ?? 0)}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:hidden">Status</p>
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeClass(order.status)}`}>
+                  {formatOrderStatus(order.status)}
+                </span>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -699,20 +779,24 @@ export default function AccountPageClient() {
             {activeView === "dashboard" ? (
               <section className="rounded-[8px] border border-slate-200 bg-white px-6 py-6 sm:px-7">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2 className="text-[22px] font-semibold text-slate-950">Orders</h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Track your recent marketplace orders from one dashboard.
-                    </p>
-                  </div>
+                  <h2 className="text-[22px] font-semibold text-slate-950">Recent Orders</h2>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveView("orders")}
-                    className="text-sm font-medium text-[#615FFF] transition hover:text-[#4f4ce6]"
-                  >
-                    View all orders
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("orders")}
+                      className="inline-flex h-11 items-center justify-center rounded-[8px] border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      Filter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveView("orders")}
+                      className="inline-flex h-11 items-center justify-center rounded-[8px] border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      See all
+                    </button>
+                  </div>
                 </div>
 
                 {errorMessage ? (
@@ -734,38 +818,7 @@ export default function AccountPageClient() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="mt-8 space-y-4">
-                    {recentOrders.map((order) => (
-                      <Link
-                        key={order.id}
-                        href={`/orders/${order.id}`}
-                        className="flex flex-col gap-4 rounded-[8px] border border-slate-200 px-5 py-5 transition hover:border-[#615FFF]/25 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Order</p>
-                          <p className="text-lg font-semibold text-slate-950">{order.order_number || order.id.slice(0, 8)}</p>
-                          <p className="text-sm text-slate-500">{formatOrderDate(order.created_at)}</p>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3 sm:items-center sm:gap-8">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Status</p>
-                            <p className="mt-1 text-sm font-medium text-slate-900">{order.status ?? "Pending"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Payment</p>
-                            <p className="mt-1 text-sm font-medium text-slate-900">{order.payment_status ?? "Pending"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Amount</p>
-                            <p className="mt-1 text-sm font-medium text-[#615FFF]">
-                              {formatBDT(order.summary?.payNow ?? 0)}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  renderOrdersTable(recentOrders)
                 )}
               </section>
             ) : null}
@@ -835,38 +888,7 @@ export default function AccountPageClient() {
                     </Link>
                   </div>
                 ) : (
-                  <div className="mt-8 space-y-4">
-                    {filteredOrders.map((order) => (
-                      <Link
-                        key={order.id}
-                        href={`/orders/${order.id}`}
-                        className="flex flex-col gap-4 rounded-[8px] border border-slate-200 px-5 py-5 transition hover:border-[#615FFF]/25 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Order</p>
-                          <p className="text-lg font-semibold text-slate-950">{order.order_number || order.id.slice(0, 8)}</p>
-                          <p className="text-sm text-slate-500">{formatOrderDate(order.created_at)}</p>
-                        </div>
-
-                        <div className="grid gap-3 sm:grid-cols-3 sm:items-center sm:gap-8">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Status</p>
-                            <p className="mt-1 text-sm font-medium text-slate-900">{order.status ?? "Pending"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Payment</p>
-                            <p className="mt-1 text-sm font-medium text-slate-900">{order.payment_status ?? "Pending"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Amount</p>
-                            <p className="mt-1 text-sm font-medium text-[#615FFF]">
-                              {formatBDT(order.summary?.payNow ?? 0)}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
+                  renderOrdersTable(filteredOrders)
                 )}
               </section>
             ) : null}

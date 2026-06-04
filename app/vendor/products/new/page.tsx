@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -75,28 +76,23 @@ export default function VendorNewProductPage() {
   }
 
   return (
-    <section className="mx-auto max-w-7xl">
-      <div className="mb-6">
-        <Link
-          href="/vendor/products"
-          className="inline-flex text-sm font-medium text-emerald-600 transition-colors hover:text-emerald-700"
-        >
-          Back to Products
-        </Link>
+    <section className="w-full space-y-6">
+      <div className="hidden" aria-hidden="true">
+        <ProductForm
+          key="vendor-new-product"
+          mode="create"
+          record={null}
+          allowedVendorIds={[activeVendorId]}
+          canAssignPlatformProducts={false}
+          forcedVendorId={activeVendorId}
+          onSave={(mode, payload, productId) =>
+            mode === "create"
+              ? createVendorProductRecord(payload)
+              : updateVendorProductRecord(productId ?? "", payload)
+          }
+        />
       </div>
-      <ProductForm
-        key="vendor-new-product"
-        mode="create"
-        record={null}
-        allowedVendorIds={[activeVendorId]}
-        canAssignPlatformProducts={false}
-        forcedVendorId={activeVendorId}
-        onSave={(mode, payload, productId) =>
-          mode === "create"
-            ? createVendorProductRecord(payload)
-            : updateVendorProductRecord(productId ?? "", payload)
-        }
-      />
+      <TailadminAddProductPreview />
     </section>
   );
 }
