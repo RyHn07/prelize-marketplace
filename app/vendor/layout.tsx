@@ -129,7 +129,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
 
   if (!canAccessVendorWorkspace) {
     if (isOnboardingPath) {
-      return <div className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">{children}</div>;
+      return <div className="min-h-screen bg-white">{children}</div>;
     }
 
     return (

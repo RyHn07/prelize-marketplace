@@ -59,8 +59,8 @@ function getStatusBadgeColor(status: string) {
 
 function VendorOnboardingShell({ children }: { children: React.ReactNode }) {
   return (
-    <section className="mx-auto flex w-full max-w-6xl justify-center px-4 py-6 sm:px-6 lg:px-8">
-      <div className="w-full rounded-[32px] border border-slate-200 bg-white px-8 py-8 shadow-sm sm:px-10 lg:px-12">
+    <section className="mx-auto flex w-full justify-center px-4 py-12 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
         {children}
       </div>
     </section>
@@ -78,9 +78,9 @@ function VendorOnboardingHeader({
 }) {
   return (
     <div className={centered ? "text-center" : ""}>
-      <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#615FFF]">Vendor Program</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{title}</h1>
-      <p className={`mt-4 text-sm leading-6 text-slate-500 ${centered ? "mx-auto max-w-2xl" : "max-w-2xl"}`}>
+      <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#615FFF]">Vendor Program</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{title}</h1>
+      <p className={`mt-2 text-sm leading-6 text-slate-500 ${centered ? "mx-auto" : ""}`}>
         {description}
       </p>
     </div>
@@ -303,10 +303,10 @@ export default function VendorDashboardPage() {
           description="Your account already has a pending vendor invitation. Finish the registration details to unlock the full workspace."
         />
 
-        <div className="mt-7">
+        <div className="mt-6">
           <Link
             href="/vendor/register"
-            className="inline-flex h-11 items-center justify-center rounded-2xl bg-[#615FFF] px-6 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
+            className="inline-flex h-11 w-full items-center justify-center rounded-full bg-[#615FFF] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6]"
           >
             Continue registration
           </Link>
