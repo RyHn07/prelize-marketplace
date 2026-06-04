@@ -83,6 +83,14 @@ export default function WorkspaceSidebar({
 
   const openSubmenu = selectedSubmenu === "closed" ? null : selectedSubmenu ?? activeSubmenu;
 
+  const isTopLevelNavActive = (href: string) => {
+    if (href === homeHref) {
+      return isWorkspaceNavPathExact(pathname, href, currentSearch);
+    }
+
+    return isWorkspaceNavPathActive(pathname, href, currentSearch);
+  };
+
   useEffect(() => {
     if (openSubmenu !== null && subMenuRefs.current[openSubmenu]) {
       setSubMenuHeight((previous) => ({
@@ -127,7 +135,7 @@ export default function WorkspaceSidebar({
               <ul className="flex flex-col gap-4">
                 {navigation.map((nav, index) => {
                   const isGroupActive =
-                    (nav.path ? isWorkspaceNavPathActive(pathname, nav.path, currentSearch) : false) ||
+                    (nav.path ? isTopLevelNavActive(nav.path) : false) ||
                     nav.subItems?.some((subItem) => isWorkspaceNavPathActive(pathname, subItem.href, currentSearch));
 
                   return (
@@ -160,12 +168,12 @@ export default function WorkspaceSidebar({
                             href={nav.path}
                             onClick={closeOnMobile}
                             className={`group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
-                              isWorkspaceNavPathActive(pathname, nav.path, currentSearch)
+                              isTopLevelNavActive(nav.path)
                                 ? "bg-[#efeeff] text-[#615FFF]"
                                 : "text-gray-700 hover:bg-gray-100 hover:text-gray-700"
                             }`}
                           >
-                            <SidebarIconContainer active={isWorkspaceNavPathActive(pathname, nav.path, currentSearch)}>
+                            <SidebarIconContainer active={isTopLevelNavActive(nav.path)}>
                               {iconMap[nav.icon]}
                             </SidebarIconContainer>
                             {(isExpanded || isHovered || isMobileOpen) && <span>{nav.name}</span>}

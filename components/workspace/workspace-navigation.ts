@@ -57,11 +57,12 @@ export function isWorkspaceNavPathExact(pathname: string, href: string, currentS
     return false;
   }
 
+  const activeSearch = new URLSearchParams(currentSearch);
+
   if (!query) {
-    return true;
+    return Array.from(activeSearch.entries()).length === 0;
   }
 
-  const activeSearch = new URLSearchParams(currentSearch);
   const targetSearch = new URLSearchParams(query);
 
   return Array.from(targetSearch.entries()).every(([key, value]) => activeSearch.get(key) === value);

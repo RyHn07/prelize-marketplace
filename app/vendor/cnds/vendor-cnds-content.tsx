@@ -91,6 +91,37 @@ function formatPricingType(value: CndsShippingPricingType) {
   return value === "unit" ? "Per Unit" : "Fixed";
 }
 
+function formatCreatedAt(value: string | null | undefined) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const parsedDate = new Date(value);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Unknown";
+  }
+
+  return parsedDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function SearchIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M3.04175 9.37363C3.04175 5.87693 5.87711 3.04199 9.37508 3.04199C12.8731 3.04199 15.7084 5.87693 15.7084 9.37363C15.7084 12.8703 12.8731 15.7053 9.37508 15.7053C5.87711 15.7053 3.04175 12.8703 3.04175 9.37363ZM9.37508 1.54199C5.04902 1.54199 1.54175 5.04817 1.54175 9.37363C1.54175 13.6991 5.04902 17.2053 9.37508 17.2053C11.2674 17.2053 13.003 16.5344 14.357 15.4176L17.177 18.238C17.4699 18.5309 17.9448 18.5309 18.2377 18.238C18.5306 17.9451 18.5306 17.4703 18.2377 17.1774L15.418 14.3573C16.5365 13.0033 17.2084 11.2669 17.2084 9.37363C17.2084 5.04817 13.7011 1.54199 9.37508 1.54199Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 export default function VendorCndsContent() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -98,7 +129,9 @@ export default function VendorCndsContent() {
   const [vendorId, setVendorId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<CndsShippingProfileRow[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [values, setValues] = useState<ProfileFormValues>(() => getInitialFormValues());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -156,6 +189,14 @@ export default function VendorCndsContent() {
     const query = searchQuery.trim().toLowerCase();
 
     return profiles.filter((profile) => {
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" ? profile.is_active : !profile.is_active);
+
+      if (!matchesStatus) {
+        return false;
+      }
+
       if (!query) {
         return true;
       }
@@ -166,20 +207,19 @@ export default function VendorCndsContent() {
         profile.pricing_type.toLowerCase().includes(query)
       );
     });
-  }, [profiles, searchQuery]);
+  }, [profiles, searchQuery, statusFilter]);
 
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId) ?? null,
     [profiles, selectedProfileId],
   );
 
-  const activeCount = useMemo(() => profiles.filter((profile) => profile.is_active).length, [profiles]);
-
   const startCreateMode = () => {
     setSelectedProfileId(null);
     setValues(getInitialFormValues());
     setErrorMessage("");
     setSuccessMessage("");
+    setIsEditorOpen(true);
   };
 
   const startEditMode = (profile: CndsShippingProfileRow) => {
@@ -187,6 +227,13 @@ export default function VendorCndsContent() {
     setValues(getInitialFormValues(profile));
     setErrorMessage("");
     setSuccessMessage("");
+    setIsEditorOpen(true);
+  };
+
+  const closeEditor = () => {
+    setIsEditorOpen(false);
+    setSelectedProfileId(null);
+    setValues(getInitialFormValues());
   };
 
   const refreshProfiles = async (focusProfileId?: string | null) => {
@@ -250,13 +297,15 @@ export default function VendorCndsContent() {
 
       if (selectedProfileId) {
         await updateVendorCndsProfileRequest(vendorId, selectedProfileId, payload);
-        await refreshProfiles(selectedProfileId);
+        await refreshProfiles();
         setSuccessMessage("CNDS profile updated.");
       } else {
-        const result = await createVendorCndsProfileRequest(vendorId, payload);
-        await refreshProfiles(result.profile.id);
+        await createVendorCndsProfileRequest(vendorId, payload);
+        await refreshProfiles();
         setSuccessMessage("CNDS profile created.");
       }
+
+      closeEditor();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save the CNDS profile.");
     } finally {
@@ -279,7 +328,7 @@ export default function VendorCndsContent() {
         <p className="mt-3 text-sm text-slate-500">Please login to access vendor CNDS profiles.</p>
         <Link
           href="/login"
-          className="mt-6 inline-flex items-center justify-center rounded-xl bg-emerald-500 px-5 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90"
+          className="mt-6 inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           Go to Login
         </Link>
@@ -296,289 +345,340 @@ export default function VendorCndsContent() {
     );
   }
 
+  const accentBorder = "focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10";
+
   return (
-    <section className="mx-auto max-w-7xl">
-      <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-600">Vendor Dashboard</p>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">CNDS Shipping Profiles</h1>
-          <p className="max-w-2xl text-sm text-slate-500">
-            Create and manage the CNDS shipping profiles assigned to your own vendor products.
-          </p>
-        </div>
+    <section className="w-full space-y-6">
+      <div className="rounded-2xl border border-gray-200 bg-white">
+        <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800">CNDS Profiles List</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Create and manage the domestic delivery profiles assigned to your vendor products.
+            </p>
+          </div>
 
-        <button
-          type="button"
-          onClick={startCreateMode}
-          className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90"
-        >
-          Add CNDS Profile
-        </button>
-      </div>
-
-      {errorMessage ? (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      {successMessage ? (
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700">
-          {successMessage}
-        </div>
-      ) : null}
-
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Total Profiles</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{profiles.length}</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-emerald-500">Active</p>
-          <p className="mt-2 text-2xl font-semibold text-emerald-700">{activeCount}</p>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Vendor Scope</p>
-          <p className="mt-2 break-all text-sm font-semibold text-slate-900">{vendorId}</p>
-        </div>
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-600">Profiles</p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-900">Your CNDS list</h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-lg bg-[#615FFF]/8 px-3 py-2 text-sm font-medium text-[#615FFF]">
+              {filteredProfiles.length} visible
             </div>
             <button
               type="button"
               onClick={startCreateMode}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-slate-900"
+              className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
-              New
+              Add CNDS Profile
             </button>
           </div>
-
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search CNDS profiles"
-            className="mb-4 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-          />
-
-          {profiles.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-              No CNDS profiles yet. Create your first vendor-owned profile to use it on products.
-            </div>
-          ) : filteredProfiles.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-              No matching profiles found.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredProfiles.map((profile) => {
-                const isSelected = selectedProfileId === profile.id;
-
-                return (
-                  <button
-                    key={profile.id}
-                    type="button"
-                    onClick={() => startEditMode(profile)}
-                    className={`block w-full rounded-2xl border px-4 py-4 text-left transition-colors ${
-                      isSelected
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-slate-200 bg-white hover:border-slate-300"
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-slate-900">{profile.name}</p>
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                          profile.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
-                        }`}
-                      >
-                        {profile.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">{formatPricingType(profile.pricing_type)}</p>
-                    <p className="mt-2 text-xs text-slate-400">{profile.tiers.length} tier(s)</p>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-600">Editor</p>
-              <h2 className="mt-1 text-xl font-semibold text-slate-900">
-                {selectedProfile ? `Edit ${selectedProfile.name}` : "Create CNDS profile"}
-              </h2>
-            </div>
-            {selectedProfile ? (
-              <button
-                type="button"
-                onClick={startCreateMode}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-emerald-300 hover:text-slate-900"
-              >
-                New Profile
-              </button>
-            ) : null}
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full max-w-[420px]">
+            <label htmlFor="vendor-cnds-search" className="sr-only">
+              Search CNDS profiles
+            </label>
+            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
+              <SearchIcon />
+            </span>
+            <input
+              id="vendor-cnds-search"
+              type="text"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by profile name, description, or pricing type"
+              className={`h-11 w-full rounded-lg border border-gray-300 bg-transparent py-2.5 pl-12 pr-4 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 outline-none transition-colors ${accentBorder}`}
+            />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="vendor-cnds-name" className="mb-1.5 block text-sm font-medium text-slate-700">
-                Profile Name
-              </label>
-              <input
-                id="vendor-cnds-name"
-                type="text"
-                value={values.name}
-                onChange={(event) => updateField("name", event.target.value)}
-                placeholder="Vendor CNDS"
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="vendor-cnds-pricing-type" className="mb-1.5 block text-sm font-medium text-slate-700">
-                Pricing Type
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="w-full sm:w-40">
+              <label htmlFor="vendor-cnds-status-filter" className="sr-only">
+                Filter by status
               </label>
               <select
-                id="vendor-cnds-pricing-type"
-                value={values.pricing_type}
-                onChange={(event) => updateField("pricing_type", event.target.value as CndsShippingPricingType)}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
+                id="vendor-cnds-status-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
+                className={`h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors ${accentBorder}`}
               >
-                <option value="fixed">Fixed</option>
-                <option value="unit">Per Unit</option>
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
               </select>
             </div>
 
-            <div className="md:col-span-2">
-              <label htmlFor="vendor-cnds-description" className="mb-1.5 block text-sm font-medium text-slate-700">
-                Description
-              </label>
-              <textarea
-                id="vendor-cnds-description"
-                rows={3}
-                value={values.description}
-                onChange={(event) => updateField("description", event.target.value)}
-                placeholder="Optional internal notes for this CNDS profile."
-                className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-              />
-            </div>
-
-            <label className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={values.is_active}
-                onChange={(event) => updateField("is_active", event.target.checked)}
-                className="h-4 w-4 border-slate-300 text-emerald-500 focus:ring-emerald-500"
-              />
-              Active profile
-            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery("");
+                setStatusFilter("all");
+              }}
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+            >
+              Clear
+            </button>
           </div>
+        </div>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="mb-4 flex items-center justify-between gap-3">
+        {successMessage ? (
+          <div className="border-b border-emerald-100 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-700 sm:px-6">
+            {successMessage}
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div className="border-b border-rose-100 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600 sm:px-6">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        {profiles.length === 0 ? (
+          <div className="p-6">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              No CNDS profiles yet. Create your first vendor-owned profile to use it on products.
+            </div>
+          </div>
+        ) : filteredProfiles.length === 0 ? (
+          <div className="p-6">
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
+              No matching profiles found.
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-full overflow-x-auto">
+            <div className="min-w-[980px]">
+              <table className="min-w-full">
+                <thead className="border-b border-gray-100">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 sm:px-6">Profile</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Description</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Pricing Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Tiers</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Created At</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredProfiles.map((profile) => {
+                    const isSelected = selectedProfileId === profile.id;
+
+                    return (
+                      <tr key={profile.id} className={isSelected ? "bg-[#615FFF]/5" : ""}>
+                        <td className="px-5 py-5 text-left sm:px-6">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-gray-800">{profile.name}</p>
+                            <span className="mt-1 block truncate text-xs text-gray-500">
+                              Vendor-owned domestic delivery
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-5 text-sm text-gray-500">
+                          <span className="block max-w-[300px] truncate">
+                            {profile.description || "No description added"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-5 text-sm text-gray-500">{formatPricingType(profile.pricing_type)}</td>
+                        <td className="px-4 py-5 text-sm font-semibold text-[#615FFF]">{profile.tiers.length}</td>
+                        <td className="px-4 py-5">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                              profile.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+                            }`}
+                          >
+                            {profile.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-5 text-sm text-gray-500">{formatCreatedAt(profile.created_at)}</td>
+                        <td className="px-4 py-5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => startEditMode(profile)}
+                            className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {isEditorOpen ? (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-slate-950/50 px-4 py-8 backdrop-blur-[2px]">
+          <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-[24px] border border-gray-200 bg-white shadow-2xl">
+            <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <p className="text-sm font-semibold text-slate-900">CNDS Tiers</p>
-                <p className="text-xs text-slate-500">Add simple quantity ranges and prices.</p>
+                <h3 className="text-base font-medium text-gray-800">
+                  {selectedProfile ? `Edit ${selectedProfile.name}` : "Create CNDS Profile"}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Configure the quantity ranges and domestic delivery costs for this profile.
+                </p>
               </div>
+
               <button
                 type="button"
-                onClick={addTier}
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90"
+                onClick={closeEditor}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-lg text-slate-500 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+                aria-label="Close editor"
               >
-                Add Tier
+                x
               </button>
             </div>
 
-            <div className="space-y-3">
-              {values.tiers.map((tier, index) => (
-                <div key={tier.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
-                    <button
-                      type="button"
-                      onClick={() => removeTier(tier.id)}
-                      disabled={values.tiers.length === 1}
-                      className="text-sm font-medium text-rose-600 transition-colors hover:text-rose-700 disabled:cursor-not-allowed disabled:text-slate-300"
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-4">
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Min Qty</label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={tier.min_qty}
-                        onChange={(event) => updateTier(tier.id, "min_qty", event.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Qty</label>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={tier.max_qty}
-                        onChange={(event) => updateTier(tier.id, "max_qty", event.target.value)}
-                        placeholder="Optional"
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Price</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={tier.price}
-                        onChange={(event) => updateTier(tier.id, "price", event.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Sort Order</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={tier.sort_order}
-                        onChange={(event) => updateTier(tier.id, "sort_order", event.target.value)}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-emerald-500"
-                      />
-                    </div>
-                  </div>
+            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-5 py-5 sm:px-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="vendor-cnds-name" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Profile Name
+                  </label>
+                  <input
+                    id="vendor-cnds-name"
+                    type="text"
+                    value={values.name}
+                    onChange={(event) => updateField("name", event.target.value)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                    placeholder="Vendor CNDS"
+                  />
                 </div>
-              ))}
+
+                <div>
+                  <label htmlFor="vendor-cnds-pricing-type" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Pricing Type
+                  </label>
+                  <select
+                    id="vendor-cnds-pricing-type"
+                    value={values.pricing_type}
+                    onChange={(event) => updateField("pricing_type", event.target.value as CndsShippingPricingType)}
+                    className={`h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  >
+                    <option value="fixed">Fixed</option>
+                    <option value="unit">Per Unit</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="vendor-cnds-description" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Description
+                </label>
+                <textarea
+                  id="vendor-cnds-description"
+                  value={values.description}
+                  onChange={(event) => updateField("description", event.target.value)}
+                  rows={4}
+                  className={`w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                  placeholder="Optional internal notes for this CNDS profile."
+                />
+              </div>
+
+              <label className="mt-4 inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={values.is_active}
+                  onChange={(event) => updateField("is_active", event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
+                />
+                Active Profile
+              </label>
+
+              <div className="mt-6 rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Shipping Tiers</p>
+                    <p className="text-xs text-slate-500">Define the quantity breakpoints and cost values.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addTier}
+                    className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                  >
+                    Add Tier
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {values.tiers.map((tier, index) => (
+                    <div key={tier.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeTier(tier.id)}
+                          disabled={values.tiers.length === 1}
+                          className="text-sm font-medium text-rose-500 disabled:cursor-not-allowed disabled:text-slate-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-4">
+                        <input
+                          type="number"
+                          min="1"
+                          value={tier.min_qty}
+                          onChange={(event) => updateTier(tier.id, "min_qty", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Min Qty"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={tier.max_qty}
+                          onChange={(event) => updateTier(tier.id, "max_qty", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Max Qty"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={tier.price}
+                          onChange={(event) => updateTier(tier.id, "price", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Price"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          value={tier.sort_order}
+                          onChange={(event) => updateTier(tier.id, "sort_order", event.target.value)}
+                          className={`h-11 rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 outline-none transition-colors ${accentBorder}`}
+                          placeholder="Sort Order"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSubmitting ? "Saving..." : selectedProfile ? "Update Profile" : "Create Profile"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeEditor}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => void handleSubmit()}
-              disabled={isSubmitting}
-              className="inline-flex items-center justify-center rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSubmitting ? "Saving..." : selectedProfile ? "Update Profile" : "Create Profile"}
-            </button>
-            <p className="text-sm text-slate-500">Only your vendor account can use and manage these CNDS profiles.</p>
-          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }

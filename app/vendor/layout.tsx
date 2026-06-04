@@ -26,6 +26,7 @@ const VENDOR_NAVIGATION: WorkspaceNavItem[] = [
       { label: "All Products", href: "/vendor/products" },
       { label: "Add Product", href: "/vendor/products/new" },
       { label: "Categories", href: "/vendor/categories" },
+      { label: "Brands", href: "/vendor/brands" },
       { label: "Media Library", href: "/vendor/media" },
       { label: "Product Reviews", href: "/vendor/reviews" },
     ],
@@ -39,11 +40,6 @@ const VENDOR_NAVIGATION: WorkspaceNavItem[] = [
       { label: "Completed Orders", href: "/vendor/orders?status=Delivered" },
       { label: "Cancelled Orders", href: "/vendor/orders?status=Cancelled" },
     ],
-  },
-  {
-    name: "Pricing Tiers",
-    path: "/vendor/pricing-tiers",
-    icon: "creditCard",
   },
   {
     name: "Shipping",
