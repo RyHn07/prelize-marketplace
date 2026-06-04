@@ -1,16 +1,80 @@
 type WorkspaceTone = "admin" | "vendor";
 
+function LoadingMotionStyles() {
+  return (
+    <style
+      dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes prelize-loading-shimmer {
+            100% { transform: translateX(100%); }
+          }
+
+          @keyframes prelize-loading-progress {
+            0% { transform: translateX(-70%) scaleX(.35); opacity: .45; }
+            45% { transform: translateX(10%) scaleX(.75); opacity: .9; }
+            100% { transform: translateX(115%) scaleX(.35); opacity: .45; }
+          }
+
+          .prelize-loading-skeleton {
+            position: relative;
+            overflow: hidden;
+            background: #e6eaf2;
+          }
+
+          .prelize-loading-skeleton::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            transform: translateX(-100%);
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.78), transparent);
+            animation: prelize-loading-shimmer 1.45s ease-in-out infinite;
+          }
+
+          .prelize-loading-progress {
+            transform-origin: left center;
+            animation: prelize-loading-progress 1.35s ease-in-out infinite;
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .prelize-loading-skeleton::after,
+            .prelize-loading-progress {
+              animation: none;
+            }
+          }
+        `,
+      }}
+    />
+  );
+}
+
+function LoadingProgress({ tone = "storefront" }: { tone?: WorkspaceTone | "storefront" }) {
+  const gradientClass =
+    tone === "vendor"
+      ? "from-emerald-500 via-cyan-500 to-[#615FFF]"
+      : "from-[#615FFF] via-cyan-500 to-emerald-500";
+
+  return (
+    <div className="h-1 overflow-hidden bg-slate-100">
+      <div
+        className={`prelize-loading-progress h-full w-3/5 rounded-full bg-gradient-to-r ${gradientClass}`}
+      />
+    </div>
+  );
+}
+
 function SkeletonBlock({
   className,
 }: {
   className: string;
 }) {
-  return <div className={`animate-pulse rounded-2xl bg-slate-200/80 ${className}`} />;
+  return <div className={`prelize-loading-skeleton rounded-xl ${className}`} />;
 }
 
-function StorefrontHeaderSkeleton() {
+export function StorefrontHeaderSkeleton() {
   return (
     <header className="border-b border-slate-200/80 bg-white">
+      <LoadingMotionStyles />
+      <LoadingProgress />
       <div className="border-b border-slate-200/80 bg-slate-50/80">
         <div className="mx-auto flex max-w-7xl justify-end px-4 py-2.5 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center gap-3">
@@ -40,6 +104,89 @@ function StorefrontHeaderSkeleton() {
   );
 }
 
+export function HomepageSectionsLoading() {
+  return (
+    <section className="bg-white">
+      <LoadingMotionStyles />
+      <div className="mx-auto max-w-7xl px-4 pt-4 pb-3 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="grid items-start gap-2 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-6">
+          <div className="overflow-hidden rounded-[14px] border border-slate-200 bg-white p-4 lg:min-h-[534px] lg:rounded-[16px] lg:p-10">
+            <SkeletonBlock className="h-4 w-28" />
+            <SkeletonBlock className="mt-6 h-10 w-full max-w-sm sm:h-14" />
+            <SkeletonBlock className="mt-3 h-10 w-3/4 max-w-xs sm:h-14" />
+            <SkeletonBlock className="mt-6 h-4 w-full max-w-md" />
+            <SkeletonBlock className="mt-3 h-4 w-4/5 max-w-sm" />
+            <SkeletonBlock className="mt-8 h-11 w-28 rounded-full" />
+            <SkeletonBlock className="mt-10 h-40 w-full rounded-[14px] sm:h-56 lg:h-64" />
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+            {Array.from({ length: 2 }).map((_, index) => (
+              <div
+                key={index}
+                className="rounded-[14px] border border-slate-200 bg-white p-4 lg:min-h-[260px]"
+              >
+                <SkeletonBlock className="h-32 w-full rounded-[12px] sm:h-40 lg:h-36" />
+                <SkeletonBlock className="mt-4 h-5 w-3/4" />
+                <SkeletonBlock className="mt-3 h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="rounded-[14px] border border-slate-200 bg-white p-3">
+              <SkeletonBlock className="aspect-square w-full rounded-[12px]" />
+              <SkeletonBlock className="mt-3 h-4 w-3/4" />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl space-y-6 px-4 pt-3 pb-5 sm:px-6 sm:py-10 lg:px-8 lg:py-16">
+        {Array.from({ length: 2 }).map((_, sectionIndex) => (
+          <div key={sectionIndex} className="space-y-3 sm:space-y-6">
+            <div className="flex items-center justify-between gap-3">
+              <SkeletonBlock className="h-7 w-44" />
+              <SkeletonBlock className="h-4 w-20" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 sm:gap-5 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, cardIndex) => (
+                <article
+                  key={cardIndex}
+                  className="overflow-hidden rounded-[14px] border border-slate-200 bg-white p-3"
+                >
+                  <SkeletonBlock className="aspect-[1.05] w-full rounded-[12px]" />
+                  <SkeletonBlock className="mt-4 h-4 w-20" />
+                  <SkeletonBlock className="mt-3 h-5 w-full" />
+                  <SkeletonBlock className="mt-2 h-5 w-2/3" />
+                  <div className="mt-4 flex items-center justify-between">
+                    <SkeletonBlock className="h-5 w-16" />
+                    <SkeletonBlock className="h-8 w-20 rounded-full" />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function StorefrontHomeLoading() {
+  return (
+    <main className="min-h-screen bg-white">
+      <StorefrontHeaderSkeleton />
+      <HomepageSectionsLoading />
+    </main>
+  );
+}
+
 export function StorefrontCatalogLoading({
   eyebrow,
   titleWidth = "w-64",
@@ -49,6 +196,7 @@ export function StorefrontCatalogLoading({
 }) {
   return (
     <main className="min-h-screen bg-white">
+      <LoadingMotionStyles />
       <StorefrontHeaderSkeleton />
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -115,6 +263,7 @@ export function StorefrontCatalogLoading({
 export function StorefrontProductLoading() {
   return (
     <main className="min-h-screen bg-white">
+      <LoadingMotionStyles />
       <StorefrontHeaderSkeleton />
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -192,6 +341,7 @@ export function WorkspaceLoading({
 
   return (
     <div className={`min-h-screen ${pageClass} text-slate-900 md:flex`}>
+      <LoadingMotionStyles />
       <aside className={`hidden h-screen w-[260px] shrink-0 border-r md:sticky md:top-0 md:flex md:flex-col ${sidebarClass}`}>
         <div className="space-y-3 border-b border-inherit px-6 py-6">
           <div className={`h-3 w-28 animate-pulse rounded-full ${sidebarBlockClass}`} />
@@ -211,6 +361,7 @@ export function WorkspaceLoading({
 
       <div className="min-w-0 flex-1">
         <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <LoadingProgress tone={tone} />
           <div className="px-4 py-4 sm:px-6 lg:px-8">
             <div className={`text-sm font-semibold uppercase tracking-[0.18em] ${accentClass}`}>
               {title}

@@ -1,5 +1,5 @@
-import { StorefrontCatalogLoading } from "@/components/loading/route-loading";
+import { StorefrontHomeLoading } from "@/components/loading/route-loading";
 
 export default function Loading() {
-  return <StorefrontCatalogLoading eyebrow="Marketplace" titleWidth="w-56" />;
+  return <StorefrontHomeLoading />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ProductType = "simple" | "variable";
 type ProductTab = "inventory" | "pricing-tiers" | "shipping" | "attributes" | "variations";
@@ -112,6 +112,16 @@ function createPreviewTierSet(index: number): PreviewTierSet {
   };
 }
 
+function getTierSetDisplayName(tierSet: Pick<PreviewTierSet, "name">, index: number) {
+  const trimmedName = tierSet.name.trim();
+
+  if (!trimmedName || /^Tier\s*-\s*\d+$/i.test(trimmedName)) {
+    return `Tier - ${index + 1}`;
+  }
+
+  return trimmedName;
+}
+
 function InputField({
   id,
   type = "text",
@@ -190,6 +200,12 @@ function SectionHeading({ title, description }: { title: string; description?: s
 }
 
 export default function TailadminProductDataPreview() {
+  const initialTierSetRef = useRef<PreviewTierSet | null>(null);
+
+  if (!initialTierSetRef.current) {
+    initialTierSetRef.current = createPreviewTierSet(0);
+  }
+
   const [productType, setProductType] = useState<ProductType>("simple");
   const [activeTab, setActiveTab] = useState<ProductTab>("inventory");
   const [pricingType, setPricingType] = useState("unit-pricing");
@@ -204,8 +220,8 @@ export default function TailadminProductDataPreview() {
   const [moqValue, setMoqValue] = useState("1");
   const [weightValue, setWeightValue] = useState("");
   const [singlePricingTiers, setSinglePricingTiers] = useState<PreviewPricingTier[]>([createPreviewTier(), createPreviewTier()]);
-  const [tierSets, setTierSets] = useState<PreviewTierSet[]>([createPreviewTierSet(0)]);
-  const [activeTierSetId, setActiveTierSetId] = useState<string>(() => createPreviewTierSet(0).id);
+  const [tierSets, setTierSets] = useState<PreviewTierSet[]>(() => [initialTierSetRef.current!]);
+  const [activeTierSetId, setActiveTierSetId] = useState<string>(() => initialTierSetRef.current!.id);
   const [attributes, setAttributes] = useState<PreviewAttribute[]>([]);
   const [openAttributeId, setOpenAttributeId] = useState<string | null>(null);
   const [attributeDrafts, setAttributeDrafts] = useState<Record<string, PreviewAttributeDraft>>({});
@@ -324,9 +340,9 @@ export default function TailadminProductDataPreview() {
             max_qty: tier.maxQty,
             price: tier.price,
           })),
-          pricingTierSets: (next.pricingTierSets ?? tierSets).map((tierSet) => ({
+          pricingTierSets: (next.pricingTierSets ?? tierSets).map((tierSet, index) => ({
             id: tierSet.id,
-            name: tierSet.name,
+            name: getTierSetDisplayName(tierSet, index),
             fallback_price: tierSet.fallbackPrice,
             pricing_type: tierSet.pricingType,
             tiers: tierSet.tiers.map((tier) => ({
@@ -672,9 +688,9 @@ export default function TailadminProductDataPreview() {
       if (customEvent.detail?.pricingTierSets) {
         const nextTierSets =
           customEvent.detail.pricingTierSets.length > 0
-            ? customEvent.detail.pricingTierSets.map((tierSet) => ({
+            ? customEvent.detail.pricingTierSets.map((tierSet, index) => ({
                 id: tierSet.id,
-                name: tierSet.name,
+                name: getTierSetDisplayName({ name: tierSet.name }, index),
                 fallbackPrice: tierSet.fallback_price,
                 pricingType: tierSet.pricing_type,
                 tiers:
@@ -950,19 +966,44 @@ export default function TailadminProductDataPreview() {
 
   const addTierSet = () => {
     const nextTierSet = createPreviewTierSet(tierSets.length);
-    const next = [...tierSets, nextTierSet];
     setActiveTierSetId(nextTierSet.id);
-    setTierSets(next);
-    queueMicrotask(() => {
-      pushPricingStateToRealForm({ pricingTierSets: next });
+    setTierSets((current) => {
+      const next = [...current, { ...nextTierSet, name: getTierSetDisplayName(nextTierSet, current.length) }];
+
+      queueMicrotask(() => {
+        pushPricingStateToRealForm({
+          pricingType: nextTierSet.pricingType,
+          regularPrice: nextTierSet.fallbackPrice,
+          pricingTierSets: next,
+        });
+      });
+
+      return next;
     });
   };
 
   const removeTierSet = (tierSetId: string) => {
-    const next = tierSets.length > 1 ? tierSets.filter((tierSet) => tierSet.id !== tierSetId) : tierSets;
-    setTierSets(next);
-    queueMicrotask(() => {
-      pushPricingStateToRealForm({ pricingTierSets: next });
+    setTierSets((current) => {
+      const next = current.length > 1 ? current.filter((tierSet) => tierSet.id !== tierSetId) : current;
+      const nextActiveTierSet = next.some((tierSet) => tierSet.id === activeTierSetId)
+        ? activeTierSet
+        : next[0];
+
+      queueMicrotask(() => {
+        if (nextActiveTierSet) {
+          setActiveTierSetId(nextActiveTierSet.id);
+          setRegularPrice(nextActiveTierSet.fallbackPrice);
+          setPricingType(nextActiveTierSet.pricingType === "fixed" ? "carton-pricing" : "unit-pricing");
+        }
+
+        pushPricingStateToRealForm({
+          pricingType: nextActiveTierSet?.pricingType,
+          regularPrice: nextActiveTierSet?.fallbackPrice,
+          pricingTierSets: next,
+        });
+      });
+
+      return next;
     });
   };
 
@@ -1150,7 +1191,7 @@ export default function TailadminProductDataPreview() {
                   {productType === "variable" ? (
                     <div className="border-b border-gray-200 px-5 pt-5 sm:px-6">
                       <div className="flex flex-wrap items-center gap-6">
-                        {tierSets.map((tierSet) => {
+                        {tierSets.map((tierSet, index) => {
                           const isActive = tierSet.id === activeTierSet?.id;
 
                           return (
@@ -1164,7 +1205,7 @@ export default function TailadminProductDataPreview() {
                                   : "border-transparent text-slate-600 hover:text-slate-900"
                               }`}
                             >
-                              {tierSet.name}
+                              {getTierSetDisplayName(tierSet, index)}
                             </button>
                           );
                         })}

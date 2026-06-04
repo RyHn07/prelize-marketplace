@@ -24,6 +24,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "natureconservancy-h.assetsadobe.com",
       },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+        pathname: "/a/**",
+      },
     ],
   },
 };
