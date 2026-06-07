@@ -6,13 +6,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   createProductEditorRecord,
-  getEffectivePrice,
   updateProductEditorRecord,
   type ProductEditorSavePayload,
   type ProductPricingTierSetUpsertPayload,
   type ProductPricingTierUpsertPayload,
   type ProductVariantUpsertPayload,
 } from "@/lib/products/actions";
+import { calculateProductProfitPricing, DEFAULT_CNY_TO_BDT_RATE } from "@/lib/product-pricing";
 import { getCndsShippingProfilesForVendor } from "@/lib/cnds/queries";
 import { listProductMedia, uploadProductMedia } from "@/lib/media/storage";
 import {
@@ -28,7 +28,6 @@ import type {
   ProductCategoryOption,
   ProductEditorRecord,
   ProductFormValues,
-  ProductPricingSource,
   ProductPricingTierFormValue,
   ProductPricingTierSetFormValue,
   ProductPricingType,
@@ -69,6 +68,20 @@ type PricingBridgeTierSet = {
   tiers: PricingBridgeTier[];
 };
 
+type CndsBridgeProfile = {
+  id: string;
+  vendor_id: string | null;
+  name: string;
+  description: string | null;
+  pricing_type: "unit" | "fixed";
+  is_active: boolean;
+  tiers: Array<{
+    min_qty: number;
+    max_qty: number | null;
+    price: number;
+  }>;
+};
+
 type AttributeBridgeAttribute = {
   id: string;
   name: string;
@@ -91,6 +104,9 @@ type SpecificationBridgeSpecification = {
   label: string;
   value: string;
 };
+
+const MAX_PRODUCT_PRICING_TIERS = 3;
+const MAX_PRODUCT_TIER_SETS = 5;
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -259,7 +275,10 @@ function getInitialPricingTierSets(record?: ProductEditorRecord | null) {
     return record.pricing_tier_sets.map(({ set, rows }) => ({
       id: set.id,
       name: set.name,
-      fallback_price: String(set.fallback_price),
+      fallback_price:
+        set.buying_price_cny !== null && set.buying_price_cny !== undefined
+          ? String(set.buying_price_cny)
+          : String(set.fallback_price),
       pricing_type: set.pricing_type,
       tiers:
         rows.length > 0
@@ -267,7 +286,10 @@ function getInitialPricingTierSets(record?: ProductEditorRecord | null) {
               id: row.id,
               min_qty: String(row.min_qty),
               max_qty: row.max_qty !== null ? String(row.max_qty) : "",
-              price: String(row.price),
+              price:
+                row.buying_price_cny !== null && row.buying_price_cny !== undefined
+                  ? String(row.buying_price_cny)
+                  : String(row.price),
             }))
           : [createEmptyPricingTier()],
     }));
@@ -281,15 +303,20 @@ function getInitialPricingTierSets(record?: ProductEditorRecord | null) {
         id: defaultTierSetId,
         name: "Default Pricing",
         fallback_price:
-          record.product.regular_price !== null && record.product.regular_price !== undefined
-            ? String(record.product.regular_price)
+          record.product.buying_price_cny !== null && record.product.buying_price_cny !== undefined
+            ? String(record.product.buying_price_cny)
+            : record.product.regular_price !== null && record.product.regular_price !== undefined
+              ? String(record.product.regular_price)
             : String(record.product.price ?? 0),
         pricing_type: record.pricing_tiers[0]?.pricing_type ?? "unit",
         tiers: record.pricing_tiers.map((tier) => ({
           id: tier.id,
           min_qty: String(tier.min_qty),
           max_qty: tier.max_qty !== null ? String(tier.max_qty) : "",
-          price: String(tier.price),
+          price:
+            tier.buying_price_cny !== null && tier.buying_price_cny !== undefined
+              ? String(tier.buying_price_cny)
+              : String(tier.price),
         })),
       },
     ];
@@ -333,8 +360,27 @@ function getInitialValues(
     badge: product?.badge ?? "",
     status: initialStatus,
     product_type: isVariable ? "variable" : "single",
-    regular_price: product?.regular_price ? String(product.regular_price) : product?.price ? String(product.price) : "",
+    regular_price:
+      product?.buying_price_cny !== null && product?.buying_price_cny !== undefined
+        ? String(product.buying_price_cny)
+        : product?.regular_price
+          ? String(product.regular_price)
+          : product?.price
+            ? String(product.price)
+            : "",
     discount_price: product?.discount_price ? String(product.discount_price) : "",
+    buying_price_cny:
+      product?.buying_price_cny !== null && product?.buying_price_cny !== undefined
+        ? String(product.buying_price_cny)
+        : product?.regular_price
+          ? String(product.regular_price)
+          : product?.price
+            ? String(product.price)
+            : "",
+    profit_percent:
+      product?.profit_percent !== null && product?.profit_percent !== undefined
+        ? String(product.profit_percent)
+        : "",
     moq: product?.moq ? String(product.moq) : "1",
     attributes: (() => {
       const inferredAttributes = inferAttributesFromVariants(record);
@@ -373,8 +419,13 @@ function getInitialValues(
       record?.variants.map((variant) => ({
         id: variant.id,
         name: variant.name,
-        regular_price: variant.regular_price !== null ? String(variant.regular_price) : String(variant.price),
-        discount_price: variant.discount_price !== null ? String(variant.discount_price) : "",
+        regular_price:
+          variant.buying_price_cny !== null && variant.buying_price_cny !== undefined
+            ? String(variant.buying_price_cny)
+            : variant.regular_price !== null
+              ? String(variant.regular_price)
+              : String(variant.price),
+        discount_price: "",
         moq: String(variant.moq),
         stock: String(variant.stock ?? 0),
         weight: variant.weight !== null && variant.weight !== undefined ? String(variant.weight) : "",
@@ -428,8 +479,13 @@ function normalizeOptionalUuid(value: string) {
 }
 
 function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
-  const regularPrice = parseNumber(values.regular_price) ?? 0;
-  const discountPrice = parseNumber(values.discount_price);
+  const buyingPriceCny = parseNumber(values.buying_price_cny || values.regular_price) ?? 0;
+  const profitPercent = parseNumber(values.profit_percent) ?? 0;
+  const pricingPreview = calculateProductProfitPricing({
+    buyingPriceCny,
+    profitPercent,
+    exchangeRateCnyToBdt: DEFAULT_CNY_TO_BDT_RATE,
+  });
   const moq = parseNumber(values.moq) ?? 1;
   const trimmedName = values.name.trim();
   const fallbackSlug =
@@ -449,15 +505,15 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
     sku: normalizeOptionalText(values.sku),
     description: normalizeOptionalText(values.description),
     image_url: normalizeOptionalText(values.image_url),
-    price: getEffectivePrice(regularPrice, discountPrice),
+    price: pricingPreview.displayPriceBdt,
     moq,
     weight: normalizeOptionalText(values.weight),
     badge: normalizeOptionalText(values.badge),
     is_active: values.status === "active",
     status: values.status,
     product_type: values.product_type,
-    regular_price: values.product_type === "single" ? regularPrice : null,
-    discount_price: values.product_type === "single" ? discountPrice : null,
+    regular_price: values.product_type === "single" ? pricingPreview.displayPriceBdt : null,
+    discount_price: null,
     gallery_images: values.gallery_images.filter(Boolean),
     attributes: values.attributes
       .map((attribute): ProductAttribute => ({
@@ -477,6 +533,11 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
     cnds_profile_id: normalizeCndsProfileId(values.cnds_profile_id),
     pricing_tier_profile_id: normalizePricingTierProfileId(values.pricing_tier_profile_id),
     pricing_source: "use_product_tier",
+    buying_price_cny: pricingPreview.buyingPriceCny,
+    profit_percent: pricingPreview.profitPercent,
+    profit_amount_cny: pricingPreview.profitAmountCny,
+    selling_price_cny: pricingPreview.sellingPriceCny,
+    exchange_rate_cny_to_bdt: pricingPreview.exchangeRateCnyToBdt,
   };
 }
 
@@ -513,9 +574,8 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
 
   return values.variations.map((variation) => {
     const fallbackRegularPrice =
-      tierSetFallbackById.get(variation.pricing_tier_set_id) ?? parseNumber(values.regular_price) ?? 0;
+      tierSetFallbackById.get(variation.pricing_tier_set_id) ?? parseNumber(values.buying_price_cny) ?? 0;
     const regularPrice = parseNumber(variation.regular_price) ?? fallbackRegularPrice;
-    const discountPrice = parseNumber(variation.discount_price) ?? parseNumber(values.discount_price);
     const moq = parseNumber(variation.moq) ?? 1;
     const stock = Math.max(0, Math.floor(parseNumber(variation.stock) ?? 0));
     const derivedValue = Object.values(variation.attribute_values)
@@ -527,8 +587,11 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
       name: variation.name.trim(),
       value: derivedValue.length > 0 ? derivedValue : variation.name.trim() || null,
       regular_price: regularPrice,
-      discount_price: discountPrice,
-      price: getEffectivePrice(regularPrice, discountPrice),
+      discount_price: null,
+      price: regularPrice,
+      buying_price_cny: regularPrice,
+      profit_amount_cny: 0,
+      selling_price_cny: regularPrice,
       moq,
       stock,
       weight: parseNumber(variation.weight),
@@ -1151,6 +1214,37 @@ function ProductForm({
     }
   }, [cndsProfiles, forcedVendorId, mode, record?.product.vendor_id, values.cnds_profile_id, values.vendor_id]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("prelize:cnds-profiles-state-updated", {
+        detail: {
+          loading: cndsProfilesLoading,
+          vendorId: values.vendor_id || null,
+          selectedProfileId: values.cnds_profile_id,
+          profiles: availableCndsProfiles.map(
+            (profile): CndsBridgeProfile => ({
+              id: profile.id,
+              vendor_id: profile.vendor_id,
+              name: profile.name,
+              description: profile.description,
+              pricing_type: profile.pricing_type,
+              is_active: profile.is_active,
+              tiers: profile.tiers.map((tier) => ({
+                min_qty: tier.min_qty,
+                max_qty: tier.max_qty,
+                price: tier.price,
+              })),
+            }),
+          ),
+        },
+      }),
+    );
+  }, [availableCndsProfiles, cndsProfilesLoading, values.cnds_profile_id]);
+
   const searchParamsString = searchParams.toString();
 
   const createMediaLibraryHref = (target: string) => {
@@ -1249,6 +1343,7 @@ function ProductForm({
           pricingType?: ProductPricingType;
           regularPrice?: string;
           discountPrice?: string;
+          profitPercent?: string;
           moq?: string;
           pricingTiers?: PricingBridgeTier[];
           pricingTierSets?: PricingBridgeTierSet[];
@@ -1259,6 +1354,8 @@ function ProductForm({
           pricing_type: customEvent.detail?.pricingType ?? current.pricing_type,
           regular_price: customEvent.detail?.regularPrice ?? current.regular_price,
           discount_price: customEvent.detail?.discountPrice ?? current.discount_price,
+          buying_price_cny: customEvent.detail?.regularPrice ?? current.buying_price_cny,
+          profit_percent: customEvent.detail?.profitPercent ?? current.profit_percent,
           moq: customEvent.detail?.moq ?? current.moq,
           pricing_tiers:
             customEvent.detail?.pricingTiers?.map((tier) => ({
@@ -1345,6 +1442,15 @@ function ProductForm({
           product_type: nextProductType,
         }));
         setErrorMessage("");
+      };
+
+      const handleSetCndsProfileFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          profileId?: string | null;
+        }>;
+
+        const nextProfileId = customEvent.detail?.profileId?.trim() ?? "";
+        updateField("cnds_profile_id", nextProfileId);
       };
 
       const handleSetStatusFromBridge = (event: Event) => {
@@ -1514,6 +1620,7 @@ function ProductForm({
       window.addEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
       window.addEventListener("prelize:set-specifications-state", handleSetSpecificationsState as EventListener);
       window.addEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
+      window.addEventListener("prelize:set-cnds-profile", handleSetCndsProfileFromBridge as EventListener);
       window.addEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
       window.addEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
       window.addEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
@@ -1532,6 +1639,7 @@ function ProductForm({
         window.removeEventListener("prelize:set-attributes-state", handleSetAttributesState as EventListener);
         window.removeEventListener("prelize:set-specifications-state", handleSetSpecificationsState as EventListener);
         window.removeEventListener("prelize:set-product-type", handleSetProductTypeFromBridge as EventListener);
+        window.removeEventListener("prelize:set-cnds-profile", handleSetCndsProfileFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
@@ -1569,6 +1677,7 @@ function ProductForm({
           pricingType: values.pricing_type,
           regularPrice: values.regular_price,
           discountPrice: values.discount_price,
+          profitPercent: values.profit_percent,
           moq: values.moq,
           pricingTiers: values.pricing_tiers.map((tier) => ({
             id: tier.id,
@@ -1594,6 +1703,7 @@ function ProductForm({
   }, [
     values.discount_price,
     values.moq,
+    values.profit_percent,
     values.pricing_tier_sets,
     values.pricing_tiers,
     values.pricing_type,
@@ -1732,7 +1842,10 @@ function ProductForm({
   const addPricingTier = () => {
     setValues((current) => ({
       ...current,
-      pricing_tiers: [...current.pricing_tiers, createEmptyPricingTier()],
+      pricing_tiers:
+        current.pricing_tiers.length >= MAX_PRODUCT_PRICING_TIERS
+          ? current.pricing_tiers
+          : [...current.pricing_tiers, createEmptyPricingTier()],
     }));
   };
 
@@ -1780,7 +1893,10 @@ function ProductForm({
 
     setValues((current) => ({
       ...current,
-      pricing_tier_sets: [...current.pricing_tier_sets, nextTierSet],
+      pricing_tier_sets:
+        current.pricing_tier_sets.length >= MAX_PRODUCT_TIER_SETS
+          ? current.pricing_tier_sets
+          : [...current.pricing_tier_sets, nextTierSet],
       variations: current.variations.map((variation) =>
         variation.pricing_tier_set_id ? variation : { ...variation, pricing_tier_set_id: nextTierSet.id },
       ),
@@ -1816,7 +1932,10 @@ function ProductForm({
         tierSet.id === tierSetId
           ? {
               ...tierSet,
-              tiers: [...tierSet.tiers, createEmptyPricingTier()],
+              tiers:
+                tierSet.tiers.length >= MAX_PRODUCT_PRICING_TIERS
+                  ? tierSet.tiers
+                  : [...tierSet.tiers, createEmptyPricingTier()],
             }
           : tierSet,
       ),
@@ -1875,6 +1994,10 @@ function ProductForm({
       return "Product type is required.";
     }
 
+    if (parseNumber(values.profit_percent) === null || (parseNumber(values.profit_percent) ?? -1) < 0) {
+      return "Profit percent is required for product pricing.";
+    }
+
     if (!canAssignPlatformProducts) {
       if (!payload.vendor_id) {
         return "No vendor account found for this product form.";
@@ -1886,8 +2009,8 @@ function ProductForm({
     }
 
     if (payload.product_type === "single") {
-      if (parseNumber(values.regular_price) === null || (parseNumber(values.regular_price) ?? 0) <= 0) {
-        return "Regular price is required for a single product.";
+      if (parseNumber(values.buying_price_cny || values.regular_price) === null || (parseNumber(values.buying_price_cny || values.regular_price) ?? 0) <= 0) {
+        return "Buying price is required for a single product.";
       }
 
       if ((parseNumber(values.moq) ?? 0) <= 0) {
@@ -1902,6 +2025,10 @@ function ProductForm({
 
       if (values.pricing_tier_sets.length === 0) {
         return "Add at least one pricing tier set for a variable product.";
+      }
+
+      if (values.pricing_tier_sets.length > MAX_PRODUCT_TIER_SETS) {
+        return `A variable product can have at most ${MAX_PRODUCT_TIER_SETS} pricing tier sets.`;
       }
 
       for (const variation of values.variations) {
@@ -1921,6 +2048,10 @@ function ProductForm({
 
         if ((parseNumber(tierSet.fallback_price) ?? -1) < 0) {
           return "Each pricing tier set needs a valid fallback price.";
+        }
+
+        if (tierSet.tiers.length > MAX_PRODUCT_PRICING_TIERS) {
+          return `Each pricing tier set can have at most ${MAX_PRODUCT_PRICING_TIERS} tiers.`;
         }
 
         for (const tier of tierSet.tiers) {
@@ -1948,6 +2079,10 @@ function ProductForm({
         }
       }
     } else {
+      if (values.pricing_tiers.length > MAX_PRODUCT_PRICING_TIERS) {
+        return `A single product can have at most ${MAX_PRODUCT_PRICING_TIERS} pricing tiers.`;
+      }
+
       for (const tier of values.pricing_tiers) {
         const isEmpty = !tier.min_qty.trim() && !tier.max_qty.trim() && !tier.price.trim();
 
@@ -2234,13 +2369,26 @@ function ProductForm({
             >
               {values.product_type === "single" ? (
                 <div className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-4">
                     <NumberField
                       id="product-regular-price"
-                      label="Regular Price / Fallback Price"
+                      label="Buying Price (CNY)"
                       value={values.regular_price}
-                      onChange={(value) => updateField("regular_price", value)}
+                      onChange={(value) => {
+                        updateField("regular_price", value);
+                        updateField("buying_price_cny", value);
+                      }}
                       placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
+                    <NumberField
+                      id="product-profit-percent"
+                      label="Profit (%)"
+                      value={values.profit_percent}
+                      onChange={(value) => updateField("profit_percent", value)}
+                      placeholder="0"
                       min="0"
                       step="0.01"
                       required
@@ -2286,9 +2434,10 @@ function ProductForm({
                       <button
                         type="button"
                         onClick={addPricingTier}
+                        disabled={values.pricing_tiers.length >= MAX_PRODUCT_PRICING_TIERS}
                         className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
                       >
-                        Add Tier
+                        {values.pricing_tiers.length >= MAX_PRODUCT_PRICING_TIERS ? `Max ${MAX_PRODUCT_PRICING_TIERS} Tiers` : "Add Tier"}
                       </button>
                     </div>
                   </div>
@@ -2340,7 +2489,7 @@ function ProductForm({
                           />
                           <NumberField
                             id={`pricing-tier-price-${tier.id}`}
-                            label="Price"
+                            label="Buying Price (CNY)"
                             value={tier.price}
                             onChange={(value) => handlePricingTierChange(tier.id, "price", value)}
                             placeholder="0.00"
@@ -2373,9 +2522,10 @@ function ProductForm({
                         <button
                           type="button"
                           onClick={addPricingTierSet}
+                          disabled={values.pricing_tier_sets.length >= MAX_PRODUCT_TIER_SETS}
                           className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
                         >
-                          Add Tier Set
+                          {values.pricing_tier_sets.length >= MAX_PRODUCT_TIER_SETS ? `Max ${MAX_PRODUCT_TIER_SETS} Tier Sets` : "Add Tier Set"}
                         </button>
                       </div>
                     </div>
@@ -2408,7 +2558,7 @@ function ProductForm({
                           />
                           <NumberField
                             id={`tier-set-fallback-${tierSet.id}`}
-                            label="Fallback Price"
+                            label="Fallback Buying Price (CNY)"
                             value={tierSet.fallback_price}
                             onChange={(value) => handlePricingTierSetChange(tierSet.id, "fallback_price", value)}
                             placeholder="0.00"
@@ -2437,9 +2587,10 @@ function ProductForm({
                           <button
                             type="button"
                             onClick={() => addPricingTierToSet(tierSet.id)}
+                            disabled={tierSet.tiers.length >= MAX_PRODUCT_PRICING_TIERS}
                             className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
                           >
-                            Add Tier
+                            {tierSet.tiers.length >= MAX_PRODUCT_PRICING_TIERS ? `Max ${MAX_PRODUCT_PRICING_TIERS} Tiers` : "Add Tier"}
                           </button>
                         </div>
 
@@ -2486,7 +2637,7 @@ function ProductForm({
                                 />
                                 <NumberField
                                   id={`tier-set-${tierSet.id}-price-${tier.id}`}
-                                  label="Price"
+                                  label="Buying Price (CNY)"
                                   value={tier.price}
                                   onChange={(value) => handlePricingTierSetTierChange(tierSet.id, tier.id, "price", value)}
                                   placeholder="0.00"

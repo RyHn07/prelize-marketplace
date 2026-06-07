@@ -76,7 +76,16 @@ function getDeliveryWindow(productId: string) {
 }
 
 function formatPriceLabel(price: string | number) {
-  return `From ৳${price}`;
+  const amount = typeof price === "number" ? price : Number(price);
+
+  if (!Number.isFinite(amount)) {
+    return `From ৳${price}`;
+  }
+
+  return `From ৳${amount.toLocaleString("en-BD", {
+    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {

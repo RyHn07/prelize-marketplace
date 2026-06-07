@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import Header from "@/components/Header";
@@ -20,6 +22,7 @@ import {
 import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getProductReviewSummaryMap, listProductReviews, mapReviewRowToStorefrontReview } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
+import { absoluteUrl, createPageMetadata, toJsonLdScriptContent } from "@/lib/seo";
 import type { ProductSpecification } from "@/types/product";
 
 function isStorefrontSpecification(value: unknown): value is ProductSpecification {
@@ -45,6 +48,36 @@ function getFallbackSpecifications(specifications: unknown): ProductSpecificatio
 type ProductDetailsPageProps = {
   params: Promise<{ slug: string }>;
 };
+
+function createProductMetaDescription(product: { name: string; short_description?: string | null; description?: string | null }) {
+  const source =
+    product.short_description?.trim() ||
+    product.description?.replace(/\s+/g, " ").trim() ||
+    `Source ${product.name} wholesale on Prelize with vendor, MOQ, shipping, and product details.`;
+
+  return source.length > 155 ? `${source.slice(0, 152).trim()}...` : source;
+}
+
+export async function generateMetadata({ params }: ProductDetailsPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const { data: productDetail } = await getPublicProductDetailBySlug(slug);
+
+  if (!productDetail) {
+    return {
+      title: "Product",
+    };
+  }
+
+  const product = productDetail.product;
+  const image = product.gallery_images?.[0] ?? product.image_url;
+
+  return createPageMetadata({
+    title: product.name,
+    description: createProductMetaDescription(product),
+    path: `/products/${product.slug}`,
+    image,
+  });
+}
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
@@ -102,6 +135,23 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
     reviews: productReviews.map(mapReviewRowToStorefrontReview),
   };
   const category = getCategoryById(productRow.category_id, categoryOptions);
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: product.gallery.filter(Boolean),
+    description: createProductMetaDescription(productRow),
+    sku: productRow.sku ?? undefined,
+    category: category?.name,
+    url: absoluteUrl(`/products/${productRow.slug}`),
+    offers: {
+      "@type": "Offer",
+      url: absoluteUrl(`/products/${productRow.slug}`),
+      price: productRow.price,
+      priceCurrency: "USD",
+      availability: productRow.is_active ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+    },
+  };
   const relatedProductRows = publicProducts
     .filter((item) => item.category_id === productRow.category_id && item.slug !== productRow.slug)
     .slice(0, 4);
@@ -123,21 +173,34 @@ export default async function ProductDetailsPage({ params }: ProductDetailsPageP
       relatedReviewSummaryMap.get(item.id),
     ),
   );
+  const categoryHref = category?.slug ? `/categories/${category.slug}` : "/categories";
 
   return (
     <main className="min-h-screen bg-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: toJsonLdScriptContent(productJsonLd) }}
+      />
       <Header />
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <nav className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>Home</span>
+          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <Link href="/" className="transition-colors hover:text-[#615FFF]">
+              Home
+            </Link>
             <span>&gt;</span>
-            <span>Categories</span>
+            <Link href="/categories" className="transition-colors hover:text-[#615FFF]">
+              Categories
+            </Link>
             <span>&gt;</span>
-            <span>{category?.name ?? "Catalog"}</span>
+            <Link href={categoryHref} className="transition-colors hover:text-[#615FFF]">
+              {category?.name ?? "Catalog"}
+            </Link>
             <span>&gt;</span>
-            <span className="font-medium text-slate-700">{product.name}</span>
+            <span aria-current="page" className="font-medium text-slate-700">
+              {product.name}
+            </span>
           </nav>
         </div>
 

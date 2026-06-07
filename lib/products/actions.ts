@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import {
+  calculateProductProfitPricing,
+  DEFAULT_CNY_TO_BDT_RATE,
+  normalizeExchangeRate,
+} from "@/lib/product-pricing";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type {
   ProductImageRow,
@@ -16,6 +21,9 @@ export type ProductVariantUpsertPayload = {
   regular_price: number | null;
   discount_price: number | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   moq: number;
   stock: number;
   weight: number | null;
@@ -87,6 +95,11 @@ const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
   "cnds_profile_id",
   "pricing_tier_profile_id",
   "pricing_source",
+  "buying_price_cny",
+  "profit_percent",
+  "profit_amount_cny",
+  "selling_price_cny",
+  "exchange_rate_cny_to_bdt",
 ]);
 
 function buildSchemaErrorMessage(message: string) {
@@ -294,6 +307,63 @@ async function resolveUniqueProductSlug(
   return {
     slug: `${baseSlug}-${suffix}`,
     error: null,
+  };
+}
+
+async function getCurrentCnyToBdtRate(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("platform_settings")
+    .select("cny_to_bdt_rate")
+    .eq("singleton_key", "default")
+    .maybeSingle();
+
+  if (error) {
+    return DEFAULT_CNY_TO_BDT_RATE;
+  }
+
+  return normalizeExchangeRate((data as { cny_to_bdt_rate?: number | string | null } | null)?.cny_to_bdt_rate);
+}
+
+function applyProfitPricingToProduct(product: ProductUpsertPayload, exchangeRateCnyToBdt: number): ProductUpsertPayload {
+  const pricing = calculateProductProfitPricing({
+    buyingPriceCny: product.buying_price_cny,
+    profitPercent: product.profit_percent,
+    exchangeRateCnyToBdt,
+  });
+
+  return {
+    ...product,
+    buying_price_cny: pricing.buyingPriceCny,
+    profit_percent: pricing.profitPercent,
+    profit_amount_cny: pricing.profitAmountCny,
+    selling_price_cny: pricing.sellingPriceCny,
+    exchange_rate_cny_to_bdt: pricing.exchangeRateCnyToBdt,
+    price: pricing.displayPriceBdt,
+    regular_price: product.product_type === "single" ? pricing.displayPriceBdt : null,
+    discount_price: null,
+  };
+}
+
+function applyProfitPricingToVariant(
+  variant: ProductVariantUpsertPayload,
+  profitPercent: number,
+  exchangeRateCnyToBdt: number,
+): ProductVariantUpsertPayload {
+  const buyingPriceCny = variant.buying_price_cny ?? variant.regular_price ?? variant.price;
+  const pricing = calculateProductProfitPricing({
+    buyingPriceCny,
+    profitPercent,
+    exchangeRateCnyToBdt,
+  });
+
+  return {
+    ...variant,
+    buying_price_cny: pricing.buyingPriceCny,
+    profit_amount_cny: pricing.profitAmountCny,
+    selling_price_cny: pricing.sellingPriceCny,
+    regular_price: pricing.displayPriceBdt,
+    discount_price: null,
+    price: pricing.displayPriceBdt,
   };
 }
 
@@ -510,6 +580,8 @@ async function syncProductPricingTiers(
   supabase: SupabaseClient,
   productId: string,
   tiers: ProductPricingTierUpsertPayload[],
+  profitPercent: number,
+  exchangeRateCnyToBdt: number,
 ) {
   const { error: deleteTiersError } = await supabase.from("product_pricing_tiers").delete().eq("product_id", productId);
 
@@ -517,14 +589,25 @@ async function syncProductPricingTiers(
     return deleteTiersError;
   }
 
-  const tierRows = tiers.map((tier) => ({
-    product_id: productId,
-    pricing_type: tier.pricing_type,
-    min_qty: tier.min_qty,
-    max_qty: tier.max_qty,
-    price: tier.price,
-    sort_order: tier.sort_order,
-  }));
+  const tierRows = tiers.map((tier) => {
+    const pricing = calculateProductProfitPricing({
+      buyingPriceCny: tier.price,
+      profitPercent,
+      exchangeRateCnyToBdt,
+    });
+
+    return {
+      product_id: productId,
+      pricing_type: tier.pricing_type,
+      min_qty: tier.min_qty,
+      max_qty: tier.max_qty,
+      price: pricing.displayPriceBdt,
+      buying_price_cny: pricing.buyingPriceCny,
+      profit_amount_cny: pricing.profitAmountCny,
+      selling_price_cny: pricing.sellingPriceCny,
+      sort_order: tier.sort_order,
+    };
+  });
 
   if (tierRows.length === 0) {
     return null;
@@ -543,6 +626,8 @@ async function syncProductPricingTierSets(
   supabase: SupabaseClient,
   productId: string,
   tierSets: ProductPricingTierSetUpsertPayload[],
+  profitPercent: number,
+  exchangeRateCnyToBdt: number,
 ) {
   const { data: existingSets, error: existingSetsError } = await supabase
     .from("product_pricing_tier_sets")
@@ -588,13 +673,24 @@ async function syncProductPricingTierSets(
     };
   }
 
-  const insertPayload = tierSets.map((tierSet) => ({
-    product_id: productId,
-    name: tierSet.name,
-    fallback_price: tierSet.fallback_price,
-    pricing_type: tierSet.pricing_type,
-    sort_order: tierSet.sort_order,
-  }));
+  const insertPayload = tierSets.map((tierSet) => {
+    const pricing = calculateProductProfitPricing({
+      buyingPriceCny: tierSet.fallback_price,
+      profitPercent,
+      exchangeRateCnyToBdt,
+    });
+
+    return {
+      product_id: productId,
+      name: tierSet.name,
+      fallback_price: pricing.displayPriceBdt,
+      buying_price_cny: pricing.buyingPriceCny,
+      profit_amount_cny: pricing.profitAmountCny,
+      selling_price_cny: pricing.sellingPriceCny,
+      pricing_type: tierSet.pricing_type,
+      sort_order: tierSet.sort_order,
+    };
+  });
 
   const { data: insertedSets, error: insertSetsError } = await supabase
     .from("product_pricing_tier_sets")
@@ -631,13 +727,24 @@ async function syncProductPricingTierSets(
       return [];
     }
 
-    return tierSet.rows.map((row) => ({
-      tier_set_id: persistedId,
-      min_qty: row.min_qty,
-      max_qty: row.max_qty,
-      price: row.price,
-      sort_order: row.sort_order,
-    }));
+    return tierSet.rows.map((row) => {
+      const pricing = calculateProductProfitPricing({
+        buyingPriceCny: row.price,
+        profitPercent,
+        exchangeRateCnyToBdt,
+      });
+
+      return {
+        tier_set_id: persistedId,
+        min_qty: row.min_qty,
+        max_qty: row.max_qty,
+        price: pricing.displayPriceBdt,
+        buying_price_cny: pricing.buyingPriceCny,
+        profit_amount_cny: pricing.profitAmountCny,
+        selling_price_cny: pricing.sellingPriceCny,
+        sort_order: row.sort_order,
+      };
+    });
   });
 
   if (rowPayload.length > 0) {
@@ -689,13 +796,18 @@ export async function createProductEditorRecordWithClient(
   supabase: SupabaseClient,
   payload: ProductEditorSavePayload,
 ) {
+  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(supabase);
+  const pricedProduct = applyProfitPricingToProduct(payload.product, exchangeRateCnyToBdt);
+  const pricedVariants = payload.variants.map((variant) =>
+    applyProfitPricingToVariant(variant, pricedProduct.profit_percent, exchangeRateCnyToBdt),
+  );
   const baseMetrics = getBaseProductMetrics(
-    payload.product.product_type,
-    payload.product,
-    payload.variants,
+    pricedProduct.product_type,
+    pricedProduct,
+    pricedVariants,
     payload.pricing_tier_sets ?? [],
   );
-  const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug);
+  const slugResult = await resolveUniqueProductSlug(supabase, pricedProduct.slug);
 
   if (slugResult.error) {
     return {
@@ -705,13 +817,13 @@ export async function createProductEditorRecordWithClient(
   }
 
   const productPayload = {
-    ...payload.product,
+    ...pricedProduct,
     slug: slugResult.slug,
     price: baseMetrics.price,
     moq: baseMetrics.moq,
-    regular_price: baseMetrics.regular_price,
-    discount_price: baseMetrics.discount_price,
-    is_active: payload.product.status === "active",
+    regular_price: pricedProduct.product_type === "single" ? pricedProduct.regular_price : baseMetrics.regular_price,
+    discount_price: null,
+    is_active: pricedProduct.status === "active",
   };
 
   const { data, error } = await insertProductWithFallback(supabase, productPayload);
@@ -738,11 +850,13 @@ export async function createProductEditorRecordWithClient(
 
   let pricingTierSetIdMap = new Map<string, string>();
 
-  if (payload.product.product_type === "variable" && payload.pricing_tier_sets) {
+  if (pricedProduct.product_type === "variable" && payload.pricing_tier_sets) {
     const tierSetResult = await syncProductPricingTierSets(
       supabase,
       (data as ProductDbRow).id,
       payload.pricing_tier_sets,
+      pricedProduct.profit_percent,
+      exchangeRateCnyToBdt,
     );
 
     if (tierSetResult.error) {
@@ -760,8 +874,8 @@ export async function createProductEditorRecordWithClient(
     pricingTierSetIdMap = tierSetResult.setIdMap;
   }
 
-  if (payload.product.product_type === "variable") {
-    const variantsPayload = payload.variants.map((variant) => ({
+  if (pricedProduct.product_type === "variable") {
+    const variantsPayload = pricedVariants.map((variant) => ({
       product_id: (data as ProductDbRow).id,
       ...variant,
       pricing_tier_set_id: variant.pricing_tier_set_id ? pricingTierSetIdMap.get(variant.pricing_tier_set_id) ?? null : null,
@@ -782,7 +896,7 @@ export async function createProductEditorRecordWithClient(
     }
   }
 
-  const relationError = await syncProductRelationTables(supabase, (data as ProductDbRow).id, payload.product);
+  const relationError = await syncProductRelationTables(supabase, (data as ProductDbRow).id, pricedProduct);
   if (relationError) {
     return {
       data: null as ProductDbRow | null,
@@ -793,7 +907,9 @@ export async function createProductEditorRecordWithClient(
   const pricingTierError = await syncProductPricingTiers(
     supabase,
     (data as ProductDbRow).id,
-    payload.product.product_type === "single" ? payload.pricing_tiers ?? [] : [],
+    pricedProduct.product_type === "single" ? payload.pricing_tiers ?? [] : [],
+    pricedProduct.profit_percent,
+    exchangeRateCnyToBdt,
   );
   if (payload.pricing_tiers && pricingTierError) {
     return {
@@ -866,13 +982,18 @@ export async function updateProductEditorRecordWithClient(
   id: string,
   payload: ProductEditorSavePayload,
 ) {
+  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(supabase);
+  const pricedProduct = applyProfitPricingToProduct(payload.product, exchangeRateCnyToBdt);
+  const pricedVariants = payload.variants.map((variant) =>
+    applyProfitPricingToVariant(variant, pricedProduct.profit_percent, exchangeRateCnyToBdt),
+  );
   const baseMetrics = getBaseProductMetrics(
-    payload.product.product_type,
-    payload.product,
-    payload.variants,
+    pricedProduct.product_type,
+    pricedProduct,
+    pricedVariants,
     payload.pricing_tier_sets ?? [],
   );
-  const slugResult = await resolveUniqueProductSlug(supabase, payload.product.slug, id);
+  const slugResult = await resolveUniqueProductSlug(supabase, pricedProduct.slug, id);
 
   if (slugResult.error) {
     return {
@@ -882,13 +1003,13 @@ export async function updateProductEditorRecordWithClient(
   }
 
   const productPayload = {
-    ...payload.product,
+    ...pricedProduct,
     slug: slugResult.slug,
     price: baseMetrics.price,
     moq: baseMetrics.moq,
-    regular_price: baseMetrics.regular_price,
-    discount_price: baseMetrics.discount_price,
-    is_active: payload.product.status === "active",
+    regular_price: pricedProduct.product_type === "single" ? pricedProduct.regular_price : baseMetrics.regular_price,
+    discount_price: null,
+    is_active: pricedProduct.status === "active",
   };
 
   const { data, error } = await updateProductWithFallback(supabase, id, productPayload);
@@ -928,7 +1049,9 @@ export async function updateProductEditorRecordWithClient(
   const tierSetResult = await syncProductPricingTierSets(
     supabase,
     id,
-    payload.product.product_type === "variable" ? payload.pricing_tier_sets ?? [] : [],
+    pricedProduct.product_type === "variable" ? payload.pricing_tier_sets ?? [] : [],
+    pricedProduct.profit_percent,
+    exchangeRateCnyToBdt,
   );
 
   if (tierSetResult.error) {
@@ -941,8 +1064,8 @@ export async function updateProductEditorRecordWithClient(
     };
   }
 
-  if (payload.product.product_type === "variable") {
-    const variantsPayload = payload.variants.map((variant) => ({
+  if (pricedProduct.product_type === "variable") {
+    const variantsPayload = pricedVariants.map((variant) => ({
       product_id: id,
       ...variant,
       pricing_tier_set_id: variant.pricing_tier_set_id ? tierSetResult.setIdMap.get(variant.pricing_tier_set_id) ?? null : null,
@@ -961,7 +1084,7 @@ export async function updateProductEditorRecordWithClient(
     }
   }
 
-  const relationError = await syncProductRelationTables(supabase, id, payload.product);
+  const relationError = await syncProductRelationTables(supabase, id, pricedProduct);
   if (relationError) {
     return {
       data: null as ProductDbRow | null,
@@ -970,7 +1093,13 @@ export async function updateProductEditorRecordWithClient(
   }
 
   const pricingTierError = payload.pricing_tiers
-    ? await syncProductPricingTiers(supabase, id, payload.product.product_type === "single" ? payload.pricing_tiers : [])
+    ? await syncProductPricingTiers(
+        supabase,
+        id,
+        pricedProduct.product_type === "single" ? payload.pricing_tiers : [],
+        pricedProduct.profit_percent,
+        exchangeRateCnyToBdt,
+      )
     : null;
   if (pricingTierError) {
     return {

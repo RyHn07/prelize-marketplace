@@ -23,6 +23,64 @@ export function roundCurrency(amount: number) {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
+export const BASE_CURRENCY = "CNY";
+export const DISPLAY_CURRENCY = "BDT";
+export const DEFAULT_CNY_TO_BDT_RATE = 16;
+
+export type ProductProfitPricingInput = {
+  buyingPriceCny: number;
+  profitPercent: number;
+  exchangeRateCnyToBdt: number;
+};
+
+export type ProductProfitPricing = {
+  buyingPriceCny: number;
+  profitPercent: number;
+  profitAmountCny: number;
+  sellingPriceCny: number;
+  exchangeRateCnyToBdt: number;
+  displayPriceBdt: number;
+};
+
+export function normalizeCurrencyNumber(value: unknown, fallback = 0) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function normalizeExchangeRate(value: unknown) {
+  const parsed = normalizeCurrencyNumber(value, DEFAULT_CNY_TO_BDT_RATE);
+  return parsed > 0 ? parsed : DEFAULT_CNY_TO_BDT_RATE;
+}
+
+export function calculateProductProfitPricing(input: ProductProfitPricingInput): ProductProfitPricing {
+  const buyingPriceCny = Math.max(0, normalizeCurrencyNumber(input.buyingPriceCny));
+  const profitPercent = Math.max(0, normalizeCurrencyNumber(input.profitPercent));
+  const exchangeRateCnyToBdt = normalizeExchangeRate(input.exchangeRateCnyToBdt);
+  const profitAmountCny = roundCurrency((buyingPriceCny * profitPercent) / 100);
+  const sellingPriceCny = roundCurrency(buyingPriceCny + profitAmountCny);
+
+  return {
+    buyingPriceCny,
+    profitPercent,
+    profitAmountCny,
+    sellingPriceCny,
+    exchangeRateCnyToBdt,
+    displayPriceBdt: roundCurrency(sellingPriceCny * exchangeRateCnyToBdt),
+  };
+}
+
+export function convertCnyBuyingPriceToBdtSellingPrice(
+  buyingPriceCny: number,
+  profitPercent: number,
+  exchangeRateCnyToBdt: number,
+) {
+  return calculateProductProfitPricing({
+    buyingPriceCny,
+    profitPercent,
+    exchangeRateCnyToBdt,
+  }).displayPriceBdt;
+}
+
 export function getMatchedProductPricingTier(
   quantity: number,
   tiers: ResolvedProductPricingTier[],

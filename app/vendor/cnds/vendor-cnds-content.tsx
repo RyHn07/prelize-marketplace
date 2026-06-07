@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 import {
   createVendorCndsProfileRequest,
@@ -123,6 +124,8 @@ function SearchIcon() {
 }
 
 export default function VendorCndsContent() {
+  const searchParams = useSearchParams();
+  const handledDeepLinkRef = useRef("");
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasVendorWorkspaceAccess, setHasVendorWorkspaceAccess] = useState(false);
@@ -253,6 +256,35 @@ export default function VendorCndsContent() {
       setValues(getInitialFormValues());
     }
   };
+
+  useEffect(() => {
+    if (loading || !hasVendorWorkspaceAccess || !vendorId) {
+      return;
+    }
+
+    const mode = searchParams.get("mode");
+    const editProfileId = searchParams.get("edit");
+    const requestKey = `${mode ?? ""}:${editProfileId ?? ""}:${profiles.length}`;
+
+    if (handledDeepLinkRef.current === requestKey) {
+      return;
+    }
+
+    if (mode === "create") {
+      handledDeepLinkRef.current = requestKey;
+      startCreateMode();
+      return;
+    }
+
+    if (editProfileId) {
+      const profile = profiles.find((currentProfile) => currentProfile.id === editProfileId);
+
+      if (profile) {
+        handledDeepLinkRef.current = requestKey;
+        startEditMode(profile);
+      }
+    }
+  }, [hasVendorWorkspaceAccess, loading, profiles, searchParams, vendorId]);
 
   const updateField = <K extends keyof ProfileFormValues>(field: K, value: ProfileFormValues[K]) => {
     setValues((current) => ({

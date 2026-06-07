@@ -13,6 +13,9 @@ export type PlatformSettingsRow = {
   support_phone: string | null;
   order_support_message: string | null;
   shipping_support_message: string | null;
+  base_currency?: string | null;
+  display_currency?: string | null;
+  cny_to_bdt_rate?: number | string | null;
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +33,9 @@ export type PlatformSettingsFormValues = {
   support_phone: string;
   order_support_message: string;
   shipping_support_message: string;
+  base_currency: string;
+  display_currency: string;
+  cny_to_bdt_rate: string;
 };
 
 export type PlatformSettingsUpsertPayload = {
@@ -46,5 +52,8 @@ export type PlatformSettingsUpsertPayload = {
   support_phone: string | null;
   order_support_message: string | null;
   shipping_support_message: string | null;
+  base_currency: string;
+  display_currency: string;
+  cny_to_bdt_rate: number;
   updated_at: string;
 };

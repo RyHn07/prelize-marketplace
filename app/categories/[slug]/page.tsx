@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import Header from "@/components/Header";
@@ -11,6 +13,7 @@ import {
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
+import { createPageMetadata } from "@/lib/seo";
 
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;
@@ -26,6 +29,25 @@ type CategoryPageProps = {
     limit?: string;
   }>;
 };
+
+export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const { data: categoryOptions } = await getProductCategoryOptions();
+  const category = categoryOptions.find((item) => item.slug === slug) ?? null;
+
+  if (!category) {
+    return {
+      title: "Category",
+    };
+  }
+
+  return createPageMetadata({
+    title: `${category.name} Wholesale Products`,
+    description: `Browse ${category.name} wholesale products, vendors, prices, and MOQ options on Prelize.`,
+    path: `/categories/${category.slug ?? slug}`,
+    image: category.image_url,
+  });
+}
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { slug } = await params;
@@ -77,12 +99,18 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <nav className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>Home</span>
+          <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <Link href="/" className="transition-colors hover:text-[#615FFF]">
+              Home
+            </Link>
             <span>&gt;</span>
-            <span>Categories</span>
+            <Link href="/categories" className="transition-colors hover:text-[#615FFF]">
+              Categories
+            </Link>
             <span>&gt;</span>
-            <span className="font-medium text-slate-700">{category.name}</span>
+            <span aria-current="page" className="font-medium text-slate-700">
+              {category.name}
+            </span>
           </nav>
         </div>
 

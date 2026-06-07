@@ -453,6 +453,46 @@ export default function AdminSettingsPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">
+                Currency
+              </p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-900">CNY business pricing</h2>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <SettingsField label="Base currency" hint="Product buying price and profit are stored against this currency.">
+                <input
+                  type="text"
+                  value={formValues.base_currency}
+                  readOnly
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none"
+                />
+              </SettingsField>
+
+              <SettingsField label="Display currency" hint="Customer-facing product and order prices use this currency.">
+                <input
+                  type="text"
+                  value={formValues.display_currency}
+                  readOnly
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none"
+                />
+              </SettingsField>
+
+              <SettingsField label="CNY to BDT rate" hint="Used when product buying price plus profit is converted for buyers.">
+                <input
+                  type="number"
+                  min="0.0001"
+                  step="0.0001"
+                  value={formValues.cny_to_bdt_rate}
+                  onChange={(event) => handleFieldChange("cny_to_bdt_rate", event.target.value)}
+                  className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                />
+              </SettingsField>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">
                 Branding Assets
               </p>
               <h2 className="mt-1 text-xl font-semibold text-slate-900">Logo, favicon, and share image</h2>

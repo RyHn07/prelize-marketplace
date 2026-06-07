@@ -168,6 +168,9 @@ export type ProductPricingTierRow = {
   min_qty: number;
   max_qty: number | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   sort_order?: number | null;
   created_at?: string | null;
 };
@@ -177,6 +180,9 @@ export type ProductPricingTierSetRow = {
   product_id: string;
   name: string;
   fallback_price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   pricing_type: ProductPricingType;
   sort_order?: number | null;
   created_at?: string | null;
@@ -188,6 +194,9 @@ export type ProductPricingTierSetTierRow = {
   min_qty: number;
   max_qty: number | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   sort_order?: number | null;
   created_at?: string | null;
 };
@@ -198,6 +207,9 @@ export type PricingTierProfileRowRecord = {
   min_qty: number;
   max_qty: number | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   sort_order: number;
   created_at?: string | null;
 };
@@ -257,6 +269,9 @@ export type ProductDbVariantRow = {
   regular_price: number | null;
   discount_price: number | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
   moq: number;
   stock?: number;
   weight?: number | null;
@@ -298,6 +313,11 @@ export type ProductDbRow = {
   cnds_profile_id?: string | null;
   pricing_tier_profile_id?: string | null;
   pricing_source?: ProductPricingSource | null;
+  buying_price_cny?: number | null;
+  profit_percent?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
+  exchange_rate_cny_to_bdt?: number | null;
 };
 
 export type ProductUpsertPayload = {
@@ -325,6 +345,11 @@ export type ProductUpsertPayload = {
   cnds_profile_id: string | null;
   pricing_tier_profile_id: string | null;
   pricing_source: ProductPricingSource;
+  buying_price_cny: number;
+  profit_percent: number;
+  profit_amount_cny: number;
+  selling_price_cny: number;
+  exchange_rate_cny_to_bdt: number;
 };
 
 export type ProductAttributeFormValue = {
@@ -450,6 +475,8 @@ export type ProductFormValues = {
   product_type: ProductType;
   regular_price: string;
   discount_price: string;
+  buying_price_cny: string;
+  profit_percent: string;
   moq: string;
   attributes: ProductAttributeFormValue[];
   specifications: ProductSpecificationFormValue[];
@@ -588,6 +615,11 @@ export type OrderItemRow = {
   variant_name?: string | null;
   variant_value?: string | null;
   price: number;
+  buying_price_cny?: number | null;
+  profit_percent?: number | null;
+  profit_amount_cny?: number | null;
+  selling_price_cny?: number | null;
+  exchange_rate_cny_to_bdt?: number | null;
   unit_price?: number | null;
   total_price?: number | null;
   quantity: number;

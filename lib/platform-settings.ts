@@ -8,10 +8,11 @@ export const PLATFORM_SETTINGS_SINGLETON_KEY = "default";
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsFormValues = {
   marketplace_name: "Prelize",
-  site_title: "Prelize Marketplace",
+  site_title: "Prelize | Wholesale Products, Sourcing & Cross-Border Trade",
   site_short_title: "Prelize",
-  site_description: "Source wholesale products with a cleaner marketplace workflow.",
-  site_url: "",
+  site_description:
+    "Prelize helps buyers discover wholesale products, browse marketplace categories, request sourcing quotes, and connect with vendors for cross-border trade.",
+  site_url: "https://prelize.com",
   logo_url: "",
   favicon_url: "",
   share_image_url: "",
@@ -19,6 +20,9 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettingsFormValues = {
   support_phone: "",
   order_support_message: "",
   shipping_support_message: "",
+  base_currency: "CNY",
+  display_currency: "BDT",
+  cny_to_bdt_rate: "16",
 };
 
 function normalizeOptionalText(value: string | null | undefined) {
@@ -49,6 +53,12 @@ export function toPlatformSettingsFormValues(
     shipping_support_message:
       settings?.shipping_support_message?.trim() ??
       DEFAULT_PLATFORM_SETTINGS.shipping_support_message,
+    base_currency: settings?.base_currency?.trim() || DEFAULT_PLATFORM_SETTINGS.base_currency,
+    display_currency: settings?.display_currency?.trim() || DEFAULT_PLATFORM_SETTINGS.display_currency,
+    cny_to_bdt_rate:
+      settings?.cny_to_bdt_rate === null || settings?.cny_to_bdt_rate === undefined
+        ? DEFAULT_PLATFORM_SETTINGS.cny_to_bdt_rate
+        : String(settings.cny_to_bdt_rate),
   };
 }
 
@@ -58,6 +68,7 @@ export function toPlatformSettingsUpsertPayload(
   const marketplaceName = values.marketplace_name.trim();
   const siteTitle = values.site_title.trim();
   const siteShortTitle = values.site_short_title.trim();
+  const parsedExchangeRate = Number(values.cny_to_bdt_rate);
 
   return {
     singleton_key: PLATFORM_SETTINGS_SINGLETON_KEY,
@@ -80,6 +91,9 @@ export function toPlatformSettingsUpsertPayload(
     support_phone: normalizeOptionalText(values.support_phone),
     order_support_message: normalizeOptionalText(values.order_support_message),
     shipping_support_message: normalizeOptionalText(values.shipping_support_message),
+    base_currency: "CNY",
+    display_currency: "BDT",
+    cny_to_bdt_rate: Number.isFinite(parsedExchangeRate) && parsedExchangeRate > 0 ? parsedExchangeRate : 16,
     updated_at: new Date().toISOString(),
   };
 }

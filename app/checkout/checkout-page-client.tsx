@@ -20,7 +20,7 @@ import {
   calculateTotalWeightKg,
   formatDeliveryWindow,
 } from "@/lib/international-shipping/utils";
-import { calculateProductGroupPricing } from "@/lib/product-pricing";
+import { calculateProductGroupPricing, normalizeExchangeRate, roundCurrency } from "@/lib/product-pricing";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
 import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
 import { getProductVariantMapByProductIds, getProductsByIds } from "@/lib/products/queries";
@@ -35,7 +35,6 @@ import type {
   ProductDbVariantRow,
   ResolvedProductPricingConfig,
   ShippingMethodRow,
-  VendorOrderRow,
 } from "@/types/product-db";
 
 const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
@@ -866,13 +865,20 @@ export default function CheckoutPage() {
 
       const productItemCostIndex = new Map<string, number>();
       const orderItemsPayload = selectedCartItems.map((item) => {
-        const vendorId = productRecordMap.get(item.productId)?.vendor_id ?? null;
+        const productRecord = productRecordMap.get(item.productId);
+        const vendorId = productRecord?.vendor_id ?? null;
         const costBreakdown = immediateChargeBreakdowns.get(item.productId);
         const pricing = pricingByProductId.get(item.productId) ?? null;
         const itemIndex = productItemCostIndex.get(item.productId) ?? 0;
         const cndsCost = costBreakdown?.itemCosts[itemIndex] ?? 0;
         const unitPrice = pricing?.itemUnitPrices[itemIndex] ?? item.price;
         const totalPrice = pricing?.itemTotals[itemIndex] ?? item.price * item.quantity;
+        const exchangeRateCnyToBdt = normalizeExchangeRate(productRecord?.exchange_rate_cny_to_bdt);
+        const profitPercent = Math.max(0, Number(productRecord?.profit_percent ?? 0));
+        const sellingPriceCny = roundCurrency(unitPrice / exchangeRateCnyToBdt);
+        const buyingPriceCny =
+          profitPercent > 0 ? roundCurrency(sellingPriceCny / (1 + profitPercent / 100)) : sellingPriceCny;
+        const profitAmountCny = roundCurrency(sellingPriceCny - buyingPriceCny);
 
         productItemCostIndex.set(item.productId, itemIndex + 1);
 
@@ -888,6 +894,13 @@ export default function CheckoutPage() {
           price: unitPrice,
           unit_price: unitPrice,
           total_price: totalPrice,
+          buying_price_cny: buyingPriceCny,
+          profit_percent: profitPercent,
+          profit_amount_cny: profitAmountCny,
+          selling_price_cny: sellingPriceCny,
+          exchange_rate_cny_to_bdt: exchangeRateCnyToBdt,
+          display_currency: "BDT",
+          total_profit_cny: roundCurrency(profitAmountCny * item.quantity),
           quantity: item.quantity,
           weight: item.weight ?? null,
           weight_kg: item.weight ?? null,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { DEFAULT_CNY_TO_BDT_RATE, roundCurrency } from "@/lib/product-pricing";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
@@ -58,6 +59,20 @@ function normalizeProductPricingSource(value: unknown): ProductPricingSource {
   return "use_fixed_price";
 }
 
+function getDisplayPriceFromCnySnapshot(
+  fallbackPrice: number | null,
+  sellingPriceCny: number | null,
+  exchangeRateCnyToBdt: number | null,
+) {
+  if (sellingPriceCny === null || exchangeRateCnyToBdt === null) {
+    return fallbackPrice ?? 0;
+  }
+
+  const displayPriceBdt = roundCurrency(sellingPriceCny * exchangeRateCnyToBdt);
+
+  return Math.max(fallbackPrice ?? 0, displayPriceBdt);
+}
+
 function normalizeProduct(row: ProductDbRow): ProductDbRow {
   const parsedPrice = Number(row.price);
   const parsedMoq = Number(row.moq);
@@ -70,11 +85,40 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
   const normalizedDiscountPrice =
     Number.isFinite(parsedDiscountPrice) && (parsedDiscountPrice as number) > 0 ? (parsedDiscountPrice as number) : null;
   const normalizedBasePrice = Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
-  const effectivePrice =
+  const parsedBuyingPriceCny =
+    row.buying_price_cny === null || row.buying_price_cny === undefined ? null : Number(row.buying_price_cny);
+  const parsedProfitPercent =
+    row.profit_percent === null || row.profit_percent === undefined ? null : Number(row.profit_percent);
+  const parsedProfitAmountCny =
+    row.profit_amount_cny === null || row.profit_amount_cny === undefined ? null : Number(row.profit_amount_cny);
+  const parsedSellingPriceCny =
+    row.selling_price_cny === null || row.selling_price_cny === undefined ? null : Number(row.selling_price_cny);
+  const parsedExchangeRate =
+    row.exchange_rate_cny_to_bdt === null || row.exchange_rate_cny_to_bdt === undefined
+      ? null
+      : Number(row.exchange_rate_cny_to_bdt);
+  const legacyEffectivePrice =
     normalizedBasePrice ??
     (normalizedDiscountPrice !== null && normalizedRegularPrice !== null
       ? Math.min(normalizedDiscountPrice, normalizedRegularPrice)
       : normalizedDiscountPrice ?? normalizedRegularPrice ?? 0);
+  const normalizedExchangeRate =
+    Number.isFinite(parsedExchangeRate) && (parsedExchangeRate as number) > 0
+      ? (parsedExchangeRate as number)
+      : Number.isFinite(parsedSellingPriceCny) && (parsedSellingPriceCny as number) > 0
+        ? DEFAULT_CNY_TO_BDT_RATE
+        : null;
+  const normalizedSellingPriceCny =
+    Number.isFinite(parsedSellingPriceCny) && (parsedSellingPriceCny as number) > 0
+      ? (parsedSellingPriceCny as number)
+      : Number.isFinite(parsedBuyingPriceCny) && (parsedBuyingPriceCny as number) > 0
+        ? roundCurrency((parsedBuyingPriceCny as number) + (Number.isFinite(parsedProfitAmountCny) ? (parsedProfitAmountCny as number) : 0))
+        : null;
+  const effectivePrice = getDisplayPriceFromCnySnapshot(
+    legacyEffectivePrice,
+    normalizedSellingPriceCny,
+    normalizedExchangeRate,
+  );
   const normalizedWeight =
     row.weight === null || row.weight === undefined
       ? null
@@ -106,6 +150,11 @@ function normalizeProduct(row: ProductDbRow): ProductDbRow {
     pricing_source: normalizeProductPricingSource(row.pricing_source),
     regular_price: normalizedRegularPrice,
     discount_price: normalizedDiscountPrice,
+    buying_price_cny: Number.isFinite(parsedBuyingPriceCny) ? parsedBuyingPriceCny : normalizedRegularPrice ?? normalizedBasePrice ?? 0,
+    profit_percent: Number.isFinite(parsedProfitPercent) ? parsedProfitPercent : 0,
+    profit_amount_cny: Number.isFinite(parsedProfitAmountCny) ? parsedProfitAmountCny : 0,
+    selling_price_cny: normalizedSellingPriceCny ?? 0,
+    exchange_rate_cny_to_bdt: normalizedExchangeRate,
     gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images : [],
     attributes: Array.isArray(row.attributes) ? row.attributes : [],
     specifications: Array.isArray(row.specifications) ? row.specifications : [],
@@ -124,6 +173,12 @@ function normalizeProductPricingTier(row: ProductPricingTierRow): ProductPricing
       ? null
       : Number(row.max_qty);
   const parsedPrice = Number(row.price);
+  const parsedBuyingPriceCny =
+    row.buying_price_cny === null || row.buying_price_cny === undefined ? null : Number(row.buying_price_cny);
+  const parsedProfitAmountCny =
+    row.profit_amount_cny === null || row.profit_amount_cny === undefined ? null : Number(row.profit_amount_cny);
+  const parsedSellingPriceCny =
+    row.selling_price_cny === null || row.selling_price_cny === undefined ? null : Number(row.selling_price_cny);
 
   return {
     ...row,
@@ -131,6 +186,9 @@ function normalizeProductPricingTier(row: ProductPricingTierRow): ProductPricing
     min_qty: Number.isFinite(parsedMinQty) && parsedMinQty > 0 ? parsedMinQty : 1,
     max_qty: Number.isFinite(parsedMaxQty ?? NaN) && (parsedMaxQty ?? 0) > 0 ? (parsedMaxQty as number) : null,
     price: Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0,
+    buying_price_cny: Number.isFinite(parsedBuyingPriceCny) ? parsedBuyingPriceCny : Number.isFinite(parsedPrice) ? parsedPrice : 0,
+    profit_amount_cny: Number.isFinite(parsedProfitAmountCny) ? parsedProfitAmountCny : 0,
+    selling_price_cny: Number.isFinite(parsedSellingPriceCny) ? parsedSellingPriceCny : 0,
     sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
     created_at: typeof row.created_at === "string" ? row.created_at : null,
   };
@@ -138,11 +196,20 @@ function normalizeProductPricingTier(row: ProductPricingTierRow): ProductPricing
 
 function normalizeProductPricingTierSet(row: ProductPricingTierSetRow): ProductPricingTierSetRow {
   const parsedFallbackPrice = Number(row.fallback_price);
+  const parsedBuyingPriceCny =
+    row.buying_price_cny === null || row.buying_price_cny === undefined ? null : Number(row.buying_price_cny);
+  const parsedProfitAmountCny =
+    row.profit_amount_cny === null || row.profit_amount_cny === undefined ? null : Number(row.profit_amount_cny);
+  const parsedSellingPriceCny =
+    row.selling_price_cny === null || row.selling_price_cny === undefined ? null : Number(row.selling_price_cny);
 
   return {
     ...row,
     pricing_type: normalizeProductPricingType(row.pricing_type),
     fallback_price: Number.isFinite(parsedFallbackPrice) && parsedFallbackPrice >= 0 ? parsedFallbackPrice : 0,
+    buying_price_cny: Number.isFinite(parsedBuyingPriceCny) ? parsedBuyingPriceCny : Number.isFinite(parsedFallbackPrice) ? parsedFallbackPrice : 0,
+    profit_amount_cny: Number.isFinite(parsedProfitAmountCny) ? parsedProfitAmountCny : 0,
+    selling_price_cny: Number.isFinite(parsedSellingPriceCny) ? parsedSellingPriceCny : 0,
     sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
     created_at: typeof row.created_at === "string" ? row.created_at : null,
   };
@@ -153,12 +220,21 @@ function normalizeProductPricingTierSetRow(row: ProductPricingTierSetTierRow): P
   const parsedMaxQty =
     row.max_qty === null || row.max_qty === undefined ? null : Number(row.max_qty);
   const parsedPrice = Number(row.price);
+  const parsedBuyingPriceCny =
+    row.buying_price_cny === null || row.buying_price_cny === undefined ? null : Number(row.buying_price_cny);
+  const parsedProfitAmountCny =
+    row.profit_amount_cny === null || row.profit_amount_cny === undefined ? null : Number(row.profit_amount_cny);
+  const parsedSellingPriceCny =
+    row.selling_price_cny === null || row.selling_price_cny === undefined ? null : Number(row.selling_price_cny);
 
   return {
     ...row,
     min_qty: Number.isFinite(parsedMinQty) && parsedMinQty > 0 ? parsedMinQty : 1,
     max_qty: Number.isFinite(parsedMaxQty ?? NaN) && (parsedMaxQty ?? 0) > 0 ? (parsedMaxQty as number) : null,
     price: Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0,
+    buying_price_cny: Number.isFinite(parsedBuyingPriceCny) ? parsedBuyingPriceCny : Number.isFinite(parsedPrice) ? parsedPrice : 0,
+    profit_amount_cny: Number.isFinite(parsedProfitAmountCny) ? parsedProfitAmountCny : 0,
+    selling_price_cny: Number.isFinite(parsedSellingPriceCny) ? parsedSellingPriceCny : 0,
     sort_order: typeof row.sort_order === "number" ? row.sort_order : null,
     created_at: typeof row.created_at === "string" ? row.created_at : null,
   };
@@ -490,6 +566,12 @@ function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
     parsedMinOrderQuantity !== null && Number.isFinite(parsedMinOrderQuantity) && parsedMinOrderQuantity > 0
       ? parsedMinOrderQuantity
       : row.moq;
+  const parsedBuyingPriceCny =
+    row.buying_price_cny === null || row.buying_price_cny === undefined ? null : Number(row.buying_price_cny);
+  const parsedProfitAmountCny =
+    row.profit_amount_cny === null || row.profit_amount_cny === undefined ? null : Number(row.profit_amount_cny);
+  const parsedSellingPriceCny =
+    row.selling_price_cny === null || row.selling_price_cny === undefined ? null : Number(row.selling_price_cny);
 
   return {
     ...row,
@@ -501,6 +583,15 @@ function normalizeVariant(row: ProductDbVariantRow): ProductDbVariantRow {
     stock: Number.isFinite(parsedStock) && parsedStock >= 0 ? parsedStock : 0,
     regular_price: Number.isFinite(parsedRegularPrice) ? parsedRegularPrice : null,
     discount_price: Number.isFinite(parsedDiscountPrice) ? parsedDiscountPrice : null,
+    buying_price_cny: Number.isFinite(parsedBuyingPriceCny)
+      ? parsedBuyingPriceCny
+      : Number.isFinite(parsedRegularPrice)
+        ? parsedRegularPrice
+        : Number.isFinite(parsedPrice)
+          ? parsedPrice
+          : 0,
+    profit_amount_cny: Number.isFinite(parsedProfitAmountCny) ? parsedProfitAmountCny : 0,
+    selling_price_cny: Number.isFinite(parsedSellingPriceCny) ? parsedSellingPriceCny : 0,
     weight: Number.isFinite(parsedWeight) ? parsedWeight : null,
     image_url: typeof row.image_url === "string" ? row.image_url : null,
     min_order_quantity: normalizedMinOrderQuantity,

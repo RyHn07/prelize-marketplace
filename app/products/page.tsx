@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
 import {
@@ -9,6 +11,14 @@ import {
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Product List",
+  description:
+    "Browse wholesale products on Prelize by category, supplier, price, MOQ, and newest marketplace listings.",
+  path: "/products",
+});
 
 type ProductsPageProps = {
   searchParams: Promise<{

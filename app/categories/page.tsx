@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
 import Header from "@/components/Header";
 import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Browse Categories",
+  description:
+    "Explore Prelize marketplace categories including fashion, agriculture, automotive, business, packaging, construction, and more wholesale product groups.",
+  path: "/categories",
+});
 
 function createSlugFallback(value: string) {
   return value

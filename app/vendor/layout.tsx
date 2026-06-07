@@ -42,11 +42,6 @@ const VENDOR_NAVIGATION: WorkspaceNavItem[] = [
     ],
   },
   {
-    name: "Shipping",
-    icon: "truck",
-    subItems: [{ label: "China Domestic Delivery", href: "/vendor/cnds" }],
-  },
-  {
     name: "Shop Settings",
     path: "/vendor/shop-settings",
     icon: "settings",

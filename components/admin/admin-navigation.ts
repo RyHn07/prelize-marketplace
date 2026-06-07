@@ -151,11 +151,6 @@ export const adminNavigation: AdminNavItem[] = [
     icon: "truck",
     subItems: [
       {
-        label: "China Domestic Delivery",
-        href: "/admin/cnds",
-        description: "Prepare local delivery workflows within China.",
-      },
-      {
         label: "Bangladesh Shipping",
         href: "/admin/international-shipping",
         description: "Prepare shipping workflows for Bangladesh.",

@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import {
+  createVendorCndsProfileRequest,
+  updateVendorCndsProfileRequest,
+  type CndsProfileEditorPayload,
+} from "@/lib/cnds/actions";
+import type { CndsShippingPricingType, CndsShippingProfileRow } from "@/types/product-db";
+
 type ProductType = "simple" | "variable";
 type ProductTab = "inventory" | "pricing-tiers" | "shipping" | "attributes" | "variations";
 type StockStatus = "in-stock" | "out-of-stock" | "on-backorder";
@@ -48,6 +55,108 @@ type VariationStateBridgeVariation = {
   summary: string;
   image_url: string;
 };
+
+type PreviewCndsProfile = {
+  id: string;
+  vendor_id: string | null;
+  name: string;
+  description: string | null;
+  pricing_type: "unit" | "fixed";
+  is_active: boolean;
+  tiers: Array<{
+    min_qty: number;
+    max_qty: number | null;
+    price: number;
+    sort_order?: number | null;
+  }>;
+};
+
+type CndsTierDraft = {
+  id: string;
+  minQty: string;
+  maxQty: string;
+  price: string;
+};
+
+type CndsEditorDraft = {
+  name: string;
+  description: string;
+  pricingType: CndsShippingPricingType;
+  isActive: boolean;
+  tiers: CndsTierDraft[];
+};
+
+const MAX_PRODUCT_PRICING_TIERS = 3;
+const MAX_PRODUCT_TIER_SETS = 5;
+
+function createCndsTierDraft(sortOrder = 0): CndsTierDraft {
+  return {
+    id: `cnds-tier-${Math.random().toString(36).slice(2, 10)}`,
+    minQty: sortOrder === 0 ? "1" : "",
+    maxQty: "",
+    price: "0",
+  };
+}
+
+function createCndsEditorDraft(profile?: PreviewCndsProfile | null): CndsEditorDraft {
+  if (!profile) {
+    return {
+      name: "",
+      description: "",
+      pricingType: "fixed",
+      isActive: true,
+      tiers: [createCndsTierDraft()],
+    };
+  }
+
+  return {
+    name: profile.name,
+    description: profile.description ?? "",
+    pricingType: profile.pricing_type,
+    isActive: profile.is_active,
+    tiers:
+      profile.tiers.length > 0
+        ? profile.tiers.map((tier) => ({
+            id: createCndsTierDraft().id,
+            minQty: String(tier.min_qty),
+            maxQty: tier.max_qty === null ? "" : String(tier.max_qty),
+            price: String(tier.price),
+          }))
+        : [createCndsTierDraft()],
+  };
+}
+
+function buildCndsEditorPayload(draft: CndsEditorDraft): CndsProfileEditorPayload {
+  return {
+    name: draft.name.trim(),
+    description: draft.description.trim(),
+    pricing_type: draft.pricingType,
+    is_active: draft.isActive,
+    tiers: draft.tiers.map((tier, index) => ({
+      min_qty: Math.max(1, Number.parseInt(tier.minQty, 10) || 1),
+      max_qty: tier.maxQty.trim() ? Math.max(1, Number.parseInt(tier.maxQty, 10) || 1) : null,
+      price: Math.max(0, Number.parseFloat(tier.price) || 0),
+      sort_order: index,
+    })),
+  };
+}
+
+function mapCndsRowToPreviewProfile(profile: CndsShippingProfileRow): PreviewCndsProfile {
+  return {
+    id: profile.id,
+    vendor_id: profile.vendor_id,
+    name: profile.name,
+    description: profile.description,
+    pricing_type: profile.pricing_type,
+    is_active: profile.is_active,
+    tiers: profile.tiers.map((tier) => ({
+      min_qty: tier.min_qty,
+      max_qty: tier.max_qty,
+      price: tier.price,
+      sort_order: tier.sort_order,
+    })),
+  };
+}
 
 const statusToStockStatus: Record<"active" | "disabled" | "draft", StockStatus> = {
   active: "in-stock",
@@ -215,8 +324,17 @@ export default function TailadminProductDataPreview() {
   const [cndsProfileOptions, setCndsProfileOptions] = useState<Array<{ value: string; label: string }>>([
     { value: "", label: "No CNDS profile selected" },
   ]);
+  const [cndsProfiles, setCndsProfiles] = useState<PreviewCndsProfile[]>([]);
+  const [cndsProfilesLoading, setCndsProfilesLoading] = useState(false);
+  const [cndsVendorId, setCndsVendorId] = useState<string | null>(null);
+  const [isCndsEditorOpen, setIsCndsEditorOpen] = useState(false);
+  const [editingCndsProfileId, setEditingCndsProfileId] = useState<string | null>(null);
+  const [cndsEditorDraft, setCndsEditorDraft] = useState<CndsEditorDraft>(() => createCndsEditorDraft());
+  const [cndsEditorError, setCndsEditorError] = useState("");
+  const [isSavingCnds, setIsSavingCnds] = useState(false);
   const [regularPrice, setRegularPrice] = useState("");
   const [discountPrice, setDiscountPrice] = useState("");
+  const [profitPercent, setProfitPercent] = useState("");
   const [moqValue, setMoqValue] = useState("1");
   const [weightValue, setWeightValue] = useState("");
   const [singlePricingTiers, setSinglePricingTiers] = useState<PreviewPricingTier[]>([createPreviewTier(), createPreviewTier()]);
@@ -315,6 +433,7 @@ export default function TailadminProductDataPreview() {
       pricingType: "unit" | "fixed";
       regularPrice: string;
       discountPrice: string;
+      profitPercent: string;
       moq: string;
       pricingTiers: PreviewPricingTier[];
       pricingTierSets: PreviewTierSet[];
@@ -333,6 +452,7 @@ export default function TailadminProductDataPreview() {
           pricingType: normalizedPricingType,
           regularPrice: next.regularPrice ?? regularPrice,
           discountPrice: next.discountPrice ?? discountPrice,
+          profitPercent: next.profitPercent ?? profitPercent,
           moq: next.moq ?? moqValue,
           pricingTiers: (next.pricingTiers ?? singlePricingTiers).map((tier) => ({
             id: tier.id,
@@ -401,6 +521,7 @@ export default function TailadminProductDataPreview() {
       });
       setRegularPrice((getField("product-regular-price") as HTMLInputElement | null)?.value ?? "");
       setDiscountPrice((getField("product-discount-price") as HTMLInputElement | null)?.value ?? "");
+      setProfitPercent((getField("product-profit-percent") as HTMLInputElement | null)?.value ?? "");
       setMoqValue((getField("product-moq") as HTMLInputElement | null)?.value ?? "1");
       setPricingType((getField("product-pricing-type") as HTMLSelectElement | null)?.value === "fixed" ? "carton-pricing" : "unit-pricing");
       setSkuValue((getField("product-sku") as HTMLInputElement | null)?.value ?? "");
@@ -424,6 +545,7 @@ export default function TailadminProductDataPreview() {
     const statusInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="status"]'));
     const regularPriceInput = getField("product-regular-price") as HTMLInputElement | null;
     const discountPriceInput = getField("product-discount-price") as HTMLInputElement | null;
+    const profitPercentInput = getField("product-profit-percent") as HTMLInputElement | null;
     const moqInput = getField("product-moq") as HTMLInputElement | null;
     const pricingTypeSelect = getField("product-pricing-type") as HTMLSelectElement | null;
     const skuInput = getField("product-sku") as HTMLInputElement | null;
@@ -437,6 +559,7 @@ export default function TailadminProductDataPreview() {
     statusInputs.forEach((input) => input.addEventListener("change", handleChangeSync));
     regularPriceInput?.addEventListener("input", handleInputSync);
     discountPriceInput?.addEventListener("input", handleInputSync);
+    profitPercentInput?.addEventListener("input", handleInputSync);
     moqInput?.addEventListener("input", handleInputSync);
     pricingTypeSelect?.addEventListener("change", handleChangeSync);
     skuInput?.addEventListener("input", handleInputSync);
@@ -450,6 +573,7 @@ export default function TailadminProductDataPreview() {
       statusInputs.forEach((input) => input.removeEventListener("change", handleChangeSync));
       regularPriceInput?.removeEventListener("input", handleInputSync);
       discountPriceInput?.removeEventListener("input", handleInputSync);
+      profitPercentInput?.removeEventListener("input", handleInputSync);
       moqInput?.removeEventListener("input", handleInputSync);
       pricingTypeSelect?.removeEventListener("change", handleChangeSync);
       skuInput?.removeEventListener("input", handleInputSync);
@@ -462,6 +586,31 @@ export default function TailadminProductDataPreview() {
     if (typeof window === "undefined") {
       return;
     }
+
+    const handleCndsProfilesStateUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        loading?: boolean;
+        vendorId?: string | null;
+        selectedProfileId?: string;
+        profiles?: PreviewCndsProfile[];
+      }>;
+      const profiles = customEvent.detail?.profiles ?? [];
+
+      setCndsProfilesLoading(Boolean(customEvent.detail?.loading));
+      setCndsVendorId(customEvent.detail?.vendorId ?? null);
+      setCndsProfiles(profiles);
+      setCndsProfileValue(customEvent.detail?.selectedProfileId ?? "");
+      setCndsProfileOptions([
+        {
+          value: "",
+          label: customEvent.detail?.loading ? "Loading CNDS profiles..." : "No CNDS profile selected",
+        },
+        ...profiles.map((profile) => ({
+          value: profile.id,
+          label: `${profile.name} (${profile.pricing_type === "unit" ? "Per Unit" : "Fixed"})`,
+        })),
+      ]);
+    };
 
     const handleProductTypeStateUpdated = (event: Event) => {
       const customEvent = event as CustomEvent<{
@@ -480,9 +629,11 @@ export default function TailadminProductDataPreview() {
       });
     };
 
+    window.addEventListener("prelize:cnds-profiles-state-updated", handleCndsProfilesStateUpdated as EventListener);
     window.addEventListener("prelize:product-type-state-updated", handleProductTypeStateUpdated as EventListener);
 
     return () => {
+      window.removeEventListener("prelize:cnds-profiles-state-updated", handleCndsProfilesStateUpdated as EventListener);
       window.removeEventListener("prelize:product-type-state-updated", handleProductTypeStateUpdated as EventListener);
     };
   }, []);
@@ -646,6 +797,7 @@ export default function TailadminProductDataPreview() {
         pricingType?: "unit" | "fixed";
         regularPrice?: string;
         discountPrice?: string;
+        profitPercent?: string;
         moq?: string;
         pricingTiers?: Array<{
           id: string;
@@ -670,6 +822,7 @@ export default function TailadminProductDataPreview() {
       setPricingType(customEvent.detail?.pricingType === "fixed" ? "carton-pricing" : "unit-pricing");
       setRegularPrice(customEvent.detail?.regularPrice ?? "");
       setDiscountPrice(customEvent.detail?.discountPrice ?? "");
+      setProfitPercent(customEvent.detail?.profitPercent ?? "");
       setMoqValue(customEvent.detail?.moq ?? "1");
 
       if (customEvent.detail?.pricingTiers) {
@@ -949,6 +1102,10 @@ export default function TailadminProductDataPreview() {
   };
 
   const addSingleTier = () => {
+    if (singlePricingTiers.length >= MAX_PRODUCT_PRICING_TIERS) {
+      return;
+    }
+
     const next = [...singlePricingTiers, createPreviewTier()];
     setSinglePricingTiers(next);
     queueMicrotask(() => {
@@ -965,6 +1122,10 @@ export default function TailadminProductDataPreview() {
   };
 
   const addTierSet = () => {
+    if (tierSets.length >= MAX_PRODUCT_TIER_SETS) {
+      return;
+    }
+
     const nextTierSet = createPreviewTierSet(tierSets.length);
     setActiveTierSetId(nextTierSet.id);
     setTierSets((current) => {
@@ -1029,7 +1190,9 @@ export default function TailadminProductDataPreview() {
 
   const addTierToSet = (tierSetId: string) => {
     const next = tierSets.map((tierSet) =>
-      tierSet.id === tierSetId ? { ...tierSet, tiers: [...tierSet.tiers, createPreviewTier()] } : tierSet,
+      tierSet.id === tierSetId && tierSet.tiers.length < MAX_PRODUCT_PRICING_TIERS
+        ? { ...tierSet, tiers: [...tierSet.tiers, createPreviewTier()] }
+        : tierSet,
     );
     setTierSets(next);
     queueMicrotask(() => {
@@ -1068,6 +1231,149 @@ export default function TailadminProductDataPreview() {
   };
 
   const activeTierSet = tierSets.find((tierSet) => tierSet.id === activeTierSetId) ?? tierSets[0];
+  const visiblePricingTiers = productType === "variable" ? activeTierSet?.tiers ?? [] : singlePricingTiers;
+  const canAddPricingTier = visiblePricingTiers.length < MAX_PRODUCT_PRICING_TIERS;
+  const canAddTierSet = tierSets.length < MAX_PRODUCT_TIER_SETS;
+  const selectedCndsProfile = cndsProfiles.find((profile) => profile.id === cndsProfileValue) ?? null;
+
+  const openCreateCndsEditor = () => {
+    setEditingCndsProfileId(null);
+    setCndsEditorDraft(createCndsEditorDraft());
+    setCndsEditorError("");
+    setIsCndsEditorOpen(true);
+  };
+
+  const openEditCndsEditor = () => {
+    if (!selectedCndsProfile) {
+      return;
+    }
+
+    setEditingCndsProfileId(selectedCndsProfile.id);
+    setCndsEditorDraft(createCndsEditorDraft(selectedCndsProfile));
+    setCndsEditorError("");
+    setIsCndsEditorOpen(true);
+  };
+
+  const closeCndsEditor = () => {
+    if (isSavingCnds) {
+      return;
+    }
+
+    setIsCndsEditorOpen(false);
+    setEditingCndsProfileId(null);
+    setCndsEditorDraft(createCndsEditorDraft());
+    setCndsEditorError("");
+  };
+
+  const updateCndsDraftField = <Field extends keyof CndsEditorDraft>(field: Field, value: CndsEditorDraft[Field]) => {
+    setCndsEditorDraft((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setCndsEditorError("");
+  };
+
+  const updateCndsTierDraft = (tierId: string, field: keyof Omit<CndsTierDraft, "id">, value: string) => {
+    setCndsEditorDraft((current) => ({
+      ...current,
+      tiers: current.tiers.map((tier) => (tier.id === tierId ? { ...tier, [field]: value } : tier)),
+    }));
+    setCndsEditorError("");
+  };
+
+  const addCndsTierDraft = () => {
+    setCndsEditorDraft((current) => ({
+      ...current,
+      tiers: [...current.tiers, createCndsTierDraft(current.tiers.length)],
+    }));
+    setCndsEditorError("");
+  };
+
+  const removeCndsTierDraft = (tierId: string) => {
+    setCndsEditorDraft((current) => ({
+      ...current,
+      tiers: current.tiers.length > 1 ? current.tiers.filter((tier) => tier.id !== tierId) : current.tiers,
+    }));
+    setCndsEditorError("");
+  };
+
+  const selectCndsProfile = (profileId: string) => {
+    setCndsProfileValue(profileId);
+    syncSelectField("product-cnds-shipping-profile", profileId);
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("prelize:set-cnds-profile", {
+          detail: {
+            profileId,
+          },
+        }),
+      );
+    }
+  };
+
+  const saveCndsEditor = async () => {
+    if (!cndsVendorId) {
+      setCndsEditorError("Select a vendor before creating a CNDS profile for this product.");
+      return;
+    }
+
+    const payload = buildCndsEditorPayload(cndsEditorDraft);
+
+    if (!payload.name) {
+      setCndsEditorError("Profile name is required.");
+      return;
+    }
+
+    if (payload.tiers.length === 0) {
+      setCndsEditorError("Add at least one CNDS tier.");
+      return;
+    }
+
+    const invalidTier = payload.tiers.find(
+      (tier) => tier.min_qty < 1 || (tier.max_qty !== null && tier.max_qty < tier.min_qty) || tier.price < 0,
+    );
+
+    if (invalidTier) {
+      setCndsEditorError("Each CNDS tier needs a valid quantity range and non-negative price.");
+      return;
+    }
+
+    setIsSavingCnds(true);
+    setCndsEditorError("");
+
+    try {
+      const result =
+        editingCndsProfileId && selectedCndsProfile
+          ? await updateVendorCndsProfileRequest(cndsVendorId, editingCndsProfileId, payload)
+          : await createVendorCndsProfileRequest(cndsVendorId, payload);
+      const savedProfile = mapCndsRowToPreviewProfile(result.profile);
+
+      setCndsProfiles((current) => {
+        const withoutSaved = current.filter((profile) => profile.id !== savedProfile.id);
+        return [savedProfile, ...withoutSaved];
+      });
+      setCndsProfileOptions((current) => {
+        const withoutSaved = current.filter((option) => option.value !== savedProfile.id && option.value !== "");
+        return [
+          { value: "", label: "No CNDS profile selected" },
+          {
+            value: savedProfile.id,
+            label: `${savedProfile.name} (${savedProfile.pricing_type === "unit" ? "Per Unit" : "Fixed"})`,
+          },
+          ...withoutSaved,
+        ];
+      });
+      selectCndsProfile(savedProfile.id);
+      setIsCndsEditorOpen(false);
+      setEditingCndsProfileId(null);
+      setCndsEditorDraft(createCndsEditorDraft());
+    } catch (error) {
+      setCndsEditorError(error instanceof Error ? error.message : "Unable to save the CNDS profile.");
+    } finally {
+      setIsSavingCnds(false);
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white">
@@ -1185,7 +1491,7 @@ export default function TailadminProductDataPreview() {
 
           {activeTab === "pricing-tiers" ? (
             <div className="space-y-6">
-              <SectionHeading title="Product Pricing Tiers" description="Set pricing, fallback values, and MOQ without changing the existing pricing logic." />
+              <SectionHeading title="Product Pricing Tiers" description="Set CNY buying prices. Selling prices are calculated from product profit percent and the current exchange rate." />
               <div className="rounded-2xl border border-gray-200">
                 <div className="space-y-6">
                   {productType === "variable" ? (
@@ -1211,11 +1517,12 @@ export default function TailadminProductDataPreview() {
                         })}
                         <button
                           type="button"
+                          disabled={!canAddTierSet}
                           onClick={addTierSet}
-                          className="inline-flex items-center gap-2 pb-3 text-base font-medium text-slate-700 hover:text-slate-900"
+                          className="inline-flex items-center gap-2 pb-3 text-base font-medium text-slate-700 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <span className="text-xl leading-none">+</span>
-                          <span>Add Tier Set</span>
+                          <span>{canAddTierSet ? "Add Tier Set" : `Max ${MAX_PRODUCT_TIER_SETS} Tier Sets`}</span>
                         </button>
                       </div>
                     </div>
@@ -1237,7 +1544,9 @@ export default function TailadminProductDataPreview() {
                         </div>
                       ) : null}
                       <div>
-                        <Label htmlFor="preview-regular-price">Regular Price / Fallback Price</Label>
+                        <Label htmlFor="preview-regular-price">
+                          {productType === "variable" ? "Fallback Buying Price (CNY)" : "Buying Price (CNY)"}
+                        </Label>
                         <InputField
                           id="preview-regular-price"
                           type="number"
@@ -1261,16 +1570,17 @@ export default function TailadminProductDataPreview() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="preview-discount-price">Discount Price</Label>
+                        <Label htmlFor="preview-profit-percent">Profit (%)</Label>
                         <InputField
-                          id="preview-discount-price"
-                          value={discountPrice}
+                          id="preview-profit-percent"
+                          type="number"
+                          value={profitPercent}
                           onChange={(value) => {
-                            setDiscountPrice(value);
-                            syncInputField("product-discount-price", value);
-                            pushPricingStateToRealForm({ discountPrice: value });
+                            setProfitPercent(value);
+                            syncInputField("product-profit-percent", value);
+                            pushPricingStateToRealForm({ profitPercent: value });
                           }}
-                          placeholder="Optional"
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -1317,6 +1627,7 @@ export default function TailadminProductDataPreview() {
 
                       <button
                         type="button"
+                        disabled={!canAddPricingTier}
                         onClick={() => {
                           if (productType === "variable" && activeTierSet) {
                             addTierToSet(activeTierSet.id);
@@ -1325,14 +1636,14 @@ export default function TailadminProductDataPreview() {
 
                           addSingleTier();
                         }}
-                        className="inline-flex h-11 items-center justify-center rounded-lg bg-[#615FFF] px-5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+                        className="inline-flex h-11 items-center justify-center rounded-lg bg-[#615FFF] px-5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Add Tier
+                        {canAddPricingTier ? "Add Tier" : `Max ${MAX_PRODUCT_PRICING_TIERS} Tiers`}
                       </button>
                     </div>
 
                     <div className="space-y-6">
-                      {(productType === "variable" ? activeTierSet?.tiers ?? [] : singlePricingTiers).map((tier, index) => (
+                      {visiblePricingTiers.map((tier, index) => (
                         <div key={tier.id} className="rounded-2xl border border-gray-200 px-4 py-4 sm:px-5">
                           <div className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
                             <div>
@@ -1368,7 +1679,7 @@ export default function TailadminProductDataPreview() {
                               />
                             </div>
                             <div>
-                              <Label htmlFor={`preview-tier-price-${tier.id}`}>Price</Label>
+                              <Label htmlFor={`preview-tier-price-${tier.id}`}>Buying Price (CNY)</Label>
                               <InputField
                                 id={`preview-tier-price-${tier.id}`}
                                 type="number"
@@ -1427,19 +1738,89 @@ export default function TailadminProductDataPreview() {
 
           {activeTab === "shipping" ? (
             <div className="space-y-6">
-              <SectionHeading title="Shipping" description="Set product dimensions and international shipping configuration." />
+              <SectionHeading title="Shipping" description="Assign CNDS shipping and review the selected profile pricing." />
               <div className="grid gap-6 xl:grid-cols-3">
                 <div className="xl:col-span-3">
                   <Label htmlFor="preview-cnds-shipping-profile">CNDS Shipping Profile</Label>
-                  <PanelSelect
-                    id="preview-cnds-shipping-profile"
-                    value={cndsProfileValue}
-                    options={cndsProfileOptions}
-                    onChange={(value) => {
-                      setCndsProfileValue(value);
-                      syncSelectField("product-cnds-shipping-profile", value);
-                    }}
-                  />
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+                    <PanelSelect
+                      id="preview-cnds-shipping-profile"
+                      value={cndsProfileValue}
+                      options={cndsProfileOptions}
+                      onChange={(value) => {
+                        setCndsProfileValue(value);
+                        syncSelectField("product-cnds-shipping-profile", value);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={openCreateCndsEditor}
+                      disabled={!cndsVendorId}
+                      className="inline-flex h-11 items-center justify-center rounded-lg border border-[#615FFF]/30 bg-white px-4 text-sm font-semibold text-[#615FFF] shadow-sm transition-colors hover:bg-[#615FFF]/5 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                    >
+                      Add CNDS
+                    </button>
+                    {selectedCndsProfile ? (
+                      <button
+                        type="button"
+                        onClick={openEditCndsEditor}
+                        className="inline-flex h-11 items-center justify-center rounded-lg bg-[#615FFF] px-4 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
+                      >
+                        Edit CNDS
+                      </button>
+                    ) : (
+                      <span className="inline-flex h-11 cursor-not-allowed items-center justify-center rounded-lg bg-slate-200 px-4 text-sm font-semibold text-slate-500">
+                        Edit CNDS
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="xl:col-span-3">
+                  <div className="rounded-2xl border border-gray-200 bg-gray-50/60 p-4">
+                    {cndsProfilesLoading ? (
+                      <p className="text-sm font-medium text-gray-600">Loading CNDS pricing...</p>
+                    ) : selectedCndsProfile ? (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">{selectedCndsProfile.name}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {selectedCndsProfile.pricing_type === "unit"
+                                ? "Per unit CNDS charge"
+                                : "Fixed CNDS charge by quantity range"}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#615FFF] ring-1 ring-[#615FFF]/20">
+                            {selectedCndsProfile.tiers.length} tier{selectedCndsProfile.tiers.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        {selectedCndsProfile.tiers.length > 0 ? (
+                          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                            <div className="grid grid-cols-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-500">
+                              <span>Min Qty</span>
+                              <span>Max Qty</span>
+                              <span className="text-right">CNDS Price</span>
+                            </div>
+                            {selectedCndsProfile.tiers.map((tier, index) => (
+                              <div
+                                key={`${selectedCndsProfile.id}-${index}`}
+                                className="grid grid-cols-3 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 last:border-b-0"
+                              >
+                                <span>{tier.min_qty}</span>
+                                <span>{tier.max_qty ?? "No limit"}</span>
+                                <span className="text-right font-semibold text-gray-900">৳{tier.price.toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">This CNDS profile has no pricing tiers yet.</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">Select a CNDS shipping profile to see its pricing tiers here.</p>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="preview-length">Length (cm)</Label>
@@ -1824,6 +2205,177 @@ export default function TailadminProductDataPreview() {
           ) : null}
         </div>
       </div>
+
+      {isCndsEditorOpen ? (
+        <div className="fixed inset-0 z-[1000000] flex items-center justify-center bg-slate-950/50 px-4 py-8 backdrop-blur-[2px]">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+            <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">
+                  {editingCndsProfileId ? "Edit CNDS Profile" : "Add CNDS Profile"}
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Configure China domestic shipping tiers without leaving this product.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCndsEditor}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-lg text-slate-500 transition-colors hover:border-[#615FFF]/30 hover:text-slate-900"
+                aria-label="Close CNDS editor"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-5 py-5 sm:px-6">
+              {cndsEditorError ? (
+                <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-600">
+                  {cndsEditorError}
+                </div>
+              ) : null}
+
+              {!cndsVendorId ? (
+                <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+                  Select a vendor before adding a CNDS profile.
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label htmlFor="inline-cnds-name">Profile Name</Label>
+                  <InputField
+                    id="inline-cnds-name"
+                    value={cndsEditorDraft.name}
+                    onChange={(value) => updateCndsDraftField("name", value)}
+                    placeholder="Test CNDS"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="inline-cnds-pricing-type">Pricing Type</Label>
+                  <PanelSelect
+                    id="inline-cnds-pricing-type"
+                    value={cndsEditorDraft.pricingType}
+                    options={[
+                      { value: "fixed", label: "Fixed" },
+                      { value: "unit", label: "Per Unit" },
+                    ]}
+                    onChange={(value) => updateCndsDraftField("pricingType", value as CndsShippingPricingType)}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label htmlFor="inline-cnds-description" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Description
+                </label>
+                <textarea
+                  id="inline-cnds-description"
+                  rows={3}
+                  value={cndsEditorDraft.description}
+                  onChange={(event) => updateCndsDraftField("description", event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm text-gray-800 shadow-sm outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10"
+                  placeholder="Optional internal note"
+                />
+              </div>
+
+              <label className="mt-4 inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={cndsEditorDraft.isActive}
+                  onChange={(event) => updateCndsDraftField("isActive", event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-[#615FFF] focus:ring-[#615FFF]"
+                />
+                Active Profile
+              </label>
+
+              <div className="mt-6 rounded-2xl border border-gray-200 bg-slate-50 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">CNDS Tiers</p>
+                    <p className="text-xs text-slate-500">Set quantity ranges and CNDS cost.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addCndsTierDraft}
+                    className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
+                  >
+                    Add Tier
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {cndsEditorDraft.tiers.map((tier, index) => (
+                    <div key={tier.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">Tier {index + 1}</p>
+                        <button
+                          type="button"
+                          onClick={() => removeCndsTierDraft(tier.id)}
+                          disabled={cndsEditorDraft.tiers.length === 1}
+                          className="text-sm font-medium text-rose-500 disabled:cursor-not-allowed disabled:text-slate-300"
+                        >
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div>
+                          <Label htmlFor={`inline-cnds-min-${tier.id}`}>Min Qty</Label>
+                          <InputField
+                            id={`inline-cnds-min-${tier.id}`}
+                            type="number"
+                            value={tier.minQty}
+                            onChange={(value) => updateCndsTierDraft(tier.id, "minQty", value)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`inline-cnds-max-${tier.id}`}>Max Qty</Label>
+                          <InputField
+                            id={`inline-cnds-max-${tier.id}`}
+                            type="number"
+                            value={tier.maxQty}
+                            onChange={(value) => updateCndsTierDraft(tier.id, "maxQty", value)}
+                            placeholder="No limit"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`inline-cnds-price-${tier.id}`}>CNDS Price</Label>
+                          <InputField
+                            id={`inline-cnds-price-${tier.id}`}
+                            type="number"
+                            value={tier.price}
+                            onChange={(value) => updateCndsTierDraft(tier.id, "price", value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-5">
+                <button
+                  type="button"
+                  onClick={() => void saveCndsEditor()}
+                  disabled={isSavingCnds || !cndsVendorId}
+                  className="inline-flex items-center justify-center rounded-lg bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSavingCnds ? "Saving..." : editingCndsProfileId ? "Update CNDS" : "Create CNDS"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeCndsEditor}
+                  disabled={isSavingCnds}
+                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
