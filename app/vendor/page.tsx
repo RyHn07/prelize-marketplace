@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 import { EcommerceMetrics } from "@/components/admin/dashboard/ecommerce-metrics";
 import type { DashboardMetricItem } from "@/components/admin/dashboard/types";
 import { getProductsForVendors } from "@/lib/products/queries";
-import { formatBDT, formatOrderDate, safeOrderStatus } from "@/lib/orders/utils";
+import { formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 import type {
@@ -45,16 +45,21 @@ function getProductStatus(product: ProductDbRow) {
 }
 
 function getStatusBadgeColor(status: string) {
-  switch (status) {
-    case "Pending":
-      return "warning";
-    case "Delivered":
-      return "success";
-    case "Cancelled":
-      return "error";
-    default:
-      return "primary";
+  const colorClass = getStatusColor(safeOrderStatus(status));
+
+  if (colorClass.includes("green")) {
+    return "success";
   }
+
+  if (colorClass.includes("yellow")) {
+    return "warning";
+  }
+
+  if (colorClass.includes("red")) {
+    return "error";
+  }
+
+  return "primary";
 }
 
 function VendorOnboardingShell({ children }: { children: React.ReactNode }) {
@@ -223,7 +228,12 @@ export default function VendorDashboardPage() {
     dashboard.orders.forEach((order) => {
       const currentStatus = safeOrderStatus(order.status);
 
-      if (currentStatus === "Pending" || currentStatus === "Confirmed" || currentStatus === "Processing") {
+      if (
+        currentStatus === "Order Placed" ||
+        currentStatus === "Payment Verified" ||
+        currentStatus === "Processing" ||
+        currentStatus === "Arrived in Warehouse"
+      ) {
         totals.attention += 1;
       }
 

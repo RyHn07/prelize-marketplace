@@ -119,7 +119,7 @@ async function getOrderNotifications(supabase: SupabaseClient) {
       id: `order:${row.id}`,
       category: "orders",
       title: `New order ${row.order_number?.trim() || row.id.slice(0, 8)}`,
-      body: `${row.user_email?.trim() || "A customer"} placed an order with status ${row.status?.trim() || "Pending"}.`,
+      body: `${row.user_email?.trim() || "A customer"} placed an order with status ${row.status?.trim() || "Order Placed"}.`,
       href: `/admin/orders/${row.id}`,
       occurredAt: row.created_at,
     }),

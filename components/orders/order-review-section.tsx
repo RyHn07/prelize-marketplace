@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductReviewRow, ReviewEligibilityItem } from "@/types/product-db";
 
@@ -113,7 +114,7 @@ export default function OrderReviewSection({
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [submittingProductId, setSubmittingProductId] = useState("");
-  const isDelivered = (orderStatus ?? "").trim() === "Delivered";
+  const isDelivered = safeOrderStatus(orderStatus) === "Delivered";
 
   useEffect(() => {
     let isMounted = true;
@@ -225,8 +226,8 @@ export default function OrderReviewSection({
           <h2 className="text-lg font-semibold text-slate-900">Product Reviews</h2>
           <p className="mt-1 text-sm text-slate-500">
             {isDelivered
-              ? "Delivered products can now receive a customer review."
-              : "Reviews unlock after this order reaches delivered status."}
+              ? "Products can now receive a customer review."
+              : "Reviews unlock after this order is delivered."}
           </p>
         </div>
       </div>

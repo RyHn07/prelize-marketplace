@@ -144,7 +144,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
   }, [params]);
 
   const groupedItems = useMemo(() => groupOrderItems(orderItems), [orderItems]);
-  const currentStatus = vendorOrder ? safeOrderStatus(vendorOrder.status) : "Pending";
+  const currentStatus = vendorOrder ? safeOrderStatus(vendorOrder.status) : "Order Placed";
   const selectableStatuses = useMemo(() => {
     const allowedNextStatuses = getAllowedVendorStatusTransitions(currentStatus);
     return [currentStatus, ...allowedNextStatuses];

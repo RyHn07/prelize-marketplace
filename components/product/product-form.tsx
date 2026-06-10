@@ -13,6 +13,7 @@ import {
   type ProductVariantUpsertPayload,
 } from "@/lib/products/actions";
 import { calculateProductProfitPricing, DEFAULT_CNY_TO_BDT_RATE } from "@/lib/product-pricing";
+import { sanitizeRichTextHtml } from "@/lib/rich-text";
 import { getCndsShippingProfilesForVendor } from "@/lib/cnds/queries";
 import { listProductMedia, uploadProductMedia } from "@/lib/media/storage";
 import {
@@ -503,7 +504,7 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
     name: trimmedName,
     slug: fallbackSlug,
     sku: normalizeOptionalText(values.sku),
-    description: normalizeOptionalText(values.description),
+    description: normalizeOptionalText(sanitizeRichTextHtml(values.description)),
     image_url: normalizeOptionalText(values.image_url),
     price: pricingPreview.displayPriceBdt,
     moq,
@@ -1487,6 +1488,22 @@ function ProductForm({
         setErrorMessage("");
       };
 
+      const handleSetProductDescriptionFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          description?: string;
+        }>;
+
+        if (typeof customEvent.detail?.description !== "string") {
+          return;
+        }
+
+        setValues((current) => ({
+          ...current,
+          description: customEvent.detail?.description ?? "",
+        }));
+        setErrorMessage("");
+      };
+
       const handleSetProductWeightFromBridge = (event: Event) => {
         const customEvent = event as CustomEvent<{
           weight?: string;
@@ -1623,6 +1640,7 @@ function ProductForm({
       window.addEventListener("prelize:set-cnds-profile", handleSetCndsProfileFromBridge as EventListener);
       window.addEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
       window.addEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+      window.addEventListener("prelize:set-product-description", handleSetProductDescriptionFromBridge as EventListener);
       window.addEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
       window.addEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
       window.addEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
@@ -1642,6 +1660,7 @@ function ProductForm({
         window.removeEventListener("prelize:set-cnds-profile", handleSetCndsProfileFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
+        window.removeEventListener("prelize:set-product-description", handleSetProductDescriptionFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
         window.removeEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
         window.removeEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
@@ -2900,6 +2919,13 @@ function ProductForm({
                   type="text"
                   value={values.sku}
                   onChange={(event) => updateField("sku", event.target.value)}
+                  className="hidden"
+                />
+
+                <textarea
+                  id="product-description"
+                  value={values.description}
+                  onChange={(event) => updateField("description", event.target.value)}
                   className="hidden"
                 />
 

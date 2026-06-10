@@ -737,7 +737,7 @@ export default function CheckoutPage() {
           order_number: orderNumber,
           user_id: user.id,
           user_email: user.email,
-          status: "Pending",
+          status: "Order Placed",
           payment_method: PAYMENT_METHOD,
           payment_status: DEFAULT_PAYMENT_STATUS,
           buyer,
@@ -827,7 +827,7 @@ export default function CheckoutPage() {
             id: vendorOrderId,
             order_id: createdOrder.id,
             vendor_id: group.vendorId,
-            status: "Pending",
+            status: "Order Placed",
             summary: createVendorOrderSummary(
               group.items.map((item) => {
                 const pricing = pricingByProductId.get(item.productId) ?? null;

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
+import { getEmailAvatarUrl } from "@/lib/account/email-avatar";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 const hasSupabaseEnv =
@@ -48,6 +50,42 @@ function getUserInitial(user: User) {
   }
 
   return "U";
+}
+
+function getUserAvatarUrl(user: User) {
+  if (typeof user.user_metadata?.avatar_url === "string" && user.user_metadata.avatar_url.trim()) {
+    return user.user_metadata.avatar_url;
+  }
+
+  if (typeof user.user_metadata?.picture === "string" && user.user_metadata.picture.trim()) {
+    return user.user_metadata.picture;
+  }
+
+  return getEmailAvatarUrl(user.email, 88);
+}
+
+function HeaderAvatar({ user }: { user: User }) {
+  const avatarUrl = getUserAvatarUrl(user);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  if (avatarUrl && !imageFailed) {
+    return (
+      <Image
+        src={avatarUrl}
+        alt={user.email ?? "My account"}
+        fill
+        sizes="44px"
+        className="object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  return <span>{getUserInitial(user)}</span>;
 }
 
 export default function HeaderAuthButton() {
@@ -112,11 +150,11 @@ export default function HeaderAuthButton() {
   return (
     <Link
       href="/account"
-      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-[#615FFF]"
+      className="relative inline-flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF]/30 hover:text-[#615FFF]"
       aria-label="My account"
       title={user.email ?? "My account"}
     >
-      <span>{getUserInitial(user)}</span>
+      <HeaderAvatar user={user} />
     </Link>
   );
 }

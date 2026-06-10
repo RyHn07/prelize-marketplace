@@ -26,10 +26,12 @@ export type HomepageThemeSectionKey =
 export type HomepageSectionType = HomepageThemeSectionKey;
 export type HomepageProductSectionSourceType = "manual" | "newest" | "featured" | "category" | "low_moq";
 export type VendorOrderStatus =
-  | "Pending"
-  | "Confirmed"
+  | "Order Placed"
+  | "Payment Verified"
   | "Processing"
+  | "Arrived in Warehouse"
   | "Shipped"
+  | "Ready to Deliver"
   | "Delivered"
   | "Cancelled";
 

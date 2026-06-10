@@ -73,14 +73,14 @@ export const adminNavigation: AdminNavItem[] = [
         description: "View every order across the marketplace.",
       },
       {
-        label: "Pending Orders",
-        href: "/admin/orders?status=Pending",
-        description: "Review orders waiting for action or fulfillment.",
+        label: "Placed Orders",
+        href: "/admin/orders?status=Order+Placed",
+        description: "Review new orders waiting for the next fulfillment step.",
       },
       {
-        label: "Completed Orders",
-        href: "/admin/orders?status=Delivered",
-        description: "Reference delivered and closed transactions.",
+        label: "Ready Orders",
+        href: "/admin/orders?status=Ready+to+Deliver",
+        description: "Reference orders ready for final delivery.",
       },
       {
         label: "Cancelled Orders",
@@ -161,11 +161,6 @@ export const adminNavigation: AdminNavItem[] = [
         description: "Estimate delivery pricing and fee logic.",
       },
     ],
-  },
-  {
-    name: "Payments",
-    path: "/admin/orders?view=payments",
-    icon: "creditCard",
   },
   {
     name: "Reports / Analytics",

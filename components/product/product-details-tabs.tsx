@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import ProductRichDescription from "@/components/product/product-rich-description";
 import type { Product } from "@/types/product";
 import type { ProductDbVariantRow } from "@/types/product-db";
 
@@ -126,7 +127,7 @@ export default function ProductDetailsTabs({ product, variants = [] }: ProductDe
         <section className="bg-white">
           <h2 className="text-xl font-semibold text-slate-900">Product Description</h2>
           <div className="mt-5 bg-white">
-            <p className="text-sm leading-8 text-slate-600 sm:text-base">{product.description}</p>
+            <ProductRichDescription value={product.description} />
           </div>
         </section>
       ) : null}

@@ -319,6 +319,11 @@ function LinkIcon() {
   );
 }
 
+function isSeaShippingMethod(method: InternationalShippingMethodRow) {
+  const name = `${method.name} ${method.slug}`.toLowerCase();
+  return name.includes("sea");
+}
+
 function CheckCircleIcon() {
   return (
     <svg
@@ -422,6 +427,7 @@ export default function ProductDetailsPurchasePanel({
   const roundedAverageRating = Math.max(0, Math.min(5, Math.round(averageRating)));
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [showCartPopup, setShowCartPopup] = useState(false);
+  const [showShippingMethodPopup, setShowShippingMethodPopup] = useState(false);
   const [isProcessingCartAction, setIsProcessingCartAction] = useState(false);
   const [lastAddedOptionCount, setLastAddedOptionCount] = useState(0);
   const [cartErrorMessage, setCartErrorMessage] = useState("");
@@ -560,6 +566,16 @@ export default function ProductDetailsPurchasePanel({
       internationalShipping,
     };
   }, [cndsProfile, product.id, product.name, productOptions, productPricingConfig, productRecord.id, quantities, selectedShippingMethod]);
+
+  useEffect(() => {
+    if (!selectedShippingMethod || !isSeaShippingMethod(selectedShippingMethod) || totals.totalWeightKg >= 500) {
+      return;
+    }
+
+    const nextAllowedMethod = internationalShippingMethods.find((method) => !isSeaShippingMethod(method));
+    setSelectedShippingMethodId(nextAllowedMethod?.id ?? "");
+  }, [internationalShippingMethods, selectedShippingMethod, totals.totalWeightKg]);
+
   const unitPriceByOptionId = useMemo(
     () =>
       new Map(
@@ -669,6 +685,18 @@ export default function ProductDetailsPurchasePanel({
 
   const handleContinueShopping = () => {
     setShowCartPopup(false);
+  };
+
+  const handleSelectShippingMethod = (method: InternationalShippingMethodRow) => {
+    if (isSeaShippingMethod(method) && totals.totalWeightKg < 500) {
+      return;
+    }
+
+    setSelectedShippingMethodId(method.id);
+  };
+
+  const handleCloseShippingMethodPopup = () => {
+    setShowShippingMethodPopup(false);
   };
 
   return (
@@ -842,18 +870,7 @@ export default function ProductDetailsPurchasePanel({
             </div>
             <button
               type="button"
-              onClick={() =>
-                setSelectedShippingMethodId((current) => {
-                  if (internationalShippingMethods.length === 0) {
-                    return "";
-                  }
-
-                  const currentIndex = internationalShippingMethods.findIndex((method) => method.id === current);
-                  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % internationalShippingMethods.length : 0;
-
-                  return internationalShippingMethods[nextIndex].id;
-                })
-              }
+              onClick={() => setShowShippingMethodPopup(true)}
               className="rounded-md p-2 text-slate-700 transition-colors hover:bg-white hover:text-[#615FFF]"
               aria-label="Change international shipping method"
             >
@@ -981,6 +998,106 @@ export default function ProductDetailsPurchasePanel({
                   View Cart
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showShippingMethodPopup ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
+          <div className="relative max-h-[88vh] w-full max-w-[720px] overflow-y-auto rounded-[16px] bg-white px-5 py-6 shadow-[0_30px_90px_rgba(15,23,42,0.24)] sm:px-7">
+            <button
+              type="button"
+              onClick={handleCloseShippingMethodPopup}
+              className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close shipping method popup"
+            >
+              <CloseIcon />
+            </button>
+
+            <div className="pr-10">
+              <h2 className="text-lg font-semibold text-slate-950">Select Shipping Method</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Current selected weight: {totals.totalWeightKg > 0 ? `${totals.totalWeightKg} kg` : "Pending weight"}
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {internationalShippingMethods.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                  No international shipping method is available right now.
+                </div>
+              ) : (
+                internationalShippingMethods.map((method) => {
+                  const isSelected = selectedShippingMethod?.id === method.id;
+                  const isSeaDisabled = isSeaShippingMethod(method) && totals.totalWeightKg < 500;
+                  const methodEstimate = calculateInternationalShippingEstimate(
+                    method,
+                    totals.totalWeightKg,
+                    totals.internationalShipping.status === "pending_review" && totals.internationalShipping.warning?.includes("weight is missing") === true,
+                  );
+
+                  return (
+                    <button
+                      key={method.id}
+                      type="button"
+                      onClick={() => handleSelectShippingMethod(method)}
+                      disabled={isSeaDisabled}
+                      className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                        isSelected
+                          ? "border-[#615FFF] bg-[#615FFF]/8"
+                          : "border-slate-200 bg-white hover:border-[#615FFF]/50 hover:bg-slate-50"
+                      } ${isSeaDisabled ? "cursor-not-allowed opacity-55 hover:border-slate-200 hover:bg-white" : ""}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                            isSelected ? "border-[#615FFF]" : "border-slate-300"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {isSelected ? <span className="h-2.5 w-2.5 rounded-full bg-[#615FFF]" /> : null}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="text-base font-semibold text-slate-950">{method.name}</span>
+                            <span className="text-sm font-semibold text-[#615FFF]">
+                              {formatDeliveryWindow(method.delivery_min_days, method.delivery_max_days)}
+                            </span>
+                          </span>
+                          {method.description ? (
+                            <span className="mt-2 block text-sm leading-6 text-slate-600">{method.description}</span>
+                          ) : null}
+                          <span className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-3">
+                            <span>Minimum: {method.minimum_weight_kg} kg</span>
+                            <span>
+                              Estimate: {methodEstimate.total === null ? PAY_ON_DELIVERY_PLACEHOLDER : formatCurrency(methodEstimate.total)}
+                            </span>
+                            <span>{method.tiers.length} pricing tier{method.tiers.length === 1 ? "" : "s"}</span>
+                          </span>
+                          {isSeaDisabled ? (
+                            <span className="mt-3 block text-sm font-medium text-amber-600">
+                              Sea shipping is available from 500 kg.
+                            </span>
+                          ) : methodEstimate.warning ? (
+                            <span className="mt-3 block text-sm font-medium text-amber-600">{methodEstimate.warning}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={handleCloseShippingMethodPopup}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+              >
+                Done
+              </button>
             </div>
           </div>
         </div>

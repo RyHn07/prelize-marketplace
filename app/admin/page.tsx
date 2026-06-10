@@ -11,6 +11,7 @@ import RecentOrders from "@/components/admin/dashboard/recent-orders";
 import StatisticsChart from "@/components/admin/dashboard/statistics-chart";
 import type { DashboardMetricItem, DashboardOrderItem, DashboardOverviewItem } from "@/components/admin/dashboard/types";
 import { getAdminAccessState } from "@/lib/admin-access";
+import { safeOrderStatus } from "@/lib/orders/utils";
 import { getProducts } from "@/lib/products/queries";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendors } from "@/lib/vendors/queries";
@@ -110,9 +111,9 @@ export default function AdminPage() {
 
   const totalProducts = products.length;
   const totalOrders = orders.length;
-  const pendingOrders = useMemo(() => orders.filter((order) => order.status === "Pending").length, [orders]);
+  const pendingOrders = useMemo(() => orders.filter((order) => safeOrderStatus(order.status) === "Order Placed").length, [orders]);
   const completedOrders = useMemo(
-    () => orders.filter((order) => order.status === "Delivered" || order.status === "Completed").length,
+    () => orders.filter((order) => safeOrderStatus(order.status) === "Delivered").length,
     [orders],
   );
   const activeVendors = useMemo(() => vendors.filter((vendor) => vendor.status === "active").length, [vendors]);
@@ -123,7 +124,7 @@ export default function AdminPage() {
         id: order.id,
         orderNumber: order.order_number,
         customerEmail: order.user_email,
-        status: order.status,
+        status: safeOrderStatus(order.status),
         createdAt: order.created_at,
         payNowAmount: order.summary?.payNow ?? 0,
       })),
@@ -224,13 +225,13 @@ export default function AdminPage() {
 
   const overviewItems: DashboardOverviewItem[] = [
     {
-      label: "Pending Orders",
+      label: "Placed Orders",
       value: `${pendingOrders} waiting for action`,
       progress: totalOrders === 0 ? 0 : (pendingOrders / totalOrders) * 100,
     },
     {
-      label: "Completed Orders",
-      value: `${completedOrders} fulfilled`,
+      label: "Delivered Orders",
+      value: `${completedOrders} delivered`,
       progress: totalOrders === 0 ? 0 : (completedOrders / totalOrders) * 100,
     },
     {

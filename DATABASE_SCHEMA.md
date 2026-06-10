@@ -81,7 +81,9 @@ Current fields inferred from the code:
 | `order_number` | text | Yes | Public order identifier like `PLZ-...` |
 | `user_id` | uuid or text | Yes | Customer user id |
 | `user_email` | text | Yes | Customer email |
-| `status` | text | Yes | Example: `Pending`, `Confirmed`, `Processing`, `Shipped`, `Delivered`, `Cancelled` |
+| `status` | text | Yes | Example: `Order Placed`, `Payment Verified`, `Processing`, `Arrived in Warehouse`, `Shipped`, `Ready to Deliver`, `Delivered`, `Cancelled` |
+| `payment_proof_path` | text | No | Bank transfer screenshot/PDF path in `payment-proofs` storage |
+| `payment_proof_uploaded_at` | timestamptz | No | When customer uploaded latest payment proof |
 | `payment_method` | text nullable | No | Currently expected by the app |
 | `payment_status` | text nullable | No | Currently expected by the app |
 | `buyer` | jsonb nullable | No | Buyer info object |

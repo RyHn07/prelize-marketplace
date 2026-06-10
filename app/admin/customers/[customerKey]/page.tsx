@@ -6,18 +6,11 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { getAdminAccessState } from "@/lib/admin-access";
+import { ORDER_STATUSES, formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
+import type { VendorOrderStatus } from "@/types/product-db";
 
-const ORDER_STATUSES = [
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
-] as const;
-
-type OrderStatus = (typeof ORDER_STATUSES)[number];
+type OrderStatus = VendorOrderStatus;
 
 type OrderSummary = {
   payNow: number;
@@ -33,28 +26,9 @@ type AdminOrder = {
   user_email: string;
   status: OrderStatus;
   created_at: string;
-  payment_status?: string | null;
   summary: OrderSummary;
   buyer?: BuyerInfo;
 };
-
-function formatBDT(amount: number) {
-  return `\u09F3${amount.toLocaleString()}`;
-}
-
-function formatOrderDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString("en-BD", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
 
 function readBuyerString(buyer: BuyerInfo, keys: string[]) {
   if (!buyer) {
@@ -72,47 +46,12 @@ function readBuyerString(buyer: BuyerInfo, keys: string[]) {
   return null;
 }
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case "Pending":
-      return "bg-amber-100 text-amber-700";
-    case "Confirmed":
-      return "bg-sky-100 text-sky-700";
-    case "Processing":
-      return "bg-violet-100 text-violet-700";
-    case "Shipped":
-      return "bg-indigo-100 text-indigo-700";
-    case "Delivered":
-      return "bg-emerald-100 text-emerald-700";
-    case "Cancelled":
-      return "bg-rose-100 text-rose-700";
-    default:
-      return "bg-slate-100 text-slate-700";
-  }
-}
-
-function getPaymentStatusColor(status: string | null | undefined) {
-  if (status === "Received") {
-    return "bg-emerald-100 text-emerald-700";
-  }
-
-  return "bg-amber-100 text-amber-700";
-}
-
 function StatusBadge({ status }: { status: OrderStatus }) {
-  return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusColor(status)}`}>
-      {status}
-    </span>
-  );
-}
-
-function PaymentBadge({ status }: { status: string | null | undefined }) {
-  const label = status === "Received" ? "Received" : "Pending";
+  const safeStatus = safeOrderStatus(status);
 
   return (
-    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusColor(status)}`}>
-      {label}
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusColor(safeStatus)}`}>
+      {safeStatus}
     </span>
   );
 }
@@ -224,7 +163,10 @@ export default function AdminCustomerOrdersPage() {
         return;
       }
 
-      const nextOrders = (data ?? []) as AdminOrder[];
+      const nextOrders = ((data ?? []) as AdminOrder[]).map((order) => ({
+        ...order,
+        status: safeOrderStatus(order.status),
+      }));
       setOrders(nextOrders);
 
       const firstOrder = nextOrders[0];
@@ -257,7 +199,7 @@ export default function AdminCustomerOrdersPage() {
         order.order_number.toLowerCase().includes(normalizedSearchQuery) ||
         order.user_email.toLowerCase().includes(normalizedSearchQuery);
 
-      const matchesStatus = statusFilter === "All Status" || order.status === statusFilter;
+      const matchesStatus = statusFilter === "All Status" || safeOrderStatus(order.status) === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -405,7 +347,7 @@ export default function AdminCustomerOrdersPage() {
           </div>
         ) : (
           <div className="max-w-full overflow-x-auto">
-            <div className="min-w-[1180px]">
+            <div className="min-w-[1040px]">
               <table className="min-w-full">
                 <thead className="border-b border-gray-100">
                   <tr>
@@ -422,7 +364,6 @@ export default function AdminCustomerOrdersPage() {
                       </div>
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Payment</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Pay Now</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Created At</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">
@@ -442,9 +383,6 @@ export default function AdminCustomerOrdersPage() {
                       <td className="px-4 py-5 text-sm text-gray-500">{order.user_email}</td>
                       <td className="px-4 py-5">
                         <StatusBadge status={order.status} />
-                      </td>
-                      <td className="px-4 py-5">
-                        <PaymentBadge status={order.payment_status} />
                       </td>
                       <td className="px-4 py-5 text-sm font-semibold text-[#615FFF]">
                         {formatBDT(order.summary?.payNow ?? 0)}

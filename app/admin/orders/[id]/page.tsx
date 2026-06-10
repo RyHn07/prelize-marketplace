@@ -5,30 +5,12 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { getAdminAccessState } from "@/lib/admin-access";
-import { formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
+import { ORDER_STATUSES, formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 import { getVendorsByIds } from "@/lib/vendors/queries";
-import type { OrderItemRow, ShippingMethodRow, VendorOrderRow, VendorRow } from "@/types/product-db";
+import type { OrderItemRow, ShippingMethodRow, VendorOrderRow, VendorOrderStatus, VendorRow } from "@/types/product-db";
 
-type OrderStatus =
-  | "Pending"
-  | "Confirmed"
-  | "Processing"
-  | "Shipped"
-  | "Delivered"
-  | "Cancelled";
-
-const ORDER_STATUSES: OrderStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
-];
-const PAYMENT_STATUSES = ["Pending", "Received", "Failed", "Refunded"] as const;
-
-type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+type OrderStatus = VendorOrderStatus;
 
 type OrderSummary = {
   quantity?: number;
@@ -46,8 +28,6 @@ type OrderRow = {
   order_number: string;
   user_email: string;
   status: OrderStatus;
-  payment_method: string | null;
-  payment_status: PaymentStatus | null;
   buyer: BuyerInfo | null;
   admin_note: string | null;
   cnds_cost_total?: number | null;
@@ -133,20 +113,6 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   );
 }
 
-function PaymentBadge({ status }: { status: PaymentStatus | null | undefined }) {
-  const isReceived = status === "Received";
-
-  return (
-    <span
-      className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-        isReceived ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-      }`}
-    >
-      {isReceived ? "Received" : "Pending"}
-    </span>
-  );
-}
-
 function groupOrderItems(items: OrderItemRow[]) {
   const groups = new Map<string, GroupedOrderItem>();
 
@@ -184,7 +150,6 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
   const [vendorOrders, setVendorOrders] = useState<VendorOrderWithContext[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [isUpdatingPaymentStatus, setIsUpdatingPaymentStatus] = useState(false);
   const [adminNote, setAdminNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteMessage, setNoteMessage] = useState("");
@@ -353,38 +318,6 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     setIsSavingNote(false);
   };
 
-  const handlePaymentStatusChange = async (newPaymentStatus: PaymentStatus) => {
-    if (!order) {
-      return;
-    }
-
-    const supabase = getSupabaseClient();
-
-    setIsUpdatingPaymentStatus(true);
-    setErrorMessage("");
-
-    const { error } = await supabase
-      .from("orders")
-      .update({ payment_status: newPaymentStatus } as never)
-      .eq("id", order.id);
-
-    if (error) {
-      setErrorMessage(
-        error.message.toLowerCase().includes("payment_status")
-          ? "Payment columns are missing. Run: alter table orders add column payment_method text default 'Bank Transfer'; alter table orders add column payment_status text default 'Pending';"
-          : "Unable to update payment status right now.",
-      );
-      setIsUpdatingPaymentStatus(false);
-      return;
-    }
-
-    setOrder({
-      ...order,
-      payment_status: newPaymentStatus,
-    });
-    setIsUpdatingPaymentStatus(false);
-  };
-
   const customerNote =
     typeof order?.buyer?.customer_note === "string"
       ? order.buyer.customer_note
@@ -440,38 +373,6 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
   return (
     <section className="w-full space-y-6">
-      <div className="rounded-2xl border border-gray-200 bg-white">
-        <div className="flex flex-col gap-4 border-b border-gray-100 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="text-base font-medium text-gray-800">{order.order_number}</h3>
-            <p className="mt-1 text-sm text-gray-500">Created {formatOrderDate(order.created_at)}</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/admin/orders"
-              className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:border-[#615FFF]/40 hover:text-slate-900"
-            >
-              Back to Orders
-            </Link>
-            <StatusBadge status={safeOrderStatus(order.status)} />
-            <select
-              value={safeOrderStatus(order.status)}
-              onChange={(event) => handleStatusChange(event.target.value as OrderStatus)}
-              disabled={isUpdatingStatus}
-              className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10 disabled:cursor-not-allowed disabled:bg-slate-50"
-              aria-label={`Update status for ${order.order_number}`}
-            >
-              {ORDER_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
       {errorMessage ? (
         <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-medium text-rose-600">
           {errorMessage}
@@ -488,17 +389,11 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
                   <h2 className="mt-2 text-2xl font-semibold text-slate-900">{order.order_number}</h2>
                   <p className="mt-1 text-sm text-slate-500">Marketplace order created on {formatOrderDate(order.created_at)}</p>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Order Status</p>
                     <div className="mt-2">
                       <StatusBadge status={safeOrderStatus(order.status)} />
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Payment Status</p>
-                    <div className="mt-2">
-                      <PaymentBadge status={order.payment_status} />
                     </div>
                   </div>
                 </div>
@@ -510,7 +405,6 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
                 <h3 className="text-sm font-semibold text-slate-900">Customer</h3>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <DetailField label="Customer Email" value={order.user_email} />
-                  <DetailField label="Payment Method" value={order.payment_method ?? "Bank Transfer"} />
                   {order.buyer && Object.keys(order.buyer).length > 0 ? (
                     Object.entries(order.buyer)
                       .filter(([, value]) => value !== null && String(value).trim() !== "")
@@ -527,7 +421,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
               <div className="rounded-xl border border-slate-200 p-4">
                 <h3 className="text-sm font-semibold text-slate-900">Operations</h3>
                 <div className="mt-4 space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
                     <div>
                       <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Update Order Status</p>
                       <select
@@ -537,21 +431,6 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
                         className="mt-2 h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10 disabled:cursor-not-allowed disabled:bg-slate-50"
                       >
                         {ORDER_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-slate-400">Update Payment</p>
-                      <select
-                        value={order.payment_status ?? "Pending"}
-                        onChange={(event) => handlePaymentStatusChange(event.target.value as PaymentStatus)}
-                        disabled={isUpdatingPaymentStatus}
-                        className="mt-2 h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-[#615FFF]/40 focus:ring-4 focus:ring-[#615FFF]/10 disabled:cursor-not-allowed disabled:bg-slate-50"
-                      >
-                        {PAYMENT_STATUSES.map((status) => (
                           <option key={status} value={status}>
                             {status}
                           </option>

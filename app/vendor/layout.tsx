@@ -36,8 +36,8 @@ const VENDOR_NAVIGATION: WorkspaceNavItem[] = [
     icon: "shoppingBag",
     subItems: [
       { label: "All Orders", href: "/vendor/orders" },
-      { label: "Pending Orders", href: "/vendor/orders?status=Pending" },
-      { label: "Completed Orders", href: "/vendor/orders?status=Delivered" },
+      { label: "Placed Orders", href: "/vendor/orders?status=Order+Placed" },
+      { label: "Ready Orders", href: "/vendor/orders?status=Ready+to+Deliver" },
       { label: "Cancelled Orders", href: "/vendor/orders?status=Cancelled" },
     ],
   },

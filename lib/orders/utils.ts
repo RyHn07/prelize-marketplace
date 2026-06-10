@@ -7,20 +7,57 @@ import type {
 } from "@/types/product-db";
 
 export const ORDER_STATUSES: VendorOrderStatus[] = [
-  "Pending",
-  "Confirmed",
+  "Order Placed",
+  "Payment Verified",
   "Processing",
+  "Arrived in Warehouse",
   "Shipped",
+  "Ready to Deliver",
   "Delivered",
   "Cancelled",
 ];
+
+export const ORDER_PROGRESS_STEPS: VendorOrderStatus[] = [
+  "Order Placed",
+  "Payment Verified",
+  "Processing",
+  "Arrived in Warehouse",
+  "Shipped",
+  "Ready to Deliver",
+  "Delivered",
+];
+
+export const ORDER_STATUS_DESCRIPTIONS: Record<VendorOrderStatus, string> = {
+  "Order Placed": "We received the order. Complete bank transfer and upload payment proof.",
+  "Payment Verified": "Payment is verified. The order is ready for processing.",
+  Processing: "Your items are being prepared and checked with the supplier.",
+  "Arrived in Warehouse": "Items arrived in our warehouse and are being checked.",
+  Shipped: "The order has left the warehouse and is on the way.",
+  "Ready to Deliver": "The order is ready for final delivery.",
+  Delivered: "The order has been delivered.",
+  Cancelled: "This order has been cancelled.",
+};
+
+const LEGACY_ORDER_STATUS_MAP: Record<string, VendorOrderStatus> = {
+  Pending: "Order Placed",
+  Confirmed: "Payment Verified",
+  Processing: "Processing",
+  Shipped: "Shipped",
+  Delivered: "Delivered",
+  Completed: "Delivered",
+  Cancelled: "Cancelled",
+};
 
 export function safeOrderStatus(value: unknown): VendorOrderStatus {
   if (ORDER_STATUSES.includes(value as VendorOrderStatus)) {
     return value as VendorOrderStatus;
   }
 
-  return "Pending";
+  if (typeof value === "string" && LEGACY_ORDER_STATUS_MAP[value]) {
+    return LEGACY_ORDER_STATUS_MAP[value];
+  }
+
+  return "Order Placed";
 }
 
 export function formatBDT(amount: number) {
@@ -43,16 +80,20 @@ export function formatOrderDate(value: string) {
 
 export function getStatusColor(status: string) {
   switch (status) {
-    case "Pending":
+    case "Order Placed":
       return "bg-yellow-100 text-yellow-700";
-    case "Confirmed":
+    case "Payment Verified":
       return "bg-blue-100 text-blue-700";
     case "Processing":
       return "bg-purple-100 text-purple-700";
+    case "Arrived in Warehouse":
+      return "bg-cyan-100 text-cyan-700";
     case "Shipped":
       return "bg-indigo-100 text-indigo-700";
-    case "Delivered":
+    case "Ready to Deliver":
       return "bg-green-100 text-green-700";
+    case "Delivered":
+      return "bg-emerald-100 text-emerald-700";
     case "Cancelled":
       return "bg-red-100 text-red-700";
     default:
@@ -130,10 +171,12 @@ export function createVendorOrderSummary(
 }
 
 const ALLOWED_VENDOR_STATUS_TRANSITIONS: Record<VendorOrderStatus, VendorOrderStatus[]> = {
-  Pending: ["Processing", "Cancelled"],
-  Confirmed: ["Processing", "Cancelled"],
-  Processing: ["Shipped", "Cancelled"],
-  Shipped: ["Delivered"],
+  "Order Placed": [],
+  "Payment Verified": ["Processing", "Cancelled"],
+  Processing: ["Arrived in Warehouse", "Cancelled"],
+  "Arrived in Warehouse": ["Shipped", "Cancelled"],
+  Shipped: ["Ready to Deliver"],
+  "Ready to Deliver": ["Delivered"],
   Delivered: [],
   Cancelled: [],
 };
@@ -174,7 +217,7 @@ export function deriveParentOrderStatus(statuses: VendorOrderStatus[]) {
   const normalizedStatuses = statuses.map(safeOrderStatus);
 
   if (normalizedStatuses.length === 0) {
-    return "Pending" as VendorOrderStatus;
+    return "Order Placed" as VendorOrderStatus;
   }
 
   if (normalizedStatuses.every((status) => status === "Cancelled")) {
@@ -185,19 +228,27 @@ export function deriveParentOrderStatus(statuses: VendorOrderStatus[]) {
     return "Delivered" as VendorOrderStatus;
   }
 
+  if (normalizedStatuses.every((status) => status === "Ready to Deliver" || status === "Delivered")) {
+    return "Ready to Deliver" as VendorOrderStatus;
+  }
+
   if (normalizedStatuses.some((status) => status === "Shipped")) {
     return "Shipped" as VendorOrderStatus;
+  }
+
+  if (normalizedStatuses.some((status) => status === "Arrived in Warehouse")) {
+    return "Arrived in Warehouse" as VendorOrderStatus;
   }
 
   if (normalizedStatuses.some((status) => status === "Processing")) {
     return "Processing" as VendorOrderStatus;
   }
 
-  if (normalizedStatuses.some((status) => status === "Confirmed")) {
-    return "Confirmed" as VendorOrderStatus;
+  if (normalizedStatuses.some((status) => status === "Payment Verified")) {
+    return "Payment Verified" as VendorOrderStatus;
   }
 
-  return "Pending" as VendorOrderStatus;
+  return "Order Placed" as VendorOrderStatus;
 }
 
 export function summarizeOrderItems(items: OrderItemRow[]) {

@@ -5,16 +5,15 @@ import Link from "next/link";
 import DashboardBadge from "./dashboard-badge";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "./dashboard-table";
 import type { DashboardOrderItem } from "./types";
+import { safeOrderStatus } from "@/lib/orders/utils";
 
 function getStatusColor(status: string) {
-  switch (status) {
+  switch (safeOrderStatus(status)) {
     case "Delivered":
-    case "Completed":
       return "success";
-    case "Pending":
+    case "Order Placed":
       return "warning";
     case "Cancelled":
-    case "Canceled":
       return "error";
     default:
       return "primary";
@@ -77,7 +76,7 @@ export default function RecentOrders({
                 <TableCell className="py-5 text-sm text-gray-500">{formatAmount(order.payNowAmount)}</TableCell>
                 <TableCell className="py-5 text-sm text-gray-500">
                   <DashboardBadge color={getStatusColor(order.status) as "success" | "warning" | "error" | "primary"} size="sm">
-                    {order.status}
+                    {safeOrderStatus(order.status)}
                   </DashboardBadge>
                 </TableCell>
               </TableRow>

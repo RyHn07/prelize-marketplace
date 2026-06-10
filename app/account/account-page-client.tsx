@@ -6,7 +6,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
+import { getEmailAvatarUrl } from "@/lib/account/email-avatar";
 import { uploadCustomerAvatar } from "@/lib/account/avatar-storage";
+import { getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 type AccountOrderSummary = {
@@ -17,6 +19,7 @@ type AccountOrder = {
   id: string;
   order_number: string;
   status: string | null;
+  payment_method?: string | null;
   payment_status?: string | null;
   user_email?: string | null;
   created_at: string;
@@ -37,8 +40,8 @@ type SettingsTab = "personal-details" | "password";
 
 const ORDER_FILTERS: Array<{ key: OrderFilterKey; label: string }> = [
   { key: "all", label: "All" },
-  { key: "pending", label: "Pending" },
-  { key: "confirmed", label: "Confirmed" },
+  { key: "pending", label: "Placed" },
+  { key: "confirmed", label: "Verified" },
   { key: "delivered", label: "Delivered" },
   { key: "cancel", label: "Cancel" },
   { key: "paid", label: "Paid" },
@@ -119,26 +122,11 @@ function formatBDT(amount: number) {
 }
 
 function getStatusBadgeClass(status: string | null) {
-  const normalizedStatus = (status ?? "pending").trim().toLowerCase();
-
-  if (normalizedStatus === "cancelled" || normalizedStatus === "canceled" || normalizedStatus === "cancel") {
-    return "bg-rose-50 text-rose-600";
-  }
-
-  if (normalizedStatus === "delivered" || normalizedStatus === "confirmed" || normalizedStatus === "completed") {
-    return "bg-emerald-50 text-emerald-600";
-  }
-
-  return "bg-amber-50 text-amber-600";
+  return getStatusColor(safeOrderStatus(status));
 }
 
 function formatOrderStatus(status: string | null) {
-  const fallbackStatus = status?.trim() || "Pending";
-
-  return fallbackStatus
-    .split(/[\s_-]+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
+  return safeOrderStatus(status);
 }
 
 function getDisplayName(user: User) {
@@ -173,7 +161,44 @@ function getAvatarUrl(user: User) {
     return user.user_metadata.picture;
   }
 
-  return "";
+  return getEmailAvatarUrl(user.email, 160);
+}
+
+function AccountAvatar({
+  src,
+  alt,
+  initial,
+  size,
+  className,
+}: {
+  src: string;
+  alt: string;
+  initial: string;
+  size: string;
+  className: string;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
+
+  return (
+    <div className={className}>
+      {src && !imageFailed ? (
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes={size}
+          className="object-cover"
+          onError={() => setImageFailed(true)}
+        />
+      ) : (
+        <span>{initial}</span>
+      )}
+    </div>
+  );
 }
 
 function getUserMetadataValue(user: User, key: "phone" | "address") {
@@ -226,18 +251,18 @@ function canSetInitialPasswordWithoutCurrentPassword(user: User) {
 }
 
 function matchesOrderFilter(order: AccountOrder, filter: OrderFilterKey) {
-  const status = (order.status ?? "").trim().toLowerCase();
+  const status = safeOrderStatus(order.status);
   const paymentStatus = (order.payment_status ?? "").trim().toLowerCase();
 
   switch (filter) {
     case "pending":
-      return status === "pending";
+      return status === "Order Placed";
     case "confirmed":
-      return status === "confirmed";
+      return status === "Payment Verified";
     case "delivered":
-      return status === "delivered";
+      return status === "Delivered";
     case "cancel":
-      return status === "cancel" || status === "cancelled" || status === "canceled";
+      return status === "Cancelled";
     case "paid":
       return paymentStatus === "received" || paymentStatus === "paid";
     case "unpaid":
@@ -247,7 +272,7 @@ function matchesOrderFilter(order: AccountOrder, filter: OrderFilterKey) {
   }
 }
 
-export default function AccountPageClient() {
+export default function AccountPageClient({ initialView = "dashboard" }: { initialView?: AccountView }) {
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -255,7 +280,7 @@ export default function AccountPageClient() {
   const [orders, setOrders] = useState<AccountOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterKey, setFilterKey] = useState<OrderFilterKey>("all");
-  const [activeView, setActiveView] = useState<AccountView>("dashboard");
+  const [activeView, setActiveView] = useState<AccountView>(initialView);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("personal-details");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -315,7 +340,7 @@ export default function AccountPageClient() {
 
       const { data: userIdOrders, error: userIdOrdersError } = await supabase
         .from("orders")
-        .select("id, order_number, status, payment_status, user_email, created_at, summary")
+        .select("id, order_number, status, payment_method, payment_status, user_email, created_at, summary")
         .eq("user_id", currentUser.id)
         .order("created_at", { ascending: false });
 
@@ -335,7 +360,7 @@ export default function AccountPageClient() {
       if (fetchedOrders.length === 0 && currentUser.email) {
         const { data: emailOrders, error: emailOrdersError } = await supabase
           .from("orders")
-          .select("id, order_number, status, payment_status, user_email, created_at, summary")
+          .select("id, order_number, status, payment_method, payment_status, user_email, created_at, summary")
           .eq("user_email", currentUser.email)
           .order("created_at", { ascending: false });
 
@@ -579,16 +604,13 @@ export default function AccountPageClient() {
     <div className="mt-6 overflow-hidden rounded-[8px] border border-slate-100">
       <div className="hidden grid-cols-[1.25fr_1.45fr_0.55fr_0.65fr] border-b border-slate-100 px-5 py-4 text-xs font-medium text-slate-500 md:grid">
         <span>Order</span>
-        <span>Customer</span>
+        <span>Payment</span>
         <span>Amount</span>
         <span>Status</span>
       </div>
 
       <div className="divide-y divide-slate-100">
-        {orderList.map((order) => {
-          const customerEmail = order.user_email || user?.email || "Customer";
-
-          return (
+        {orderList.map((order) => (
             <Link
               key={order.id}
               href={`/orders/${order.id}`}
@@ -600,16 +622,13 @@ export default function AccountPageClient() {
               </div>
 
               <div className="flex min-w-0 items-center gap-3">
-                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#615FFF] via-[#7a78ff] to-[#19d3c5] text-sm font-semibold text-white">
-                  {avatarUrl ? (
-                    <Image src={avatarUrl} alt={displayName} fill sizes="40px" className="object-cover" />
-                  ) : (
-                    <span>{displayName.charAt(0).toUpperCase() || "U"}</span>
-                  )}
-                </div>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ECEBFF] text-sm font-semibold text-[#615FFF]">
+                  ৳
+                </span>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:hidden">Customer</p>
-                  <p className="truncate text-sm text-slate-600">{customerEmail}</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-slate-400 md:hidden">Payment</p>
+                  <p className="truncate text-sm font-semibold text-slate-700">{order.payment_status ?? "Pending"}</p>
+                  <p className="mt-1 truncate text-xs text-slate-500">{order.payment_method ?? "Bank Transfer"}</p>
                 </div>
               </div>
 
@@ -625,8 +644,7 @@ export default function AccountPageClient() {
                 </span>
               </div>
             </Link>
-          );
-        })}
+        ))}
       </div>
     </div>
   );
@@ -737,13 +755,13 @@ export default function AccountPageClient() {
             <section className="rounded-[8px] border border-slate-200 bg-white px-6 py-6 sm:px-7">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#615FFF] via-[#7a78ff] to-[#19d3c5] text-lg font-semibold text-white">
-                    {avatarUrl ? (
-                      <Image src={avatarUrl} alt={displayName} fill sizes="64px" className="object-cover" />
-                    ) : (
-                      <span>{getUserInitial(user)}</span>
-                    )}
-                  </div>
+                  <AccountAvatar
+                    src={avatarUrl}
+                    alt={displayName}
+                    initial={getUserInitial(user)}
+                    size="64px"
+                    className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#ECEBFF] text-lg font-semibold text-[#615FFF]"
+                  />
 
                   <div>
                     <h1 className="text-[28px] font-semibold uppercase leading-none text-slate-950">
@@ -961,13 +979,13 @@ export default function AccountPageClient() {
                     <div>
                       <p className="text-sm font-semibold text-slate-950">Profile photo</p>
                       <div className="mt-4 flex flex-col items-start gap-4">
-                        <div className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#615FFF] via-[#7a78ff] to-[#19d3c5] text-3xl font-semibold text-white">
-                          {avatarUrl ? (
-                            <Image src={avatarUrl} alt={displayName} fill sizes="112px" className="object-cover" />
-                          ) : (
-                            <span>{getUserInitial(user)}</span>
-                          )}
-                        </div>
+                        <AccountAvatar
+                          src={avatarUrl}
+                          alt={displayName}
+                          initial={getUserInitial(user)}
+                          size="112px"
+                          className="relative flex h-28 w-28 items-center justify-center overflow-hidden rounded-full bg-[#ECEBFF] text-3xl font-semibold text-[#615FFF]"
+                        />
                         <button
                           type="button"
                           onClick={() => avatarInputRef.current?.click()}

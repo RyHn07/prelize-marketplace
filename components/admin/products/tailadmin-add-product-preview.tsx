@@ -11,6 +11,7 @@ import {
   uploadProductMedia,
 } from "@/lib/media/storage";
 
+import RichTextDescriptionEditor from "./rich-text-description-editor";
 import TailadminProductDataPreview from "./tailadmin-product-data-preview";
 
 type SpecificationPreviewRow = {
@@ -21,7 +22,7 @@ type SpecificationPreviewRow = {
 
 type GalleryModalProps = {
   isOpen: boolean;
-  target: "gallery" | "main-image" | `variation:${string}`;
+  target: "description" | "gallery" | "main-image" | `variation:${string}`;
   currentMainImage: string;
   vendorId: string;
   onClose: () => void;
@@ -629,6 +630,8 @@ function GalleryLibraryModal({
           <p className="text-sm text-slate-500">
             {target === "gallery"
               ? "Click images to select multiple items. Selected images will be added to the real product gallery field and saved with the product."
+              : target === "description"
+                ? "Click one image to insert it inside the rich product description."
               : "Click one image to use it as the main product image. The selected image will be saved with the product."}
           </p>
           <div className="flex items-center gap-3">
@@ -645,7 +648,7 @@ function GalleryLibraryModal({
               disabled={selectedImages.length === 0}
               className="inline-flex items-center justify-center rounded-xl bg-[#615FFF] px-5 py-2.5 text-sm font-semibold text-white transition-opacity enabled:hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {target === "gallery" ? "Add to gallery" : "Use image"}{" "}
+              {target === "gallery" ? "Add to gallery" : target === "description" ? "Insert image" : "Use image"}{" "}
               {selectedImages.length > 0 ? `(${selectedImages.length})` : ""}
             </button>
           </div>
@@ -658,6 +661,7 @@ function GalleryLibraryModal({
 
 export default function TailadminAddProductPreview() {
   const [productName, setProductName] = useState("");
+  const [descriptionHtml, setDescriptionHtml] = useState("");
   const [vendorValue, setVendorValue] = useState("");
   const [brandValue, setBrandValue] = useState("");
   const [categoryValue, setCategoryValue] = useState("");
@@ -667,7 +671,8 @@ export default function TailadminAddProductPreview() {
   const [specifications, setSpecifications] = useState<SpecificationPreviewRow[]>([]);
   const [mainImage, setMainImage] = useState("");
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
-  const [openMediaTarget, setOpenMediaTarget] = useState<"gallery" | "main-image" | `variation:${string}` | null>(null);
+  const [descriptionImageToInsert, setDescriptionImageToInsert] = useState<string | null>(null);
+  const [openMediaTarget, setOpenMediaTarget] = useState<"description" | "gallery" | "main-image" | `variation:${string}` | null>(null);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [pendingSubmitStatus, setPendingSubmitStatus] = useState<"active" | "draft" | null>(null);
   const [draggedGalleryIndex, setDraggedGalleryIndex] = useState<number | null>(null);
@@ -740,11 +745,13 @@ export default function TailadminAddProductPreview() {
 
     const syncFromRealForm = () => {
       const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
+      const descriptionInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
       const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
       const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
       const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
       setProductName(productNameInput?.value ?? "");
+      setDescriptionHtml(descriptionInput?.value ?? "");
       setVendorValue(vendorSelect?.value ?? "");
       setBrandValue(brandSelect?.value ?? "");
       setCategoryValue(categorySelect?.value ?? "");
@@ -777,16 +784,19 @@ export default function TailadminAddProductPreview() {
     syncFromRealForm();
 
     const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
+    const descriptionInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
     const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
     const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
     const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
     const handleNameInput = () => syncFromRealForm();
+    const handleDescriptionInput = () => syncFromRealForm();
     const handleVendorChange = () => syncFromRealForm();
     const handleBrandChange = () => syncFromRealForm();
     const handleCategoryChange = () => syncFromRealForm();
 
     productNameInput?.addEventListener("input", handleNameInput);
+    descriptionInput?.addEventListener("input", handleDescriptionInput);
     vendorSelect?.addEventListener("change", handleVendorChange);
     brandSelect?.addEventListener("change", handleBrandChange);
     categorySelect?.addEventListener("change", handleCategoryChange);
@@ -840,6 +850,7 @@ export default function TailadminAddProductPreview() {
     return () => {
       window.clearTimeout(timer);
       productNameInput?.removeEventListener("input", handleNameInput);
+      descriptionInput?.removeEventListener("input", handleDescriptionInput);
       vendorSelect?.removeEventListener("change", handleVendorChange);
       brandSelect?.removeEventListener("change", handleBrandChange);
       categorySelect?.removeEventListener("change", handleCategoryChange);
@@ -1179,11 +1190,24 @@ export default function TailadminAddProductPreview() {
               <label htmlFor="preview-description" className="mb-1.5 block text-sm font-medium text-gray-700">
                 Description
               </label>
-              <textarea
-                id="preview-description"
-                placeholder="Receipt Info (optional)"
-                rows={8}
-                className="min-h-[162px] w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-[#615FFF]/40 focus:outline-none focus:ring-4 focus:ring-[#615FFF]/10"
+              <RichTextDescriptionEditor
+                value={descriptionHtml}
+                imageToInsert={descriptionImageToInsert}
+                onRequestImage={() => setOpenMediaTarget("description")}
+                onChange={(nextValue) => {
+                  setDescriptionHtml(nextValue);
+                  window.dispatchEvent(
+                    new CustomEvent("prelize:set-product-description", {
+                      detail: { description: nextValue },
+                    }),
+                  );
+                  const realInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
+
+                  if (realInput) {
+                    realInput.value = nextValue;
+                    realInput.dispatchEvent(new Event("input", { bubbles: true }));
+                  }
+                }}
               />
             </div>
           </div>
@@ -1453,6 +1477,8 @@ export default function TailadminAddProductPreview() {
                 detail: { imageUrl },
               }),
             );
+          } else if (openMediaTarget === "description") {
+            setDescriptionImageToInsert(imageUrls[0] ?? null);
           } else if (openMediaTarget?.startsWith("variation:")) {
             window.dispatchEvent(
               new CustomEvent("prelize:set-variation-image", {
