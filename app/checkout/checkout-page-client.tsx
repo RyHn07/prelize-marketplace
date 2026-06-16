@@ -243,6 +243,7 @@ export default function CheckoutPage() {
   const [cndsProfilesById, setCndsProfilesById] = useState<Record<string, CndsShippingProfileRow>>({});
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [hasLoadedDraft, setHasLoadedDraft] = useState(false);
+  const [hasLoadedProductRecords, setHasLoadedProductRecords] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [buyerForm, setBuyerForm] = useState<BuyerForm>({
@@ -262,7 +263,8 @@ export default function CheckoutPage() {
       setItems(getQuoteItems());
     };
 
-    syncQuoteItems();
+    const currentItems = getQuoteItems();
+    setItems(currentItems);
 
     Promise.resolve().then(() => {
       if (!isMounted) {
@@ -270,16 +272,22 @@ export default function CheckoutPage() {
       }
 
       const draftValue = window.localStorage.getItem(CHECKOUT_DRAFT_STORAGE_KEY);
+      let draftSelectedKeys: string[] = [];
 
       if (draftValue) {
         try {
           const parsedDraft = JSON.parse(draftValue) as CheckoutDraft;
-          setSelectedKeys(Array.isArray(parsedDraft.selectedKeys) ? parsedDraft.selectedKeys : []);
+          draftSelectedKeys = Array.isArray(parsedDraft.selectedKeys) ? parsedDraft.selectedKeys : [];
+          setSelectedKeys(draftSelectedKeys);
           setSelectedShippingProfiles(parsedDraft.selectedShippingProfiles ?? {});
           setSelectedInternationalShippingMethodId(parsedDraft.selectedInternationalShippingMethodId ?? "");
         } catch {
           window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
         }
+      }
+
+      if (draftSelectedKeys.length === 0 && currentItems.length > 0) {
+        setSelectedKeys(currentItems.map((item) => getVariantKey(item)));
       }
 
       setHasLoadedDraft(true);
@@ -337,6 +345,17 @@ export default function CheckoutPage() {
     let isMounted = true;
 
     const loadProductRecords = async () => {
+      setHasLoadedProductRecords(false);
+
+      if (items.length === 0) {
+        setProductRecords([]);
+        setProductVariantsByProductId(new Map());
+        setPricingConfigByProductId({});
+        setCndsProfilesById({});
+        setHasLoadedProductRecords(true);
+        return;
+      }
+
       const result = await getProductsByIds(items.map((item) => item.productId));
 
       if (!isMounted) {
@@ -369,6 +388,7 @@ export default function CheckoutPage() {
 
       if (cndsProfileIds.length === 0) {
         setCndsProfilesById({});
+        setHasLoadedProductRecords(true);
         return;
       }
 
@@ -381,9 +401,18 @@ export default function CheckoutPage() {
       setCndsProfilesById(
         Object.fromEntries(cndsProfileResult.profiles.map((profile) => [profile.id, profile])),
       );
+      setHasLoadedProductRecords(true);
     };
 
-    void loadProductRecords();
+    void loadProductRecords().catch(() => {
+      if (isMounted) {
+        setProductRecords([]);
+        setProductVariantsByProductId(new Map());
+        setPricingConfigByProductId({});
+        setCndsProfilesById({});
+        setHasLoadedProductRecords(true);
+      }
+    });
 
     return () => {
       isMounted = false;
@@ -401,6 +430,10 @@ export default function CheckoutPage() {
   const itemAvailabilityIssues = useMemo(() => {
     const issues = new Map<string, ItemAvailabilityIssue>();
 
+    if (!hasLoadedProductRecords) {
+      return issues;
+    }
+
     items.forEach((item) => {
       const issue = getProductAvailabilityIssue(productRecordMap.get(item.productId));
 
@@ -410,7 +443,7 @@ export default function CheckoutPage() {
     });
 
     return issues;
-  }, [items, productRecordMap]);
+  }, [hasLoadedProductRecords, items, productRecordMap]);
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const hasUnavailableSelectedItems = useMemo(
     () => items.some((item) => selectedKeySet.has(getVariantKey(item)) && itemAvailabilityIssues.has(getVariantKey(item))),
@@ -940,7 +973,7 @@ export default function CheckoutPage() {
     }
   };
 
-  if (!hasCheckedAuth || !currentUser || !hasLoadedDraft) {
+  if (!hasCheckedAuth || !currentUser || !hasLoadedDraft || !hasLoadedProductRecords) {
     return (
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center">
