@@ -5,8 +5,10 @@ import {
   updateProductEditorRecordWithClient,
   type ProductEditorSavePayload,
 } from "@/lib/products/actions";
+import { getAdminProductEditorRecord } from "@/lib/admin/vps-data";
 import { getProductEditorRecord } from "@/lib/products/queries";
 import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { hasSupabaseClientEnv } from "@/lib/supabase-client";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRequest(request);
@@ -17,8 +19,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await getProductEditorRecord(id, supabase);
+    const result = hasSupabaseClientEnv()
+      ? await getProductEditorRecord(id, getSupabaseServiceRoleClient())
+      : await getAdminProductEditorRecord(id);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });

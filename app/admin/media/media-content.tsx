@@ -5,14 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { getAdminAccessState } from "@/lib/admin-access";
-import {
-  listProductMedia,
-  removeProductMedia,
-  uploadProductMedia,
-  type ProductMediaItem,
-} from "@/lib/media/storage";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import type { ProductMediaItem } from "@/lib/media/storage";
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -71,37 +64,31 @@ export default function MediaContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/media", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        items?: ProductMediaItem[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const result = await listProductMedia();
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (result.error) {
-        setErrorMessage(result.error.message);
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load media library.");
         setItems([]);
         setLoading(false);
         return;
       }
 
-      setItems(result.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setItems(payload.items ?? []);
       setLoading(false);
     };
 
@@ -145,39 +132,8 @@ export default function MediaContent() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    try {
-      const uploadedItems: ProductMediaItem[] = [];
-
-      for (const file of files) {
-        const result = await uploadProductMedia(file);
-
-        if (result.error || !result.data) {
-          setErrorMessage(result.error?.message ?? "Unable to upload image.");
-          continue;
-        }
-
-        uploadedItems.push(result.data);
-      }
-
-      if (uploadedItems.length > 0) {
-        const refreshed = await listProductMedia();
-
-        if (refreshed.error) {
-          setErrorMessage(refreshed.error.message);
-        } else {
-          setItems(refreshed.data);
-          setSelectedPath(uploadedItems[0]?.path ?? null);
-          setActiveTab("library");
-          setSuccessMessage(
-            uploadedItems.length === 1
-              ? "1 image uploaded to the media library."
-              : `${uploadedItems.length} images uploaded to the media library.`,
-          );
-        }
-      }
-    } finally {
-      setIsUploading(false);
-    }
+    setErrorMessage("VPS media upload endpoint is not configured yet. Existing VPS images are available in the library.");
+    setIsUploading(false);
   };
 
   const handleUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -209,19 +165,7 @@ export default function MediaContent() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const result = await removeProductMedia(item.path);
-
-    if (result.error) {
-      setErrorMessage(result.error.message);
-      setRemovingPath(null);
-      return;
-    }
-
-    setItems((current) => current.filter((entry) => entry.path !== item.path));
-    if (selectedPath === item.path) {
-      setSelectedPath(null);
-    }
-    setSuccessMessage("Image removed from the media library.");
+    setErrorMessage("VPS media delete endpoint is not configured yet.");
     setRemovingPath(null);
   };
 

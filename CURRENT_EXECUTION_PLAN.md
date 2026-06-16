@@ -1,6 +1,6 @@
 # Current Execution Plan
 
-Last updated: 2026-05-02
+Last updated: 2026-06-12
 
 ## Purpose
 
@@ -23,17 +23,21 @@ The project already has:
 - admin product flow
 - admin order flow
 - persisted admin settings page
-- Supabase-backed product management
-- Supabase-backed public product list and product detail pages
+- PostgreSQL-backed product management
+- PostgreSQL-backed public product list and product detail pages
 - multivendor schema migration for vendors, vendor members, vendor orders, and product ownership
-- multivendor RLS migration plus recursion-safe platform admin helper
+- legacy multivendor migration notes plus current app-level admin/vendor access helpers
 - vendor management screens in admin
 - vendor-scoped product management screens in a separate vendor workspace
 - checkout creation of parent `orders` plus vendor-scoped `vendor_orders`
 - vendor order list and vendor order detail pages
 - admin order-detail monitoring of vendor sub-orders
+- VPS PostgreSQL as the normal runtime database through `DATABASE_URL`
+- VPS image hosting through `https://img.prelize.com`
+- cookie-based auth routes replacing Supabase auth for local app runtime
+- PostgreSQL-backed admin APIs for dashboard, products, orders, vendors, customers, categories, brands, reviews, notifications, homepage themes/content/product sections, shipping, and settings
 
-The biggest current gap is now multivendor hardening and buyer-facing vendor visibility, not the basic multivendor foundation itself.
+The biggest current gap is now finishing the non-Supabase migration edges, media upload/delete, multivendor hardening, and buyer-facing vendor visibility.
 
 Because of that, the platform is past multivendor setup and into stabilization work.
 
@@ -47,14 +51,14 @@ We should treat multivendor foundation as already in progress and focus the next
 
 ## What We Do Now
 
-### Priority 1: Finish product data alignment around the Supabase catalog
+### Priority 1: Finish product data alignment around the PostgreSQL catalog
 
 This is the current top priority.
 
 Tasks:
 
-- [x] Public product list reads from Supabase
-- [x] Public product details page reads from Supabase
+- [x] Public product list reads from PostgreSQL
+- [x] Public product details page reads from PostgreSQL
 - [x] Admin-created products can power the public catalog path
 - [x] Audit current product shapes and gaps in `PRODUCT_DATA_AUDIT.md`
 - [ ] Audit field usage in `types/product.ts`
@@ -117,7 +121,7 @@ Use one parent marketplace order with vendor sub-orders. It keeps the buyer expe
 
 The foundation is already live. The current multivendor hardening phase should keep these true:
 
-- [x] Storefront products are fully Supabase-backed
+- [x] Storefront products are PostgreSQL-backed
 - [~] Cart and checkout do not rely on mock product data
 - [x] Product schema is stable enough to add `vendor_id`
 - [~] Admin access direction is clear enough to support role-based permissions
@@ -182,10 +186,31 @@ If we want the cleanest next sprint, it should be:
 2. Lock the shared buying-data shape used by quote items, order items, and storefront detail pages.
 3. Finish replacing simple admin email fallback with role-first authorization.
 4. Harden vendor order status transitions, parent order status sync, and buyer-facing vendor order visibility.
-5. Start the next admin completion slice after settings and vendors: categories or customers.
+5. Finish the remaining admin polish around media upload/delete, vendor visibility, and route-level permission checks.
 
 ## Practical Rule
 
 If a change still assumes one seller, make it neutral or vendor-ready now.
 
-But do not expand multivendor UI breadth further until product data, checkout, and permissions stay stable on Supabase.
+But do not expand multivendor UI breadth further until product data, checkout, and permissions stay stable on the VPS PostgreSQL runtime.
+
+## Active Runtime Architecture
+
+Normal development and production-like local testing should follow this flow:
+
+1. Browser requests pages from the Next.js app.
+2. Server components and route handlers call `lib/db.ts`.
+3. `lib/db.ts` uses `pg.Pool` and `process.env.DATABASE_URL`.
+4. `DATABASE_URL` points to the VPS PostgreSQL database.
+5. Product and media URLs stored in PostgreSQL point to `https://img.prelize.com`.
+6. Login, signup, account, and admin checks use local auth API routes and signed cookies.
+7. Admin pages call `/api/admin/*` route handlers, which enforce admin access and then query PostgreSQL.
+
+Supabase is no longer the active runtime source of truth. Any remaining Supabase helper usage should be treated as legacy compatibility until replaced.
+
+## Immediate Next Slice
+
+- Finish VPS media upload/delete endpoints for admin media, categories, brands, and settings image uploads.
+- Replace remaining legacy Supabase service-role routes, especially homepage banners and any vendor-side management helpers still using Supabase-only clients.
+- Continue hardening vendor workspace APIs against the same PostgreSQL/cookie auth model.
+- Keep checkout and order creation stable while making targeted PostgreSQL fixes only.

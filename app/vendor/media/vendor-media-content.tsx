@@ -15,6 +15,12 @@ import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 
 type DateFilter = "all" | "week" | "month" | "older";
 type MediaTab = "upload" | "library";
+type VendorMediaResponse = {
+  userEmail?: string | null;
+  vendorId?: string | null;
+  items?: ProductMediaItem[];
+  error?: string;
+};
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -90,20 +96,21 @@ export default function VendorMediaContent() {
           return;
         }
 
-        const result = await listProductMedia({ vendorId: onboardingStatus.vendorId });
+        const response = await fetch("/api/vendor/media", { cache: "no-store" });
+        const result = (await response.json().catch(() => null)) as VendorMediaResponse | null;
 
         if (!isMounted) {
           return;
         }
 
-        if (result.error) {
-          setErrorMessage(result.error.message);
+        if (!response.ok || !result) {
+          setErrorMessage(result?.error ?? "Unable to load vendor media.");
           setItems([]);
           setLoading(false);
           return;
         }
 
-        setItems(result.data);
+        setItems(result.items ?? []);
         setLoading(false);
       } catch (error) {
         if (!isMounted) {

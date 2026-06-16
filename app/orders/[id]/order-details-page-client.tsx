@@ -10,9 +10,7 @@ import {
   ORDER_PROGRESS_STEPS,
   safeOrderStatus,
 } from "@/lib/orders/utils";
-import { DEFAULT_PLATFORM_SETTINGS, PLATFORM_SETTINGS_SINGLETON_KEY, toPlatformSettingsFormValues } from "@/lib/platform-settings";
-import { getSupabaseClient } from "@/lib/supabase-client";
-import { getVendorsByIds } from "@/lib/vendors/queries";
+import { DEFAULT_PLATFORM_SETTINGS } from "@/lib/platform-settings";
 import type { PlatformSettingsFormValues } from "@/types/platform-settings";
 import type { VendorOrderStatus } from "@/types/product-db";
 
@@ -261,7 +259,7 @@ function ProductImage({ src, alt }: { src?: string; alt: string }) {
 
   return (
     <div className="relative h-14 w-14 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-      <Image src={src} alt={alt} fill sizes="56px" className="object-cover" />
+      <Image src={src} alt={alt} fill sizes="56px" className="object-cover" unoptimized />
     </div>
   );
 }
@@ -283,11 +281,18 @@ function PrelizeInvoiceHeader({
 
   return (
     <div className="py-7">
-      <div className="grid gap-6 md:grid-cols-2 md:items-start">
+      <div className="grid grid-cols-2 items-start gap-6">
         <div className="flex items-center gap-3">
           {settings.logo_url ? (
             <div className="relative h-14 w-36">
-              <Image src={settings.logo_url} alt={brandName} fill sizes="144px" className="object-contain object-left" />
+              <Image
+                src={settings.logo_url}
+                alt={brandName}
+                fill
+                sizes="144px"
+                className="object-contain object-left"
+                unoptimized
+              />
             </div>
           ) : (
             <>
@@ -299,7 +304,7 @@ function PrelizeInvoiceHeader({
           )}
         </div>
 
-        <div className="md:text-right">
+        <div className="text-right">
           <p className="text-lg font-semibold text-slate-950">{order?.order_number ?? "Loading..."}</p>
           <p className="mt-1 text-sm font-medium text-slate-600">
             {order ? formatOrderDate(order.created_at) : "Loading..."}
@@ -307,7 +312,7 @@ function PrelizeInvoiceHeader({
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 md:grid-cols-2 md:items-start">
+      <div className="mt-8 grid grid-cols-2 items-start gap-8">
         <div className="space-y-1 text-sm text-slate-700">
           <p className="font-semibold text-slate-950">Contact Info:</p>
           <p>RAIHAN REAZ</p>
@@ -316,8 +321,8 @@ function PrelizeInvoiceHeader({
           <p>Wechat: raihan_reaz</p>
         </div>
 
-        <div className="md:text-right">
-          <div className="space-y-1 text-sm text-slate-700 md:inline-block md:min-w-[260px] md:text-left">
+        <div className="text-right">
+          <div className="inline-block min-w-[260px] space-y-1 text-left text-sm text-slate-700">
             <p className="font-semibold text-slate-950">To:</p>
             <p className="font-medium text-slate-900">{customerName}</p>
             <p>{order?.user_email}</p>
@@ -388,7 +393,7 @@ function OrderItemsTable({
           key={item.id}
           className="grid grid-cols-[minmax(0,1fr)_110px_90px_110px] items-center gap-3 px-7 py-4"
         >
-          <div className="flex min-w-0 gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <ProductImage src={item.product_image || group.image} alt={item.product_name || group.name} />
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-950">{item.product_name || group.name}</p>
@@ -396,7 +401,6 @@ function OrderItemsTable({
                 {item.variant_value ?? item.variation}
                 {item.variant_name ? ` - ${item.variant_name}` : ""}
               </p>
-              {group.vendorName ? <p className="mt-1 text-xs text-slate-400">Vendor: {group.vendorName}</p> : null}
             </div>
           </div>
 
@@ -465,12 +469,12 @@ function OrderItemsTable({
   );
 
   return (
-    <div className="pb-2">
+    <div className="invoice-print-area pb-2">
       <div className="space-y-6">
         {itemPages.map((pageItems, pageIndex) => (
           <section
             key={pageIndex}
-            className="relative mx-auto flex aspect-[210/297] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-16 print:h-[297mm] print:w-[210mm] print:min-w-[210mm] print:break-after-page"
+            className="invoice-print-page relative mx-auto flex aspect-[210/297] w-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-16 print:h-[297mm] print:w-[210mm] print:min-w-[210mm] print:break-after-page"
           >
             <div className="pointer-events-none absolute inset-0 overflow-hidden text-slate-300/20">
               <span className="absolute left-[3%] top-[6%] -rotate-45 text-sm font-light tracking-[0.12em]">https://prelize.com</span>
@@ -530,29 +534,103 @@ export default function OrderDetailsPageClient() {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
+  const handlePrintInvoice = () => {
+    const invoice = document.querySelector<HTMLElement>(".invoice-print-area");
+
+    if (!invoice) {
+      window.print();
+      return;
+    }
+
+    const printFrame = document.createElement("iframe");
+    printFrame.setAttribute("title", "Print invoice");
+    printFrame.style.position = "fixed";
+    printFrame.style.left = "-10000px";
+    printFrame.style.top = "0";
+    printFrame.style.width = "210mm";
+    printFrame.style.height = "297mm";
+    printFrame.style.border = "0";
+    document.body.appendChild(printFrame);
+
+    const printDocument = printFrame.contentDocument ?? printFrame.contentWindow?.document;
+
+    if (!printDocument) {
+      printFrame.remove();
+      window.print();
+      return;
+    }
+
+    const headStyles = Array.from(document.head.querySelectorAll("style, link[rel='stylesheet']"))
+      .map((node) => node.outerHTML)
+      .join("\n");
+
+    printDocument.open();
+    printDocument.write(`<!doctype html>
+      <html>
+        <head>
+          <title>${order?.order_number ?? "Invoice"}</title>
+          ${headStyles}
+          <style>
+            @page { size: A4; margin: 0; }
+            html, body { width: 210mm; margin: 0; padding: 0; background: #ffffff; }
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .invoice-print-area { width: 210mm !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+            .invoice-print-area > div { gap: 0 !important; }
+            .invoice-print-page {
+              width: 210mm !important;
+              min-width: 210mm !important;
+              height: 297mm !important;
+              min-height: 297mm !important;
+              max-height: 297mm !important;
+              margin: 0 !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              box-shadow: none !important;
+              padding: 16mm !important;
+              page-break-after: always;
+              break-after: page;
+            }
+            .invoice-print-page:last-child {
+              page-break-after: auto;
+              break-after: auto;
+            }
+          </style>
+        </head>
+        <body>${invoice.outerHTML}</body>
+      </html>`);
+    printDocument.close();
+
+    printFrame.onload = () => {
+      setTimeout(() => {
+        printFrame.contentWindow?.focus();
+        printFrame.contentWindow?.print();
+        setTimeout(() => printFrame.remove(), 500);
+      }, 250);
+    };
+  };
+
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
     const currentOrderId = typeof params?.id === "string" ? params.id : "";
-
-    if (!currentOrderId) {
-      setHasLoaded(true);
-      setIsAuthorized(true);
-      setOrder(null);
-      setItems([]);
-      return () => {
-        isMounted = false;
-      };
-    }
 
     const loadOrder = async () => {
       if (!isMounted) {
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (!currentOrderId) {
+        setHasLoaded(true);
+        setIsAuthorized(true);
+        setOrder(null);
+        setItems([]);
+        return;
+      }
 
-      if (authError) {
+      const response = await fetch(`/api/orders/${encodeURIComponent(currentOrderId)}`, {
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
         if (isMounted) {
           setIsAuthorized(false);
           setOrder(null);
@@ -562,28 +640,11 @@ export default function OrderDetailsPageClient() {
         return;
       }
 
-      const currentUserId = authData.user?.id ?? null;
-      const currentUserEmail = authData.user?.email ?? null;
-
-      if (!currentUserId) {
-        if (isMounted) {
-          setIsAuthorized(false);
-          setHasLoaded(true);
-        }
-        return;
-      }
-
-      const { data: fetchedOrder, error: orderError } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", currentOrderId)
-        .single();
-
       if (!isMounted) {
         return;
       }
 
-      if (orderError || !fetchedOrder) {
+      if (!response.ok) {
         setIsAuthorized(true);
         setOrder(null);
         setItems([]);
@@ -591,60 +652,24 @@ export default function OrderDetailsPageClient() {
         return;
       }
 
-      const orderRow = {
-        ...(fetchedOrder as OrderRow),
-        status: safeOrderStatus((fetchedOrder as { status?: unknown }).status),
+      const payload = (await response.json()) as {
+        order: OrderRow | null;
+        items: OrderItemRow[];
+        platformSettings: PlatformSettingsFormValues | null;
+        vendorNamesById: Record<string, string>;
       };
-
-      const matchesUserId = orderRow.user_id === currentUserId;
-      const matchesUserEmail =
-        currentUserEmail !== null &&
-        typeof orderRow.user_email === "string" &&
-        orderRow.user_email.toLowerCase() === currentUserEmail.toLowerCase();
-
-      if (!matchesUserId && !matchesUserEmail) {
-        setIsAuthorized(true);
-        setOrder(null);
-        setItems([]);
-        setHasLoaded(true);
-        return;
-      }
-
-      const { data: fetchedItems, error: itemsError } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", currentOrderId);
-
-      if (!isMounted) {
-        return;
-      }
-
-      const normalizedItems = itemsError || !fetchedItems ? [] : (fetchedItems as OrderItemRow[]);
-      const { data: fetchedSettings } = await supabase
-        .from("platform_settings")
-        .select("marketplace_name, site_short_title, site_url, logo_url, support_email, support_phone")
-        .eq("singleton_key", PLATFORM_SETTINGS_SINGLETON_KEY)
-        .maybeSingle();
-      const vendorIds = Array.from(
-        new Set(
-          normalizedItems
-            .map((item) => item.vendor_id)
-            .filter((vendorId): vendorId is string => typeof vendorId === "string" && vendorId.length > 0),
-        ),
-      );
-      const vendorResult = vendorIds.length > 0 ? await getVendorsByIds(vendorIds) : { data: [], error: null };
-
-      if (!isMounted) {
-        return;
-      }
+      const orderRow = payload.order
+        ? {
+            ...payload.order,
+            status: safeOrderStatus(payload.order.status),
+          }
+        : null;
 
       setIsAuthorized(true);
       setOrder(orderRow);
-      setItems(normalizedItems);
-      setPlatformSettings(toPlatformSettingsFormValues(fetchedSettings));
-      setVendorNamesById(
-        Object.fromEntries(vendorResult.data.map((vendor) => [vendor.id, vendor.name])),
-      );
+      setItems(payload.items ?? []);
+      setPlatformSettings(payload.platformSettings ?? DEFAULT_PLATFORM_SETTINGS);
+      setVendorNamesById(payload.vendorNamesById ?? {});
       setHasLoaded(true);
     };
 
@@ -740,14 +765,34 @@ export default function OrderDetailsPageClient() {
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5 print:hidden">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Order Status</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Track each step from order placement to final delivery.
+            </p>
+          </div>
           <OrderStatusTimeline currentStatus={currentOrderStatus} currentOrderStepIndex={currentOrderStepIndex} />
         </div>
 
         <div className="space-y-4">
           <div className="space-y-4">
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-slate-900">Ordered Products</h2>
+              <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+                <h2 className="text-lg font-semibold text-slate-900">Ordered Products</h2>
+                <button
+                  type="button"
+                  onClick={handlePrintInvoice}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-[#615FFF] hover:text-[#615FFF]"
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9V3h12v6" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M6 14h12v7H6z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Print Invoice
+                </button>
+              </div>
               <OrderItemsTable
                 groups={groupedItems}
                 order={order}
@@ -755,7 +800,11 @@ export default function OrderDetailsPageClient() {
               />
             </section>
 
-            {order ? <OrderReviewSection orderId={order.id} orderStatus={order.status} /> : null}
+            {order ? (
+              <div className="print:hidden">
+                <OrderReviewSection orderId={order.id} orderStatus={order.status} />
+              </div>
+            ) : null}
 
           </div>
         </div>

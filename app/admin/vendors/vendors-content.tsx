@@ -5,10 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import { updateVendorApprovalStatus } from "@/lib/vendor-onboarding";
-import { getVendorProductCounts, getVendors } from "@/lib/vendors/queries";
 import type { VendorRow, VendorStatus } from "@/types/product-db";
 
 function getStatusClasses(status: VendorStatus) {
@@ -91,46 +88,34 @@ export default function VendorsContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadVendors = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/vendors", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        vendors?: VendorRow[];
+        productCounts?: Record<string, number>;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const [vendorResult, productCountResult] = await Promise.all([
-        getVendors(),
-        getVendorProductCounts(),
-      ]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (vendorResult.error) {
-        setErrorMessage(
-          vendorResult.error.message.toLowerCase().includes("vendors")
-            ? "Vendor tables are missing. Run the latest multivendor migration, then reload this page."
-            : "Unable to load vendors right now.",
-        );
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load vendors right now.");
         setVendors([]);
         setProductCounts({});
         setLoading(false);
         return;
       }
 
-      setVendors(vendorResult.data);
-      setProductCounts(productCountResult.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setVendors(payload.vendors ?? []);
+      setProductCounts(payload.productCounts ?? {});
       setSuccessMessage(createdStatus === "created" ? "Vendor created successfully." : "");
       setLoading(false);
     };
@@ -169,13 +154,12 @@ export default function VendorsContent() {
 
     try {
       await updateVendorApprovalStatus(vendorId, status);
-      const refreshedVendors = await getVendors();
 
-      if (refreshedVendors.error) {
-        throw refreshedVendors.error;
-      }
-
-      setVendors(refreshedVendors.data);
+      setVendors((current) =>
+        current.map((vendor) =>
+          vendor.id === vendorId ? { ...vendor, status, updated_at: new Date().toISOString() } : vendor,
+        ),
+      );
       setSuccessMessage(status === "active" ? "Vendor approved." : "Vendor rejected.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to update vendor status.");

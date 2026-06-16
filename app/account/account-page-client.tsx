@@ -4,12 +4,19 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent 
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 
 import { getEmailAvatarUrl } from "@/lib/account/email-avatar";
-import { uploadCustomerAvatar } from "@/lib/account/avatar-storage";
 import { getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
+
+type AccountUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  avatarUrl: string | null;
+  phone?: string | null;
+  address?: string | null;
+};
 
 type AccountOrderSummary = {
   payNow?: number;
@@ -129,16 +136,9 @@ function formatOrderStatus(status: string | null) {
   return safeOrderStatus(status);
 }
 
-function getDisplayName(user: User) {
-  const fromMetadata =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name
-      : typeof user.user_metadata?.name === "string"
-        ? user.user_metadata.name
-        : "";
-
-  if (fromMetadata.trim()) {
-    return fromMetadata.trim();
+function getDisplayName(user: AccountUser) {
+  if (user.name?.trim()) {
+    return user.name.trim();
   }
 
   if (typeof user.email === "string" && user.email.includes("@")) {
@@ -148,17 +148,13 @@ function getDisplayName(user: User) {
   return "PRELIZE USER";
 }
 
-function getUserInitial(user: User) {
+function getUserInitial(user: AccountUser) {
   return getDisplayName(user).trim().charAt(0).toUpperCase() || "U";
 }
 
-function getAvatarUrl(user: User) {
-  if (typeof user.user_metadata?.avatar_url === "string" && user.user_metadata.avatar_url.trim()) {
-    return user.user_metadata.avatar_url;
-  }
-
-  if (typeof user.user_metadata?.picture === "string" && user.user_metadata.picture.trim()) {
-    return user.user_metadata.picture;
+function getAvatarUrl(user: AccountUser) {
+  if (user.avatarUrl?.trim()) {
+    return user.avatarUrl;
   }
 
   return getEmailAvatarUrl(user.email, 160);
@@ -201,55 +197,6 @@ function AccountAvatar({
   );
 }
 
-function getUserMetadataValue(user: User, key: "phone" | "address") {
-  const value = user.user_metadata?.[key];
-  return typeof value === "string" ? value : "";
-}
-
-function getAuthProviders(user: User) {
-  const providers = new Set<string>();
-  const primaryProvider = user.app_metadata?.provider;
-  const providerList = user.app_metadata?.providers;
-
-  if (typeof primaryProvider === "string") {
-    providers.add(primaryProvider);
-  }
-
-  if (Array.isArray(providerList)) {
-    providerList.forEach((provider) => {
-      if (typeof provider === "string") {
-        providers.add(provider);
-      }
-    });
-  }
-
-  user.identities?.forEach((identity) => {
-    if (typeof identity.provider === "string") {
-      providers.add(identity.provider);
-    }
-  });
-
-  return providers;
-}
-
-function hasAccountPassword(user: User) {
-  const metadataValue = user.user_metadata?.has_password;
-
-  if (metadataValue === true || metadataValue === "true") {
-    return true;
-  }
-
-  const providers = getAuthProviders(user);
-
-  return providers.has("email");
-}
-
-function canSetInitialPasswordWithoutCurrentPassword(user: User) {
-  const providers = getAuthProviders(user);
-
-  return providers.has("google") && !hasAccountPassword(user);
-}
-
 function matchesOrderFilter(order: AccountOrder, filter: OrderFilterKey) {
   const status = safeOrderStatus(order.status);
   const paymentStatus = (order.payment_status ?? "").trim().toLowerCase();
@@ -276,7 +223,7 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
   const router = useRouter();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AccountUser | null>(null);
   const [orders, setOrders] = useState<AccountOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterKey, setFilterKey] = useState<OrderFilterKey>("all");
@@ -297,38 +244,37 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
-  const syncSettingsFields = (currentUser: User) => {
+  const syncSettingsFields = (currentUser: AccountUser) => {
     setProfileName(getDisplayName(currentUser));
-    setProfilePhone(getUserMetadataValue(currentUser, "phone"));
+    setProfilePhone(currentUser.phone ?? "");
     setProfileEmail(currentUser.email ?? "");
-    setProfileAddress(getUserMetadataValue(currentUser, "address"));
+    setProfileAddress(currentUser.address ?? "");
   };
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadAccount = async () => {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const response = await fetch("/api/account", { cache: "no-store" });
+      const data = (await response.json().catch(() => null)) as {
+        user?: AccountUser | null;
+        orders?: AccountOrder[];
+        error?: string;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      if (authError) {
+      if (!response.ok) {
         setUser(null);
         setOrders([]);
-        setErrorMessage(authError.message);
+        setErrorMessage(data?.error ?? "Unable to load your account.");
         setLoading(false);
         return;
       }
 
-      const currentUser = authData.user ?? null;
-
-      if (!isMounted) {
-        return;
-      }
-
+      const currentUser = data?.user ?? null;
       setUser(currentUser);
 
       if (!currentUser) {
@@ -337,48 +283,7 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
       }
 
       syncSettingsFields(currentUser);
-
-      const { data: userIdOrders, error: userIdOrdersError } = await supabase
-        .from("orders")
-        .select("id, order_number, status, payment_method, payment_status, user_email, created_at, summary")
-        .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false });
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (userIdOrdersError) {
-        setOrders([]);
-        setErrorMessage(userIdOrdersError.message);
-        setLoading(false);
-        return;
-      }
-
-      let fetchedOrders = (userIdOrders ?? []) as AccountOrder[];
-
-      if (fetchedOrders.length === 0 && currentUser.email) {
-        const { data: emailOrders, error: emailOrdersError } = await supabase
-          .from("orders")
-          .select("id, order_number, status, payment_method, payment_status, user_email, created_at, summary")
-          .eq("user_email", currentUser.email)
-          .order("created_at", { ascending: false });
-
-        if (!isMounted) {
-          return;
-        }
-
-        if (emailOrdersError) {
-          setOrders([]);
-          setErrorMessage(emailOrdersError.message);
-          setLoading(false);
-          return;
-        }
-
-        fetchedOrders = (emailOrders ?? []) as AccountOrder[];
-      }
-
-      setOrders(fetchedOrders);
+      setOrders(data?.orders ?? []);
       setErrorMessage("");
       setLoading(false);
     };
@@ -394,8 +299,7 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
     setIsSigningOut(true);
 
     try {
-      const supabase = getSupabaseClient();
-      await supabase.auth.signOut();
+      await fetch("/api/auth/logout", { method: "POST" });
       router.push("/");
       router.refresh();
     } finally {
@@ -418,30 +322,34 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
       const normalizedName = profileName.trim();
       const normalizedEmail = profileEmail.trim();
       const emailChanged = normalizedEmail !== (user.email ?? "");
-      const { data, error } = await getSupabaseClient().auth.updateUser({
-        email: normalizedEmail,
-        data: {
-          ...user.user_metadata,
-          full_name: normalizedName,
+      const response = await fetch("/api/account", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           name: normalizedName,
+          email: normalizedEmail,
           phone: profilePhone.trim(),
           address: profileAddress.trim(),
-        },
+        }),
       });
+      const data = (await response.json().catch(() => null)) as {
+        user?: AccountUser;
+        error?: string;
+      } | null;
 
-      if (error) {
-        setSettingsErrorMessage(error.message);
+      if (!response.ok || !data?.user) {
+        setSettingsErrorMessage(data?.error ?? "Unable to save your profile.");
         return;
       }
 
-      if (data.user) {
-        setUser(data.user);
-        syncSettingsFields(data.user);
-      }
+      setUser(data.user);
+      syncSettingsFields(data.user);
 
       setSettingsSuccessMessage(
         emailChanged
-          ? "Profile saved. Check your inbox if email confirmation is required."
+          ? "Profile saved successfully. Please use the new email for your next login."
           : "Profile saved successfully.",
       );
     } catch (error) {
@@ -461,9 +369,7 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
       return;
     }
 
-    const requiresCurrentPassword = !canSetInitialPasswordWithoutCurrentPassword(user);
-
-    if (requiresCurrentPassword && !currentPassword.trim()) {
+    if (!currentPassword.trim()) {
       setSettingsErrorMessage("Current password is required.");
       return;
     }
@@ -476,36 +382,21 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
     setIsUpdatingPassword(true);
 
     try {
-      const supabase = getSupabaseClient();
-
-      if (requiresCurrentPassword) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user.email ?? "",
-          password: currentPassword,
-        });
-
-        if (signInError) {
-          setSettingsErrorMessage("Current password is incorrect.");
-          return;
-        }
-      }
-
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword,
-        data: {
-          ...user.user_metadata,
-          has_password: true,
+      const response = await fetch("/api/account/password", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
       });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
 
-      if (error) {
-        setSettingsErrorMessage(error.message);
+      if (!response.ok) {
+        setSettingsErrorMessage(data?.error ?? "Unable to update your password.");
         return;
-      }
-
-      if (data.user) {
-        setUser(data.user);
-        syncSettingsFields(data.user);
       }
 
       setCurrentPassword("");
@@ -544,32 +435,9 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
     setIsUploadingAvatar(true);
 
     try {
-      const uploaded = await uploadCustomerAvatar(user.id, file);
-
-      if (uploaded.error || !uploaded.data) {
-        setSettingsErrorMessage(uploaded.error?.message ?? "Unable to upload your profile photo.");
-        return;
-      }
-
-      const { data, error } = await getSupabaseClient().auth.updateUser({
-        data: {
-          ...user.user_metadata,
-          avatar_url: uploaded.data,
-        },
-      });
-
-      if (error) {
-        setSettingsErrorMessage(error.message);
-        return;
-      }
-
-      if (data.user) {
-        setUser(data.user);
-      }
-
-      setSettingsSuccessMessage("Profile photo updated successfully.");
-    } catch (error) {
-      setSettingsErrorMessage(error instanceof Error ? error.message : "Unable to upload your profile photo.");
+      setSettingsErrorMessage("Profile photo upload is being migrated to the VPS storage system.");
+    } catch {
+      setSettingsErrorMessage("Unable to upload your profile photo.");
     } finally {
       setIsUploadingAvatar(false);
       event.target.value = "";
@@ -587,11 +455,8 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
   const avatarUrl = user ? getAvatarUrl(user) : "";
   const displayName = user ? getDisplayName(user) : "";
   const recentOrders = orders.slice(0, 5);
-  const skipCurrentPasswordForInitialSet = user ? canSetInitialPasswordWithoutCurrentPassword(user) : false;
-  const passwordHeading = skipCurrentPasswordForInitialSet ? "Set password" : "Change password";
-  const passwordHelpText = skipCurrentPasswordForInitialSet
-    ? "Create a password for this Google account. After this first setup, future password changes will require your current password."
-    : "Enter your current password, then choose a new password for your account.";
+  const passwordHeading = "Change password";
+  const passwordHelpText = "Enter your current password, then choose a new password for your account.";
 
   const sidebarItemClass = (isActive: boolean) =>
     `flex w-full items-center gap-3 rounded-[8px] px-4 py-3 text-left text-[15px] transition ${
@@ -1087,22 +952,20 @@ export default function AccountPageClient({ initialView = "dashboard" }: { initi
                     </div>
 
                     <div className="grid gap-5 md:grid-cols-2">
-                      {!skipCurrentPasswordForInitialSet ? (
-                        <div className="md:col-span-2">
-                          <label htmlFor="account-current-password" className="mb-1.5 block text-sm font-medium text-slate-700">
-                            Current password
-                          </label>
-                          <input
-                            id="account-current-password"
-                            type="password"
-                            value={currentPassword}
-                            onChange={(event) => setCurrentPassword(event.target.value)}
-                            className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
-                            autoComplete="current-password"
-                            required
-                          />
-                        </div>
-                      ) : null}
+                      <div className="md:col-span-2">
+                        <label htmlFor="account-current-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                          Current password
+                        </label>
+                        <input
+                          id="account-current-password"
+                          type="password"
+                          value={currentPassword}
+                          onChange={(event) => setCurrentPassword(event.target.value)}
+                          className="h-11 w-full rounded-[8px] border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition-colors focus:border-[#615FFF]"
+                          autoComplete="current-password"
+                          required
+                        />
+                      </div>
 
                       <div>
                         <label htmlFor="account-new-password" className="mb-1.5 block text-sm font-medium text-slate-700">

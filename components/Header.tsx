@@ -8,7 +8,10 @@ import HeaderWishlistButton from "@/components/wishlist/header-wishlist-button";
 import HeaderMobileSearchRow from "@/components/header-mobile-search-row";
 import { HeaderCategoriesDesktop } from "@/components/header-categories-dropdown";
 import HeaderServicesDropdown from "@/components/header-services-dropdown";
+import { query } from "@/lib/db";
 import { getProductCategoryOptions } from "@/lib/products/queries";
+import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import type { ProductCategoryOption } from "@/types/product-db";
 
 const topBarLinks = [
   { href: "https://facebook.com", label: "Facebook" },
@@ -229,10 +232,44 @@ function createSlugFallback(value: string) {
     .replace(/-{2,}/g, "-");
 }
 
+async function getHeaderCategoryOptions() {
+  try {
+    if (hasSupabaseClientEnv()) {
+      return getProductCategoryOptions();
+    }
+
+    const result = await query<ProductCategoryOption>(
+      `
+        select id, name, slug, parent_id, coalesce(image_url, image) as image_url
+        from public.categories
+        order by name asc
+      `,
+    );
+
+    return {
+      data: result.rows,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: [] as ProductCategoryOption[],
+      error,
+    };
+  }
+}
+
+async function getHeaderPlatformSettings() {
+  try {
+    return await getResolvedPlatformSettings();
+  } catch {
+    return DEFAULT_PLATFORM_SETTINGS;
+  }
+}
+
 export default async function Header() {
   const [settings, categoryResult] = await Promise.all([
-    getResolvedPlatformSettings(),
-    getProductCategoryOptions(),
+    getHeaderPlatformSettings(),
+    getHeaderCategoryOptions(),
   ]);
   const logoUrl = settings.logo_url.trim();
   const siteShortTitle =

@@ -1,6 +1,6 @@
 # Wholesale Marketplace Database Schema
 
-Last updated: 2026-05-02
+Last updated: 2026-06-12
 
 ## Purpose
 
@@ -11,6 +11,18 @@ This document describes:
 - the recommended future schema for multivendor support
 
 This is a working implementation guide, not a final migration history.
+
+## Runtime Source Of Truth
+
+The active runtime database is VPS PostgreSQL. The app connects with `pg` through `lib/db.ts` and reads the connection string from `process.env.DATABASE_URL`.
+
+Supabase is no longer the runtime backend. Old `supabase/migrations` files remain useful as schema history, but new application code should target PostgreSQL route handlers and server utilities.
+
+Image files are not stored in the Next.js repo. Public image URLs should point at:
+
+```text
+https://img.prelize.com
+```
 
 ## Current Tables Used by the App
 
@@ -53,7 +65,7 @@ Current gaps:
 
 ### Product image storage and normalization
 
-Image files are stored in the public Supabase Storage bucket named `product-media`. PostgreSQL stores image URLs and media metadata, not image binaries.
+Image files are served from the VPS image host. PostgreSQL stores image URLs and media metadata, not image binaries.
 
 The normalized product gallery source is `product_images`:
 
@@ -65,7 +77,7 @@ The normalized product gallery source is `product_images`:
 | `sort_order` | integer nullable | No | Gallery display order |
 | `created_at` | timestamptz | Yes | Creation timestamp |
 
-`20260520_normalize_product_images.sql` backfills legacy `products.gallery_images` values into `product_images`, inserts `products.image_url` when a product has no gallery rows, removes duplicate rows, and adds a unique `(product_id, image_url)` index.
+The legacy Supabase migration `20260520_normalize_product_images.sql` documents the historical normalization from `products.gallery_images` into `product_images`.
 
 The legacy `products.gallery_images` field remains temporarily for compatibility. New product saves synchronize the relational `product_images` rows, and storefront reads prefer those normalized rows.
 
@@ -198,19 +210,19 @@ This table now exists in the multivendor foundation migration and is used for ve
 | --- | --- | --- | --- |
 | `id` | uuid | Yes | Primary key |
 | `vendor_id` | uuid | Yes | References `vendors.id` |
-| `user_id` | uuid | Yes | Supabase auth user id |
+| `user_id` | uuid | Yes | App user id from `public.users` |
 | `role` | text | Yes | `owner` or `staff` |
 | `status` | text | Yes | `active`, `invited`, or `disabled` |
 | `created_at` | timestamptz | Yes | Creation timestamp |
 
 ### 7. `platform_roles`
 
-This table now exists and is used for role-based admin access. The RLS direction now also uses a recursion-safe `public.is_platform_admin()` helper, although legacy email fallback still exists in app code.
+This table exists and is used for role-based admin access in the PostgreSQL-backed app session flow.
 
 | Column | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `id` | uuid | Yes | Primary key |
-| `user_id` | uuid | Yes | Supabase auth user id |
+| `user_id` | uuid | Yes | App user id from `public.users` |
 | `role` | text | Yes | Currently used for `platform_admin` |
 | `created_at` | timestamptz | Yes | Creation timestamp |
 
@@ -359,19 +371,19 @@ Recommended fields:
 | --- | --- | --- | --- |
 | `id` | uuid | Yes | Primary key |
 | `vendor_id` | uuid | Yes | References `vendors.id` |
-| `user_id` | uuid | Yes | Supabase auth user id |
+| `user_id` | uuid | Yes | App user id from `public.users` |
 | `role` | text | Yes | Example: `owner`, `staff` |
 | `status` | text | Yes | Example: `active`, `invited`, `disabled` |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
 ### 3. `platform_roles`
 
-Recommended shape now matches the table already added in `20260425_platform_roles.sql`, but legacy email fallback still exists in code.
+Recommended shape now matches the table already added in `20260425_platform_roles.sql` and the current app-level admin guard.
 
 | Column | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `id` | uuid | Yes | Primary key |
-| `user_id` | uuid | Yes | Supabase auth user id |
+| `user_id` | uuid | Yes | App user id from `public.users` |
 | `role` | text | Yes | Example: `platform_admin` |
 | `created_at` | timestamp | Yes | Creation timestamp |
 
@@ -420,7 +432,7 @@ Recommended access rules:
 - Platform admins can read and update all marketplace orders/products/categories/vendors
 - Vendor users can be scoped to vendor-owned products and vendor-owned order records
 - Public users can read only active/public products and categories
-- Platform-admin RLS checks should use `public.is_platform_admin()` instead of self-querying `platform_roles`
+- Platform-admin checks should be enforced in server route/page guards and backed by `platform_roles`
 
 ## Immediate Schema Tasks
 
@@ -439,13 +451,13 @@ Recommended access rules:
 
 Important current assumptions in code:
 
-- Public storefront list/detail pages already use Supabase product data
+- Public storefront list/detail pages already use PostgreSQL product data
 - Cart and checkout now enrich and validate quote items against live product records
 - Missing or inactive products are now blocked in cart and checkout
 - Vendor data model and vendor-scoped product access are implemented
 - Checkout now creates one parent marketplace order plus vendor sub-orders
 - Vendor order pages and admin vendor-order monitoring are implemented
-- RLS policies exist for multivendor tables, and the recursion-safe `public.is_platform_admin()` helper is part of the current direction
+- Legacy RLS notes remain as migration history; current app authorization lives in server route/page guards and role-aware PostgreSQL queries
 - Seller wording is now neutral in customer-facing flows, but vendor identity is still not shown on buyer-facing pages
 - Product gallery reads prefer normalized `product_images` rows, with `products.gallery_images` retained as a temporary compatibility fallback
 - The app already expects `payment_method`, `payment_status`, and `admin_note` to exist or be added to `orders`

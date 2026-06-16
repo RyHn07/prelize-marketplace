@@ -1,8 +1,21 @@
 import type { MetadataRoute } from "next";
 
-import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { query } from "@/lib/db";
 import { absoluteUrl } from "@/lib/seo";
-import { getVendors } from "@/lib/vendors/queries";
+import { getServerVendors } from "@/lib/vendors/server-queries";
+
+type SitemapProductRow = {
+  slug: string;
+  image_url: string | null;
+  gallery_images: string[] | null;
+  created_at: string | null;
+};
+
+type SitemapCategoryRow = {
+  slug: string | null;
+  parent_id: string | null;
+  image_url: string | null;
+};
 
 const staticRoutes: MetadataRoute.Sitemap = [
   {
@@ -23,11 +36,26 @@ const staticRoutes: MetadataRoute.Sitemap = [
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [{ data: products }, { data: categories }, { data: vendors }] = await Promise.all([
-    getPublicProducts(),
-    getProductCategoryOptions(),
-    getVendors(),
+  const [productsResult, categoriesResult, { data: vendors }] = await Promise.all([
+    query<SitemapProductRow>(
+      `
+        select slug, coalesce(image_url, image) as image_url, gallery_images, created_at
+        from public.products
+        where coalesce(is_active, true) = true and coalesce(status, 'active') = 'active'
+        order by created_at desc
+      `,
+    ),
+    query<SitemapCategoryRow>(
+      `
+        select slug, parent_id, coalesce(image_url, image) as image_url
+        from public.categories
+        order by created_at desc
+      `,
+    ),
+    getServerVendors(),
   ]);
+  const products = productsResult.rows;
+  const categories = categoriesResult.rows;
 
   const categoryRoutes: MetadataRoute.Sitemap = categories
     .filter((category) => Boolean(category.slug))

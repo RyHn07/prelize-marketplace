@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
 
-import {
-  createHomepageTheme,
-  listHomepageThemes,
-  parseHomepageThemeInput,
-  validateHomepageThemeInput,
-} from "@/lib/homepage/admin";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { query } from "@/lib/db";
+import { requireAdminRequest } from "@/lib/supabase-admin";
+
+type ThemePayload = {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  preview_image_url?: string | null;
+  status?: string;
+  is_active?: boolean;
+  settings_json?: unknown;
+};
+
+function toSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "homepage-theme";
+}
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);
@@ -16,14 +29,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await listHomepageThemes(supabase);
-
-    if (result.error) {
-      return NextResponse.json({ error: result.error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ themes: result.data });
+    const result = await query("select * from public.homepage_themes order by updated_at desc");
+    return NextResponse.json({ themes: result.rows });
   } catch (error) {
     return NextResponse.json(
       {
@@ -42,21 +49,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const payload = parseHomepageThemeInput(await request.json());
-    const validationError = validateHomepageThemeInput(payload);
+    const payload = (await request.json()) as ThemePayload;
+    const name = payload.name?.trim();
 
-    if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: "Theme name is required." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await createHomepageTheme(supabase, payload);
+    const result = await query(
+      `
+        insert into public.homepage_themes (
+          name, slug, description, preview_image_url, status, is_active, settings_json, updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7::jsonb, now())
+        returning *
+      `,
+      [
+        name,
+        toSlug(payload.slug || name),
+        payload.description ?? null,
+        payload.preview_image_url ?? null,
+        payload.status || "draft",
+        payload.is_active ?? false,
+        JSON.stringify(payload.settings_json ?? {}),
+      ],
+    );
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ record: result.data });
+    return NextResponse.json({ record: { theme: result.rows[0], sections: [] } });
   } catch (error) {
     return NextResponse.json(
       {

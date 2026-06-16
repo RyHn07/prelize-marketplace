@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { DEFAULT_CNY_TO_BDT_RATE, roundCurrency } from "@/lib/product-pricing";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
   ProductBrandOption,
@@ -1053,6 +1053,13 @@ export async function getProductEditorRecordForVendors(id: string, vendorIds: st
 }
 
 export async function getProductCategoryOptions() {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: [] as ProductCategoryOption[],
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, image_url").order("name", { ascending: true });
 

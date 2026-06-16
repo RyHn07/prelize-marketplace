@@ -1,6 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
 import { LEGACY_ADMIN_EMAILS, PLATFORM_ADMIN_ROLE } from "@/lib/admin-access";
+import { getCurrentUserFromCookie } from "@/lib/auth/session";
+import { query } from "@/lib/db";
+import { getDisabledSupabaseClient } from "@/lib/supabase-client";
 
 function getSupabaseUrl() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -33,6 +36,10 @@ function getSupabaseServiceRoleKey() {
 }
 
 export function getSupabaseServiceRoleClient() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return getDisabledSupabaseClient();
+  }
+
   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
     auth: {
       persistSession: false,
@@ -42,6 +49,10 @@ export function getSupabaseServiceRoleClient() {
 }
 
 export function getSupabaseServerUserClient(accessToken: string) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    return getDisabledSupabaseClient();
+  }
+
   return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
     auth: {
       persistSession: false,
@@ -99,6 +110,15 @@ export async function isAdminAccessToken(accessToken: string, userId: string, us
     return true;
   }
 
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    const result = await query<{ role: string }>(
+      "select role from public.platform_roles where user_id = $1 and role = $2 limit 1",
+      [userId, PLATFORM_ADMIN_ROLE],
+    );
+
+    return Boolean(result.rows[0]);
+  }
+
   const supabase = getSupabaseServerUserClient(accessToken);
   const { data, error } = await supabase
     .from("platform_roles")
@@ -111,6 +131,34 @@ export async function isAdminAccessToken(accessToken: string, userId: string, us
 }
 
 export async function requireAdminRequest(request: Request) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    const user = await getCurrentUserFromCookie();
+
+    if (!user) {
+      return {
+        errorResponse: Response.json({ error: "Unauthorized." }, { status: 401 }),
+        user: null,
+        accessToken: null,
+      };
+    }
+
+    const hasAdminAccess = await isAdminAccessToken("", user.id, user.email);
+
+    if (!hasAdminAccess) {
+      return {
+        errorResponse: Response.json({ error: "Admin access is required." }, { status: 403 }),
+        user: null,
+        accessToken: null,
+      };
+    }
+
+    return {
+      errorResponse: null,
+      user,
+      accessToken: "",
+    };
+  }
+
   const authResult = await getAuthenticatedUserFromRequest(request);
 
   if (authResult.error || !authResult.accessToken || !authResult.user) {

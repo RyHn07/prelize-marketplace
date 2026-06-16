@@ -3,9 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-import { getAdminAccessState } from "@/lib/admin-access";
-import { getAdminCustomers, type AdminCustomerRow } from "@/lib/customers/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import type { AdminCustomerRow } from "@/lib/customers/queries";
 
 function formatBDT(amount: number) {
   return `\u09F3${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
@@ -68,37 +66,31 @@ export default function AdminCustomersPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/customers", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        customers?: AdminCustomerRow[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const result = await getAdminCustomers();
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (result.error) {
-        setErrorMessage(result.error.message);
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load customers.");
         setCustomers([]);
         setLoading(false);
         return;
       }
 
-      setCustomers(result.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setCustomers(payload.customers ?? []);
       setLoading(false);
     };
 

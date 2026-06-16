@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { query } from "@/lib/db";
+import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
 import {
   getProductCategoryOptions,
   getProductImageMapByProductIds,
@@ -64,8 +65,24 @@ export type HomepageRenderData = {
   categories: Category[];
 };
 
+function createEmptyHomepageRenderData(): HomepageRenderData {
+  return {
+    theme: null,
+    sections: [],
+    contentBlocks: [],
+    contentBlockMap: new Map<string, HomepageContentBlockRow>(),
+    banners: [],
+    productSections: [],
+    categories: [],
+  };
+}
+
 function resolveSupabaseClient(client?: SupabaseClient) {
-  return client ?? getSupabaseClient();
+  if (client) {
+    return client;
+  }
+
+  return hasSupabaseClientEnv() ? getSupabaseClient() : null;
 }
 
 function normalizeText(value: unknown) {
@@ -264,7 +281,238 @@ function buildHomepageCategories(
     }))
     .sort((left, right) => right.totalItems - left.totalItems || left.name.localeCompare(right.name))
     .slice(0, 8)
-    .map(({ totalItems: _totalItems, ...category }) => category);
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      image: category.image,
+      itemCount: category.itemCount,
+    }));
+}
+
+async function getLocalHomepageRenderData(options?: {
+  previewThemeId?: string;
+  previewThemeSlug?: string;
+}) {
+  const themeResult = options?.previewThemeId
+    ? await query<RawHomepageThemeRow>("select * from public.homepage_themes where id = $1 limit 1", [
+        options.previewThemeId,
+      ])
+    : options?.previewThemeSlug
+      ? await query<RawHomepageThemeRow>("select * from public.homepage_themes where slug = $1 limit 1", [
+          options.previewThemeSlug,
+        ])
+      : await query<RawHomepageThemeRow>(
+          `
+            select *
+            from public.homepage_themes
+            where is_active = true and status = 'active'
+            order by updated_at desc
+            limit 1
+          `,
+        );
+
+  const theme = themeResult.rows[0] ? normalizeHomepageTheme(themeResult.rows[0]) : null;
+
+  if (!theme) {
+    return {
+      data: createEmptyHomepageRenderData(),
+      error: null,
+    };
+  }
+
+  const sectionsResult = await query<RawHomepageThemeSectionRow>(
+    `
+      select *
+      from public.homepage_theme_sections
+      where theme_id = $1 and is_enabled = true
+      order by sort_order asc, created_at asc
+    `,
+    [theme.id],
+  );
+  const contentBlocksResult = await query<RawHomepageContentBlockRow>(
+    `
+      select *
+      from public.homepage_content_blocks
+      where is_active = true
+      order by created_at asc
+    `,
+  );
+  const bannersResult = await query<RawHomepageBannerRow>(
+    `
+      select *
+      from public.homepage_banners
+      where is_active = true
+      order by sort_order asc, created_at asc
+    `,
+  );
+  const productSectionsResult = await query<RawHomepageProductSectionRow>(
+    `
+      select *
+      from public.homepage_product_sections
+      where is_active = true
+      order by sort_order asc, created_at asc
+    `,
+  );
+  const categoriesResult = await query<ProductCategoryOption>(
+    `
+      select id, name, slug, parent_id, coalesce(image_url, image) as image_url
+      from public.categories
+      order by name asc
+    `,
+  );
+  const productsResult = await query<ProductDbRow>(
+    `
+      select
+        id,
+        vendor_id,
+        category_id,
+        brand_id,
+        name,
+        slug,
+        sku,
+        description,
+        coalesce(image_url, image) as image_url,
+        coalesce(
+          nullif(price, 0),
+          pricing.min_tier_price,
+          case
+            when selling_price_cny is not null
+              and exchange_rate_cny_to_bdt is not null
+              and selling_price_cny > 0
+              and exchange_rate_cny_to_bdt > 0
+            then round((selling_price_cny * exchange_rate_cny_to_bdt)::numeric, 2)
+            else coalesce(price, price_from, 0)
+          end
+        )::float8 as price,
+        coalesce(moq, 1)::int as moq,
+        coalesce(weight::text, '') as weight,
+        badge,
+        coalesce(is_active, true) as is_active,
+        created_at,
+        status,
+        product_type,
+        regular_price::float8 as regular_price,
+        discount_price::float8 as discount_price,
+        gallery_images,
+        attributes,
+        cdd_shipping_profile,
+        short_description,
+        specifications,
+        reviews,
+        cnds_profile_id,
+        pricing_tier_profile_id,
+        pricing_source,
+        buying_price_cny::float8 as buying_price_cny,
+        profit_percent::float8 as profit_percent,
+        profit_amount_cny::float8 as profit_amount_cny,
+        selling_price_cny::float8 as selling_price_cny,
+        exchange_rate_cny_to_bdt::float8 as exchange_rate_cny_to_bdt
+      from public.products
+      left join (
+        select
+          product_pricing_tier_sets.product_id,
+          min(product_pricing_tier_set_rows.price) as min_tier_price
+        from public.product_pricing_tier_sets
+        join public.product_pricing_tier_set_rows
+          on product_pricing_tier_set_rows.tier_set_id = product_pricing_tier_sets.id
+        group by product_pricing_tier_sets.product_id
+      ) pricing on pricing.product_id = products.id
+      where coalesce(is_active, true) = true and coalesce(status, 'active') = 'active'
+      order by created_at desc
+    `,
+  );
+  const vendorsResult = await query<ProductVendorOption>(
+    `
+      select id, name, slug, status
+      from public.vendors
+      order by name asc
+    `,
+  );
+  const productImagesResult = await query<{ product_id: string; image_url: string }>(
+    `
+      select product_id, image_url
+      from public.product_images
+      order by sort_order asc, created_at asc
+    `,
+  );
+  const reviewSummaryResult = await query<{ product_id: string; average_rating: string | null; review_count: string }>(
+    `
+      select product_id, avg(rating)::text as average_rating, count(*)::text as review_count
+      from public.product_reviews
+      group by product_id
+    `,
+  );
+
+  const sections = sectionsResult.rows.map(normalizeHomepageThemeSection);
+  const contentBlocks = contentBlocksResult.rows.map(normalizeHomepageContentBlock);
+  const contentBlockMap = new Map(contentBlocks.map((block) => [block.content_key, block] as const));
+  const banners = bannersResult.rows.map(normalizeHomepageBanner);
+  const productSections = productSectionsResult.rows.map(normalizeHomepageProductSection);
+  const publicProducts = productsResult.rows;
+  const categoryOptions = categoriesResult.rows;
+  const vendors = vendorsResult.rows;
+  const imageMap = new Map<string, string[]>();
+
+  for (const image of productImagesResult.rows) {
+    const current = imageMap.get(image.product_id) ?? [];
+    current.push(image.image_url);
+    imageMap.set(image.product_id, current);
+  }
+
+  const reviewSummaryMap = new Map(
+    reviewSummaryResult.rows.map((row) => [
+      row.product_id,
+      {
+        averageRating: Number(row.average_rating ?? 0),
+        reviewCount: Number(row.review_count),
+      },
+    ]),
+  );
+
+  const categories = buildHomepageCategories(categoryOptions, publicProducts);
+  const resolvedProductSections: HomepageResolvedProductSection[] = [];
+
+  for (const section of productSections) {
+    let scopedProducts: ProductDbRow[] = [];
+
+    if (section.source_type === "manual") {
+      const orderById = new Map(section.product_ids.map((id, index) => [id, index]));
+      scopedProducts = publicProducts
+        .filter((product) => orderById.has(product.id))
+        .sort((left, right) => (orderById.get(left.id) ?? 0) - (orderById.get(right.id) ?? 0));
+    } else if (section.source_type === "featured") {
+      scopedProducts = [...publicProducts].filter(isPublicProductFeatured).sort(sortByCreatedAtDescending);
+    } else if (section.source_type === "category") {
+      scopedProducts = [...publicProducts]
+        .filter((product) => product.category_id === section.category_id)
+        .sort(sortByCreatedAtDescending);
+    } else if (section.source_type === "low_moq") {
+      scopedProducts = [...publicProducts].sort(
+        (left, right) => left.moq - right.moq || sortByCreatedAtDescending(left, right),
+      );
+    } else {
+      scopedProducts = [...publicProducts].sort(sortByCreatedAtDescending);
+    }
+
+    resolvedProductSections.push({
+      ...section,
+      products: mapProductsToStorefront(scopedProducts.slice(0, section.limit_count), imageMap, reviewSummaryMap, categoryOptions, vendors),
+    });
+  }
+
+  return {
+    data: {
+      theme,
+      sections,
+      contentBlocks,
+      contentBlockMap,
+      banners,
+      productSections: resolvedProductSections,
+      categories,
+    } satisfies HomepageRenderData,
+    error: null,
+  };
 }
 
 async function resolveHomepageProductSectionProducts(
@@ -308,6 +556,20 @@ async function resolveHomepageProductSectionProducts(
 
 export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageThemeRow>(
+      "select * from public.homepage_themes where slug = $1 limit 1",
+      [slug],
+    );
+
+    return {
+      data: result.rows[0] ? normalizeHomepageTheme(result.rows[0]) : null,
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_themes")
     .select("*")
@@ -322,6 +584,20 @@ export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClie
 
 export async function getHomepageThemeById(id: string, client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageThemeRow>(
+      "select * from public.homepage_themes where id = $1 limit 1",
+      [id],
+    );
+
+    return {
+      data: result.rows[0] ? normalizeHomepageTheme(result.rows[0]) : null,
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_themes")
     .select("*")
@@ -336,6 +612,25 @@ export async function getHomepageThemeById(id: string, client?: SupabaseClient) 
 
 export async function getActiveHomepageTheme(client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageThemeRow>(
+      `
+        select *
+        from public.homepage_themes
+        where is_active = true and status = 'active'
+        order by updated_at desc
+        limit 1
+      `,
+    );
+
+    return {
+      data: result.rows[0] ? normalizeHomepageTheme(result.rows[0]) : null,
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_themes")
     .select("*")
@@ -352,6 +647,25 @@ export async function getActiveHomepageTheme(client?: SupabaseClient) {
 
 export async function getHomepageSections(themeId: string, client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageThemeSectionRow>(
+      `
+        select *
+        from public.homepage_theme_sections
+        where theme_id = $1 and is_enabled = true
+        order by sort_order asc, created_at asc
+      `,
+      [themeId],
+    );
+
+    return {
+      data: result.rows.map(normalizeHomepageThemeSection),
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_theme_sections")
     .select("*")
@@ -368,6 +682,24 @@ export async function getHomepageSections(themeId: string, client?: SupabaseClie
 
 export async function getHomepageContentBlocks(client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageContentBlockRow>(
+      `
+        select *
+        from public.homepage_content_blocks
+        where is_active = true
+        order by created_at asc
+      `,
+    );
+
+    return {
+      data: result.rows.map(normalizeHomepageContentBlock),
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_content_blocks")
     .select("*")
@@ -382,6 +714,24 @@ export async function getHomepageContentBlocks(client?: SupabaseClient) {
 
 export async function getHomepageBanners(client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageBannerRow>(
+      `
+        select *
+        from public.homepage_banners
+        where is_active = true
+        order by sort_order asc, created_at asc
+      `,
+    );
+
+    return {
+      data: result.rows.map(normalizeHomepageBanner),
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_banners")
     .select("*")
@@ -397,6 +747,24 @@ export async function getHomepageBanners(client?: SupabaseClient) {
 
 export async function getHomepageProductSections(client?: SupabaseClient) {
   const supabase = resolveSupabaseClient(client);
+
+  if (!supabase) {
+    const { query } = await import("@/lib/db");
+    const result = await query<RawHomepageProductSectionRow>(
+      `
+        select *
+        from public.homepage_product_sections
+        where is_active = true
+        order by sort_order asc, created_at asc
+      `,
+    );
+
+    return {
+      data: result.rows.map(normalizeHomepageProductSection),
+      error: null,
+    };
+  }
+
   const { data, error } = await supabase
     .from("homepage_product_sections")
     .select("*")
@@ -415,6 +783,17 @@ export async function getHomepageRenderData(options?: {
   previewThemeSlug?: string;
   client?: SupabaseClient;
 }) {
+  if (!options?.client && !hasSupabaseClientEnv()) {
+    try {
+      return await getLocalHomepageRenderData(options);
+    } catch (error) {
+      return {
+        data: createEmptyHomepageRenderData(),
+        error,
+      };
+    }
+  }
+
   const client = options?.client;
 
   const themeResult = options?.previewThemeId
@@ -425,15 +804,7 @@ export async function getHomepageRenderData(options?: {
 
   if (!themeResult.data) {
     return {
-      data: {
-        theme: null,
-        sections: [] as HomepageThemeSectionRow[],
-        contentBlocks: [] as HomepageContentBlockRow[],
-        contentBlockMap: new Map<string, HomepageContentBlockRow>(),
-        banners: [] as HomepageBannerRow[],
-        productSections: [] as HomepageResolvedProductSection[],
-        categories: [] as Category[],
-      } satisfies HomepageRenderData,
+      data: createEmptyHomepageRenderData(),
       error: themeResult.error,
     };
   }

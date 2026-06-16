@@ -4,11 +4,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { createBrand, deleteBrand, updateBrand } from "@/lib/brands/actions";
-import { getAdminBrands, getBrandProductCounts, type AdminBrandRow } from "@/lib/brands/queries";
-import { getAdminAccessState } from "@/lib/admin-access";
-import { uploadProductMedia } from "@/lib/media/storage";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import type { BrandUpsertPayload } from "@/lib/brands/actions";
+import type { AdminBrandRow } from "@/lib/brands/queries";
 
 type BrandFormState = {
   name: string;
@@ -90,43 +87,34 @@ export default function AdminBrandsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/brands", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        brands?: AdminBrandRow[];
+        productCounts?: Record<string, number>;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const [brandResult, countResult] = await Promise.all([getAdminBrands(), getBrandProductCounts()]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (brandResult.error) {
-        setErrorMessage(brandResult.error.message);
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load brands.");
         setBrands([]);
         setProductCounts({});
         setLoading(false);
         return;
       }
 
-      if (countResult.error) {
-        setErrorMessage(countResult.error.message);
-      }
-
-      setBrands(brandResult.data);
-      setProductCounts(countResult.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setBrands(payload.brands ?? []);
+      setProductCounts(payload.productCounts ?? {});
       setLoading(false);
     };
 
@@ -193,18 +181,24 @@ export default function AdminBrandsPage() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const payload = {
+    const payload: BrandUpsertPayload = {
       name: trimmedName,
       slug: form.slug.trim() || toSlug(trimmedName),
       image_url: form.image_url.trim() || null,
     };
 
-    const result = editingBrandId
-      ? await updateBrand(editingBrandId, payload)
-      : await createBrand(payload);
+    const response = await fetch(editingBrandId ? `/api/admin/brands/${editingBrandId}` : "/api/admin/brands", {
+      method: editingBrandId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = (await response.json().catch(() => null)) as {
+      data?: AdminBrandRow | null;
+      error?: string;
+    } | null;
 
-    if (result.error || !result.data) {
-      setErrorMessage(result.error?.message ?? "Unable to save the brand right now.");
+    if (!response.ok || !result?.data) {
+      setErrorMessage(result?.error ?? "Unable to save the brand right now.");
       setIsSaving(false);
       return;
     }
@@ -233,19 +227,7 @@ export default function AdminBrandsPage() {
     setSuccessMessage("");
 
     try {
-      const result = await uploadProductMedia(file);
-
-      if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? "Unable to upload brand image.");
-        setIsUploadingImage(false);
-        return;
-      }
-
-      setForm((current) => ({
-        ...current,
-        image_url: result.data!.publicUrl,
-      }));
-      setSuccessMessage("Brand image uploaded successfully.");
+      setErrorMessage("VPS media upload endpoint is not configured yet. Paste an existing image URL instead.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to upload brand image.");
     } finally {
@@ -258,10 +240,11 @@ export default function AdminBrandsPage() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const result = await deleteBrand(brand.id);
+    const response = await fetch(`/api/admin/brands/${brand.id}`, { method: "DELETE" });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (result.error) {
-      setErrorMessage(result.error.message);
+    if (!response.ok) {
+      setErrorMessage(result?.error ?? "Unable to delete brand.");
       setDeletingBrandId(null);
       return;
     }

@@ -5,9 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { getAdminAccessState } from "@/lib/admin-access";
 import { ORDER_STATUSES, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import type { VendorOrderStatus } from "@/types/product-db";
 
 type OrderStatus = VendorOrderStatus;
@@ -100,37 +98,31 @@ export default function OrdersContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadAdminOrders = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/orders", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        orders?: AdminOrder[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (error) {
-        setErrorMessage("Admin database policy required to view all orders.");
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load orders right now.");
         setOrders([]);
         setLoading(false);
         return;
       }
 
-      setOrders(((data ?? []) as AdminOrder[]).map((order) => ({ ...order, status: safeOrderStatus(order.status) })));
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setOrders((payload.orders ?? []).map((order) => ({ ...order, status: safeOrderStatus(order.status) })));
       setLoading(false);
     };
 
@@ -142,15 +134,18 @@ export default function OrdersContent() {
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
-    const supabase = getSupabaseClient();
-
     setUpdatingOrderId(orderId);
     setErrorMessage("");
 
-    const { error } = await supabase.from("orders").update({ status: newStatus } as never).eq("id", orderId);
+    const response = await fetch("/api/admin/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId, status: newStatus }),
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (error) {
-      setErrorMessage("Unable to update order status right now.");
+    if (!response.ok) {
+      setErrorMessage(payload?.error ?? "Unable to update order status right now.");
       setUpdatingOrderId(null);
       return;
     }

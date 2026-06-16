@@ -6,8 +6,6 @@ import Link from "next/link";
 import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
 import { createAdminProductRecord, getAdminProductEditorRecord, updateAdminProductRecord } from "@/lib/admin-product-actions";
-import { getProductManagementAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductEditorRecord } from "@/types/product-db";
 
 export default function AdminEditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -21,27 +19,31 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadPage = async () => {
       const resolvedParams = await params;
-      const access = await getProductManagementAccessState(supabase);
+      const accessResponse = await fetch("/api/auth/me", { cache: "no-store" });
+      const accessPayload = (await accessResponse.json().catch(() => null)) as {
+        user?: { email?: string | null; role?: string | null } | null;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasProductManagementAccess(access.hasProductManagementAccess);
-      setManageableVendorIds(access.manageableVendorIds);
-      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
+      const user = accessResponse.ok ? accessPayload?.user ?? null : null;
+      const isAdmin = user?.role === "platform_admin";
+      setUserEmail(user?.email ?? null);
+      setHasProductManagementAccess(isAdmin);
+      setManageableVendorIds([]);
+      setCanAssignPlatformProducts(isAdmin);
 
-      if (!access.userEmail) {
+      if (!user?.email) {
         setLoading(false);
         return;
       }
 
-      if (!access.hasProductManagementAccess) {
+      if (!isAdmin) {
         setLoading(false);
         return;
       }

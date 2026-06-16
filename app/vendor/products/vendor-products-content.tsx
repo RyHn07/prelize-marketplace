@@ -8,11 +8,17 @@ import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { AdminDropdown } from "@/components/admin/admin-dropdown";
 import { AdminDropdownItem } from "@/components/admin/admin-dropdown-item";
 import ConfirmationDialog from "@/components/confirmation-dialog";
-import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getProductCategoryOptions, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import { deleteVendorProductRecord } from "@/lib/vendor-product-actions";
 import type { ProductCategoryOption, ProductDbRow, ProductStatus, ProductType, ProductVendorOption } from "@/types/product-db";
+
+type VendorProductsResponse = {
+  userEmail?: string | null;
+  vendorId?: string | null;
+  products?: ProductDbRow[];
+  vendorOptions?: ProductVendorOption[];
+  categoryOptions?: ProductCategoryOption[];
+  error?: string;
+};
 
 function formatPrice(amount: number) {
   return `\u09F3${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
@@ -118,45 +124,36 @@ export default function VendorProductsContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadProducts = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
-      const membership = await getCurrentVendorMembership(supabase);
+      const response = await fetch("/api/vendor/products", { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as VendorProductsResponse | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasVendorWorkspaceAccess(access.hasVendorWorkspaceAccess);
-      setActiveVendorId(membership?.vendor_id ?? access.activeVendorId);
-
-      if (!access.userEmail || !membership?.vendor_id) {
+      if (!response.ok || !result) {
+        setErrorMessage(result?.error ?? "Unable to load vendor products.");
+        setUserEmail(response.status === 401 ? null : "");
+        setHasVendorWorkspaceAccess(false);
+        setActiveVendorId(null);
         setLoading(false);
         return;
       }
 
-      const [productResult, vendorResult, categoryResult] = await Promise.all([
-        getProductsForVendors([membership.vendor_id]),
-        getProductVendorOptions(),
-        getProductCategoryOptions(),
-      ]);
+      setUserEmail(result.userEmail ?? null);
+      setHasVendorWorkspaceAccess(Boolean(result.vendorId));
+      setActiveVendorId(result.vendorId ?? null);
 
-      if (!isMounted) {
-        return;
-      }
-
-      if (productResult.error) {
-        setErrorMessage(productResult.error.message);
-        setProducts([]);
+      if (!result.userEmail || !result.vendorId) {
         setLoading(false);
         return;
       }
 
-      setProducts(productResult.data);
-      setVendorOptions(vendorResult.data);
-      setCategoryOptions(categoryResult.data);
+      setProducts(result.products ?? []);
+      setVendorOptions(result.vendorOptions ?? []);
+      setCategoryOptions(result.categoryOptions ?? []);
       setLoading(false);
     };
 

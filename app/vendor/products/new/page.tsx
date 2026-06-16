@@ -5,9 +5,8 @@ import Link from "next/link";
 
 import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
-import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import { createVendorProductRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
+import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 
 export default function VendorNewProductPage() {
   const [loading, setLoading] = useState(true);
@@ -17,20 +16,23 @@ export default function VendorNewProductPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const validateAccess = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
-      const membership = await getCurrentVendorMembership(supabase);
+      try {
+        const access = await fetchVendorOnboardingStatus();
 
-      if (!isMounted) {
-        return;
+        if (!isMounted) {
+          return;
+        }
+
+        setUserEmail(access.userEmail);
+        setHasVendorWorkspaceAccess(access.canAccessVendorWorkspace);
+        setActiveVendorId(access.vendorId);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-
-      setUserEmail(access.userEmail);
-      setHasVendorWorkspaceAccess(Boolean(membership));
-      setActiveVendorId(membership?.vendor_id ?? null);
-      setLoading(false);
     };
 
     void validateAccess();

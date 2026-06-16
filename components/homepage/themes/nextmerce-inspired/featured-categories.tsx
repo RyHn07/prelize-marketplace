@@ -58,7 +58,7 @@ export default function FeaturedCategories({ categories }: { categories: Categor
       <div className="border-b border-slate-200 pb-2 sm:pb-10">
         <div className="flex items-center justify-between gap-6">
           <h2 className="text-[14px] font-semibold tracking-tight text-slate-900 sm:text-3xl">
-            Browse by Category
+            Browse Categories
           </h2>
 
           <Link

@@ -5,9 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { getAdminAccessState } from "@/lib/admin-access";
 import { ORDER_STATUSES, formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import type { VendorOrderStatus } from "@/types/product-db";
 
 type OrderStatus = VendorOrderStatus;
@@ -115,23 +113,8 @@ export default function AdminCustomerOrdersPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadCustomerOrders = async () => {
-      const access = await getAdminAccessState(supabase);
-
-      if (!isMounted) {
-        return;
-      }
-
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
       const rawCustomerKey =
         typeof params.customerKey === "string" ? decodeURIComponent(params.customerKey) : "";
       const parsedKey = parseCustomerKey(rawCustomerKey);
@@ -143,27 +126,32 @@ export default function AdminCustomerOrdersPage() {
         return;
       }
 
-      let query = supabase.from("orders").select("*").order("created_at", { ascending: false });
-
-      query =
-        parsedKey.type === "user"
-          ? query.eq("user_id", parsedKey.value)
-          : query.eq("user_email", parsedKey.value);
-
-      const { data, error } = await query;
+      const response = await fetch(
+        `/api/admin/customers/${encodeURIComponent(`${parsedKey.type}:${parsedKey.value}`)}`,
+        { cache: "no-store" },
+      );
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        orders?: AdminOrder[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      if (error) {
-        setErrorMessage("Unable to load customer orders right now.");
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load customer orders right now.");
         setOrders([]);
         setLoading(false);
         return;
       }
 
-      const nextOrders = ((data ?? []) as AdminOrder[]).map((order) => ({
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      const nextOrders = (payload.orders ?? []).map((order) => ({
         ...order,
         status: safeOrderStatus(order.status),
       }));

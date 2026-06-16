@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
 import type { ProductVendorOption, VendorMemberRow, VendorRow, VendorStatus } from "@/types/product-db";
 
 function normalizeVendorStatus(value: unknown): VendorStatus {
@@ -29,7 +29,38 @@ function normalizeVendor(row: VendorRow): VendorRow {
   };
 }
 
+async function getLocalQuery() {
+  throw new Error("PostgreSQL vendor queries must run through a server-only module.");
+}
+
+async function fetchVendorsFromApi() {
+  const response = await fetch("/api/public/vendors", { cache: "no-store" });
+  if (!response.ok) {
+    return {
+      data: [] as VendorRow[],
+      error: new Error("Unable to load vendors."),
+    };
+  }
+
+  const payload = (await response.json()) as { data?: VendorRow[] };
+  return {
+    data: (payload.data ?? []).map(normalizeVendor),
+    error: null,
+  };
+}
+
 export async function getVendors() {
+  if (!hasSupabaseClientEnv()) {
+    if (typeof window !== "undefined") {
+      return fetchVendorsFromApi();
+    }
+
+    return {
+      data: [] as VendorRow[],
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("vendors").select("*").order("name", { ascending: true });
 
@@ -47,6 +78,13 @@ export async function getVendors() {
 }
 
 export async function getVendorById(id: string) {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: null as VendorRow | null,
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("vendors").select("*").eq("id", id).maybeSingle();
 
@@ -64,6 +102,13 @@ export async function getVendorById(id: string) {
 }
 
 export async function getVendorBySlug(slug: string) {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: null as VendorRow | null,
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
 
@@ -84,6 +129,13 @@ export async function getVendorsByIds(ids: string[]) {
   const scopedIds = Array.from(new Set(ids.filter(Boolean)));
 
   if (scopedIds.length === 0) {
+    return {
+      data: [] as VendorRow[],
+      error: null,
+    };
+  }
+
+  if (!hasSupabaseClientEnv()) {
     return {
       data: [] as VendorRow[],
       error: null,
@@ -121,6 +173,13 @@ export async function getVendorOptions() {
 }
 
 export async function getVendorProductCounts() {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: {} as Record<string, number>,
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from("products").select("vendor_id").not("vendor_id", "is", null);
 
@@ -155,6 +214,13 @@ export async function getVendorProductCounts() {
 }
 
 export async function getVendorMemberships() {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: [] as VendorMemberRow[],
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("vendor_members")
@@ -184,6 +250,13 @@ export type VendorOwnedProductDebugRow = {
 };
 
 export async function getVendorOwnedProductsDebug() {
+  if (!hasSupabaseClientEnv()) {
+    return {
+      data: [] as VendorOwnedProductDebugRow[],
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("products")

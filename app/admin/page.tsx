@@ -10,11 +10,7 @@ import MonthlyTarget from "@/components/admin/dashboard/monthly-target";
 import RecentOrders from "@/components/admin/dashboard/recent-orders";
 import StatisticsChart from "@/components/admin/dashboard/statistics-chart";
 import type { DashboardMetricItem, DashboardOrderItem, DashboardOverviewItem } from "@/components/admin/dashboard/types";
-import { getAdminAccessState } from "@/lib/admin-access";
 import { safeOrderStatus } from "@/lib/orders/utils";
-import { getProducts } from "@/lib/products/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
-import { getVendors } from "@/lib/vendors/queries";
 import type { ProductDbRow, VendorRow } from "@/types/product-db";
 
 type DashboardOrder = {
@@ -57,48 +53,34 @@ export default function AdminPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadDashboard = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        orders?: DashboardOrder[];
+        products?: ProductDbRow[];
+        vendors?: VendorRow[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load dashboard data right now.");
         setLoading(false);
         return;
       }
 
-      const [{ data: ordersData, error: ordersError }, productResult, vendorResult] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(200),
-        getProducts(),
-        getVendors(),
-      ]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (ordersError) {
-        setErrorMessage("Unable to load dashboard data right now.");
-      }
-
-      if (productResult.error && !ordersError) {
-        setErrorMessage(productResult.error.message);
-      }
-
-      if (vendorResult.error && !ordersError && !productResult.error) {
-        setErrorMessage(vendorResult.error.message);
-      }
-
-      setOrders((ordersData ?? []) as DashboardOrder[]);
-      setProducts(productResult.data ?? []);
-      setVendors(vendorResult.data ?? []);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setOrders(payload.orders ?? []);
+      setProducts(payload.products ?? []);
+      setVendors(payload.vendors ?? []);
       setLoading(false);
     };
 

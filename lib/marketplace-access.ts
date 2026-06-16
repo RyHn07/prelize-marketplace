@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { hasSupabaseClientEnv } from "@/lib/supabase-client";
 import type { VendorMemberRole, VendorMemberStatus } from "@/types/product-db";
 
 const PLATFORM_ADMIN_ROLE = "platform_admin";
@@ -51,6 +52,50 @@ function normalizeVendorMemberStatus(value: unknown): VendorMemberStatus {
 export async function getMarketplaceAccessState(
   supabase: SupabaseClient,
 ): Promise<MarketplaceAccessState> {
+  if (!hasSupabaseClientEnv() && typeof window !== "undefined") {
+    const response = await fetch("/api/vendor/onboarding-status", { cache: "no-store" });
+    const status = (await response.json().catch(() => null)) as {
+      userId?: string | null;
+      userEmail?: string | null;
+      vendorId?: string | null;
+      vendorRole?: VendorMemberRole | null;
+      vendorMemberStatus?: VendorMemberStatus | null;
+      vendorStatus?: string | null;
+      canAccessVendorWorkspace?: boolean;
+    } | null;
+
+    if (!status?.userId) {
+      return {
+        userId: null,
+        userEmail: null,
+        hasPlatformAdminAccess: false,
+        vendorMemberships: [],
+      };
+    }
+
+    const hasActiveVendorMembership =
+      Boolean(status.vendorId) &&
+      status.canAccessVendorWorkspace === true &&
+      status.vendorMemberStatus === "active" &&
+      status.vendorStatus === "active";
+
+    return {
+      userId: status.userId,
+      userEmail: status.userEmail ?? null,
+      hasPlatformAdminAccess: false,
+      vendorMemberships:
+        hasActiveVendorMembership && status.vendorId
+          ? [
+              {
+                vendor_id: status.vendorId,
+                role: normalizeVendorMemberRole(status.vendorRole),
+                status: "active",
+              },
+            ]
+          : [],
+    };
+  }
+
   const { data: authData } = await supabase.auth.getUser();
   const user = authData.user;
   const userId = user?.id ?? null;

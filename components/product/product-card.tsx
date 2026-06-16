@@ -14,6 +14,7 @@ import type { Product } from "@/types/product";
 interface ProductCardProps {
   product: Product;
   viewMode?: "grid" | "list";
+  showVendorName?: boolean;
 }
 
 function DeliveryIcon() {
@@ -78,6 +79,10 @@ function getDeliveryWindow(productId: string) {
 function formatPriceLabel(price: string | number) {
   const amount = typeof price === "number" ? price : Number(price);
 
+  if (Number.isFinite(amount) && amount <= 0) {
+    return "Price on request";
+  }
+
   if (!Number.isFinite(amount)) {
     return `From ৳${price}`;
   }
@@ -88,7 +93,7 @@ function formatPriceLabel(price: string | number) {
   })}`;
 }
 
-export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
+export default function ProductCard({ product, viewMode = "grid", showVendorName = true }: ProductCardProps) {
   const averageRating = product.averageRating ?? 0;
   const reviewCount = product.reviewCount ?? 0;
   const roundedRating = Math.max(0, Math.min(5, Math.round(averageRating)));
@@ -131,6 +136,7 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
               : "(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 50vw"
           }
           className="object-cover"
+          unoptimized
         />
 
         {product.badge ? (
@@ -161,7 +167,7 @@ export default function ProductCard({ product, viewMode = "grid" }: ProductCardP
 
       <div className={`flex flex-1 flex-col gap-2 ${isListView ? "py-1 pr-1" : "p-2.5 sm:p-3"}`}>
         <div className="space-y-1">
-          {product.vendorName ? (
+          {showVendorName && product.vendorName ? (
             <p className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:block">
               Vendor: {product.vendorName}
             </p>

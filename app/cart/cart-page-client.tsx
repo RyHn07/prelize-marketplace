@@ -22,11 +22,7 @@ import {
   formatDeliveryWindow,
 } from "@/lib/international-shipping/utils";
 import { calculateProductGroupPricing } from "@/lib/product-pricing";
-import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
-import { getProductVariantMapByProductIds, getProductsByIds } from "@/lib/products/queries";
 import { calculateCartDisplayTotals, calculateCartTotals, calculateCndsShipping, type CartItem } from "@/lib/shipping-utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
-import { getVendorsByIds } from "@/lib/vendors/queries";
 import type {
   CndsShippingProfileOption,
   InternationalShippingMethodRow,
@@ -79,6 +75,14 @@ type CheckoutDraft = {
   selectedKeys: string[];
   selectedShippingProfiles: Record<string, string>;
   selectedInternationalShippingMethodId?: string;
+};
+
+type CartCatalogResponse = {
+  products?: ProductDbRow[];
+  variantsByProductId?: Record<string, ProductDbVariantRow[]>;
+  pricingByProductId?: Record<string, ResolvedProductPricingConfig>;
+  vendorNamesById?: Record<string, string>;
+  error?: string;
 };
 
 type ItemAvailabilityIssue = {
@@ -265,7 +269,7 @@ export default function CartPage() {
   const router = useRouter();
   const [items, setItems] = useState<QuoteItem[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
-  const [selectedShippingProfiles, setSelectedShippingProfiles] = useState<Record<string, string>>({});
+  const [selectedShippingProfiles] = useState<Record<string, string>>({});
   const [internationalShippingMethods, setInternationalShippingMethods] = useState<InternationalShippingMethodRow[]>([]);
   const [selectedInternationalShippingMethodId, setSelectedInternationalShippingMethodId] = useState("");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -348,47 +352,40 @@ export default function CartPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!isMounted) {
-        return;
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = (await response.json()) as {
+          user?: { id?: string | null; email?: string | null } | null;
+        };
+        const user = data.user;
+
+        if (isMounted) {
+          setCurrentUser(
+            user?.id && user.email
+              ? {
+                  id: user.id,
+                  email: user.email,
+                }
+              : null,
+          );
+        }
+      } catch {
+        if (isMounted) {
+          setCurrentUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setHasCheckedAuth(true);
+        }
       }
+    }
 
-      const user = data.user;
-      setCurrentUser(
-        user?.id && user.email
-          ? {
-              id: user.id,
-              email: user.email,
-            }
-          : null,
-      );
-      setHasCheckedAuth(true);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!isMounted) {
-        return;
-      }
-
-      const user = session?.user;
-      setCurrentUser(
-        user?.id && user.email
-          ? {
-              id: user.id,
-              email: user.email,
-            }
-          : null,
-      );
-      setHasCheckedAuth(true);
-    });
+    void loadCurrentUser();
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
     };
   }, []);
 
@@ -412,31 +409,42 @@ export default function CartPage() {
       }
 
       try {
-        const result = await getProductsByIds(items.map((item) => item.productId));
+        const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
+
+        if (productIds.length === 0) {
+          if (isMounted) {
+            setProductRecords([]);
+            setProductVariantsByProductId(new Map());
+            setPricingConfigByProductId({});
+            setCndsProfilesById({});
+            setVendorNamesById({});
+            setActionMessage("");
+          }
+          return;
+        }
+
+        const params = new URLSearchParams();
+        params.set("ids", productIds.join(","));
+        const response = await fetch(`/api/public/cart?${params.toString()}`, { cache: "no-store" });
+        const result = (await response.json().catch(() => null)) as CartCatalogResponse | null;
 
         if (!isMounted) {
           return;
         }
 
-        setProductRecords(result.data);
-        const variantsResult = await getProductVariantMapByProductIds(result.data.map((product) => product.id));
-
-        if (!isMounted) {
-          return;
+        if (!response.ok || !result) {
+          throw new Error(result?.error ?? "Unable to load cart details.");
         }
 
-        setProductVariantsByProductId(variantsResult.data);
-        const pricingTierResult = await fetchResolvedProductPricingMap(result.data.map((product) => product.id));
-
-        if (!isMounted) {
-          return;
-        }
-
-        setPricingConfigByProductId(pricingTierResult.data);
+        const products = result.products ?? [];
+        setProductRecords(products);
+        setProductVariantsByProductId(new Map(Object.entries(result.variantsByProductId ?? {})));
+        setPricingConfigByProductId(result.pricingByProductId ?? {});
+        setVendorNamesById(result.vendorNamesById ?? {});
 
         const cndsProfileIds = Array.from(
           new Set(
-            result.data
+            products
               .map((product) => product.cnds_profile_id)
               .filter((profileId): profileId is string => typeof profileId === "string" && profileId.length > 0),
           ),
@@ -455,29 +463,6 @@ export default function CartPage() {
             Object.fromEntries(cndsProfileResult.profiles.map((profile) => [profile.id, profile])),
           );
         }
-
-        const vendorIds = Array.from(
-          new Set(
-            result.data
-              .map((product) => product.vendor_id)
-              .filter((vendorId): vendorId is string => typeof vendorId === "string" && vendorId.length > 0),
-          ),
-        );
-
-        if (vendorIds.length === 0) {
-          setVendorNamesById({});
-          return;
-        }
-
-        const vendorResult = await getVendorsByIds(vendorIds);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setVendorNamesById(
-          Object.fromEntries(vendorResult.data.map((vendor) => [vendor.id, vendor.name])),
-        );
         setActionMessage("");
       } catch {
         if (!isMounted) {

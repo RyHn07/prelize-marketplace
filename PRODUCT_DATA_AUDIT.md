@@ -1,13 +1,13 @@
 # Product Data Audit
 
-Last updated: 2026-05-02
+Last updated: 2026-06-12
 
 ## Purpose
 
 This note captures the current product data shapes in the repo and the main gaps between:
 
 - storefront UI needs
-- Supabase product records
+- PostgreSQL product records
 - quote/cart/checkout snapshots
 - future multivendor requirements
 
@@ -15,14 +15,14 @@ It is meant to guide the next execution step after the recent build-stability fi
 
 ## Current Reality
 
-The storefront product list and product detail pages are already reading from Supabase:
+The storefront product list and product detail pages are already reading from VPS PostgreSQL:
 
 - `app/products/page.tsx`
 - `app/products/[slug]/page.tsx`
 - `lib/products/queries.ts`
 - `lib/products/storefront.ts`
 
-That means the old roadmap item "move public catalog to Supabase" is mostly complete.
+That means the old roadmap item "move public catalog to a real backend" is complete for the current VPS PostgreSQL runtime.
 
 The bigger remaining gap is not catalog page wiring anymore. The bigger gap is data parity and cart/checkout alignment.
 
@@ -73,7 +73,7 @@ Defined in `types/product-db.ts`:
 
 There is also `ProductDbVariantRow` for variant records, and the public product detail purchase flow now uses it.
 
-Product gallery URLs are now normalized into `product_images`. The legacy `products.gallery_images` JSON field remains as a compatibility fallback while existing environments apply `20260520_normalize_product_images.sql`.
+Product gallery URLs are now normalized into `product_images`. The legacy `products.gallery_images` JSON field remains as a compatibility fallback.
 
 ### Quote/cart snapshot shape
 
@@ -106,11 +106,11 @@ The database is used to enrich and validate:
 
 ## What Already Works Well
 
-- Public catalog pages already read from Supabase
-- Public product detail already reads by slug from Supabase
+- Public catalog pages already read from PostgreSQL
+- Public product detail already reads by slug from PostgreSQL
 - Public product listing already maps DB rows into storefront UI shape
-- Related products already use Supabase-backed category relationships
-- Admin product management already writes and reads Supabase product records
+- Related products already use PostgreSQL-backed category relationships
+- Admin product management already writes and reads PostgreSQL product records
 - Product saves synchronize normalized `product_images` rows and deduplicate gallery URLs
 - Cart and checkout already enrich quote items with live product records using `getProductsByIds`
 
@@ -164,11 +164,11 @@ The repo now has vendor ownership in the product model, vendor-aware checkout wr
 
 This is acceptable temporarily, but it is not full storefront parity yet.
 
-### 5. Reviews are still static UI content
+### 5. Reviews are PostgreSQL-backed in admin, but storefront review parity still needs polish
 
-`components/product/product-details-tabs.tsx` uses hardcoded review items.
+`product_reviews` exists and `/admin/reviews` reads it from PostgreSQL.
 
-That is not a blocker for checkout stability, but it is still part of the storefront data gap.
+The remaining gap is making buyer-facing product tabs consistently read the same review source before review work is considered complete.
 
 ## Recommended Next Implementation Order
 

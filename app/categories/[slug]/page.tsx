@@ -5,14 +5,17 @@ import { notFound } from "next/navigation";
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
 import {
-  getProductCategoryOptions,
-  getProductImageMapByProductIds,
-  getPublicProductsByBrowseParams,
   type ProductBrowseSort,
 } from "@/lib/products/queries";
+import {
+  getServerProductCategoryBySlug,
+  getServerProductCategoryOptions,
+  getServerProductImageMapByProductIds,
+  getServerProductReviewSummaryMap,
+  getServerPublicProductsByBrowseParams,
+} from "@/lib/products/server-catalog";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
-import { getProductReviewSummaryMap } from "@/lib/reviews";
-import { getVendorOptions } from "@/lib/vendors/queries";
+import { getServerVendorOptions } from "@/lib/vendors/server-queries";
 import { createPageMetadata } from "@/lib/seo";
 
 type CategoryPageProps = {
@@ -32,8 +35,7 @@ type CategoryPageProps = {
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const { data: categoryOptions } = await getProductCategoryOptions();
-  const category = categoryOptions.find((item) => item.slug === slug) ?? null;
+  const { data: category } = await getServerProductCategoryBySlug(slug);
 
   if (!category) {
     return {
@@ -52,12 +54,11 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { slug } = await params;
   const filters = await searchParams;
-  const [{ data: categoryOptions }, { data: vendorOptions }] = await Promise.all([
-    getProductCategoryOptions(),
-    getVendorOptions(),
+  const [{ data: category }, { data: categoryOptions }, { data: vendorOptions }] = await Promise.all([
+    getServerProductCategoryBySlug(slug),
+    getServerProductCategoryOptions(),
+    getServerVendorOptions(),
   ]);
-
-  const category = categoryOptions.find((item) => item.slug === slug) ?? null;
 
   if (!category) {
     notFound();
@@ -70,14 +71,14 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     limit,
     availableMinPrice,
     availableMaxPrice,
-  } = await getPublicProductsByBrowseParams({
+  } = await getServerPublicProductsByBrowseParams({
     ...filters,
     category: slug,
   });
   const productIds = scopedProducts.map((product) => product.id);
   const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
-    getProductImageMapByProductIds(productIds),
-    getProductReviewSummaryMap(productIds),
+    getServerProductImageMapByProductIds(productIds),
+    getServerProductReviewSummaryMap(productIds),
   ]);
   const storefrontProducts = scopedProducts.map((product) =>
     mapProductDbToStorefrontProduct(

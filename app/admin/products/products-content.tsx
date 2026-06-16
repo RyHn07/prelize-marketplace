@@ -9,13 +9,12 @@ import { AdminDropdown } from "@/components/admin/admin-dropdown";
 import { AdminDropdownItem } from "@/components/admin/admin-dropdown-item";
 import ConfirmationDialog from "@/components/confirmation-dialog";
 import { deleteAdminProductRecord } from "@/lib/admin-product-actions";
-import { getProductManagementAccessState } from "@/lib/marketplace-access";
-import { getProductCategoryOptions, getProducts, getProductsForVendors, getProductVendorOptions } from "@/lib/products/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import type { ProductCategoryOption, ProductDbRow, ProductStatus, ProductType, ProductVendorOption } from "@/types/product-db";
 
-function formatPrice(amount: number) {
-  return `\u09F3${Number.isFinite(amount) ? amount.toLocaleString() : "0"}`;
+function formatPrice(amount: number | string | null | undefined) {
+  const parsedAmount = typeof amount === "number" ? amount : Number(amount);
+
+  return `\u09F3${Number.isFinite(parsedAmount) ? parsedAmount.toLocaleString() : "0"}`;
 }
 
 function getProductStatus(product: ProductDbRow): ProductStatus {
@@ -118,49 +117,37 @@ export default function ProductsContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadProducts = async () => {
-      const access = await getProductManagementAccessState(supabase);
+      const response = await fetch("/api/admin/products", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        hasPlatformAdminAccess?: boolean;
+        products?: ProductDbRow[];
+        vendorOptions?: ProductVendorOption[];
+        categoryOptions?: ProductCategoryOption[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasProductManagementAccess(access.hasProductManagementAccess);
-      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
-
-      if (!access.userEmail) {
-        setLoading(false);
-        return;
-      }
-
-      if (!access.hasProductManagementAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const [productResult, vendorResult, categoryResult] = await Promise.all([
-        access.hasPlatformAdminAccess ? getProducts() : getProductsForVendors(access.manageableVendorIds),
-        getProductVendorOptions(),
-        getProductCategoryOptions(),
-      ]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (productResult.error) {
-        setErrorMessage(productResult.error.message);
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasProductManagementAccess(false);
+        setErrorMessage(payload?.error ?? "Unable to load products.");
         setProducts([]);
         setLoading(false);
         return;
       }
 
-      setProducts(productResult.data);
-      setVendorOptions(vendorResult.data);
-      setCategoryOptions(categoryResult.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasProductManagementAccess(true);
+      setCanAssignPlatformProducts(payload.hasPlatformAdminAccess ?? true);
+      setProducts(payload.products ?? []);
+      setVendorOptions(payload.vendorOptions ?? []);
+      setCategoryOptions(payload.categoryOptions ?? []);
       setLoading(false);
     };
 

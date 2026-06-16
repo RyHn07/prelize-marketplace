@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { createBrand, deleteBrand, updateBrand } from "@/lib/brands/actions";
-import { getAdminBrands, getBrandProductCounts, type AdminBrandRow } from "@/lib/brands/queries";
+import type { AdminBrandRow } from "@/lib/brands/queries";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { uploadProductMedia } from "@/lib/media/storage";
 import { getSupabaseClient } from "@/lib/supabase-client";
@@ -14,6 +14,14 @@ type BrandFormState = {
   name: string;
   slug: string;
   image_url: string;
+};
+
+type VendorCatalogResponse = {
+  userEmail?: string | null;
+  vendorId?: string | null;
+  brands?: AdminBrandRow[];
+  brandProductCounts?: Record<string, number>;
+  error?: string;
 };
 
 const EMPTY_FORM: BrandFormState = {
@@ -107,26 +115,23 @@ export default function VendorBrandsPage() {
         return;
       }
 
-      const [brandResult, countResult] = await Promise.all([getAdminBrands(), getBrandProductCounts()]);
+      const response = await fetch("/api/vendor/catalog", { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as VendorCatalogResponse | null;
 
       if (!isMounted) {
         return;
       }
 
-      if (brandResult.error) {
-        setErrorMessage(brandResult.error.message);
+      if (!response.ok || !result) {
+        setErrorMessage(result?.error ?? "Unable to load brands.");
         setBrands([]);
         setProductCounts({});
         setLoading(false);
         return;
       }
 
-      if (countResult.error) {
-        setErrorMessage(countResult.error.message);
-      }
-
-      setBrands(brandResult.data);
-      setProductCounts(countResult.data);
+      setBrands(result.brands ?? []);
+      setProductCounts(result.brandProductCounts ?? {});
       setLoading(false);
     };
 

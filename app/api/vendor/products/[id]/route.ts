@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { getCurrentUserFromCookie, type AuthUser } from "@/lib/auth/session";
+import { query } from "@/lib/db";
 import {
   deleteProductRecordWithClient,
   updateProductEditorRecordWithClient,
@@ -9,6 +11,24 @@ import { getProductEditorRecordForVendors } from "@/lib/products/queries";
 import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
 
 async function getActiveVendorMembership(userId: string) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const result = await query<{ vendor_id: string; status: string }>(
+      `
+        select vendor_id, status
+        from public.vendor_members
+        where user_id = $1 and status = 'active'
+        order by created_at desc
+        limit 1
+      `,
+      [userId],
+    );
+
+    return {
+      data: result.rows[0] ?? null,
+      error: null,
+    };
+  }
+
   const supabase = getSupabaseServiceRoleClient();
   const { data, error } = await supabase
     .from("vendor_members")
@@ -32,15 +52,25 @@ async function getActiveVendorMembership(userId: string) {
   };
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function getRequestUser(request: Request): Promise<{ id: string; email?: string | null } | AuthUser | null> {
   const authResult = await getAuthenticatedUserFromRequest(request);
 
-  if (authResult.error || !authResult.user) {
-    return NextResponse.json({ error: authResult.error ?? "Unauthorized." }, { status: 401 });
+  if (!authResult.error && authResult.user) {
+    return authResult.user;
+  }
+
+  return getCurrentUserFromCookie();
+}
+
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getRequestUser(request);
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   try {
-    const membershipResult = await getActiveVendorMembership(authResult.user.id);
+    const membershipResult = await getActiveVendorMembership(user.id);
 
     if (membershipResult.error) {
       return NextResponse.json({ error: membershipResult.error.message }, { status: 500 });
@@ -94,14 +124,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authResult = await getAuthenticatedUserFromRequest(request);
+  const user = await getRequestUser(request);
 
-  if (authResult.error || !authResult.user) {
-    return NextResponse.json({ error: authResult.error ?? "Unauthorized." }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   try {
-    const membershipResult = await getActiveVendorMembership(authResult.user.id);
+    const membershipResult = await getActiveVendorMembership(user.id);
 
     if (membershipResult.error) {
       return NextResponse.json({ error: membershipResult.error.message }, { status: 500 });
@@ -131,14 +161,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authResult = await getAuthenticatedUserFromRequest(request);
+  const user = await getRequestUser(request);
 
-  if (authResult.error || !authResult.user) {
-    return NextResponse.json({ error: authResult.error ?? "Unauthorized." }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   try {
-    const membershipResult = await getActiveVendorMembership(authResult.user.id);
+    const membershipResult = await getActiveVendorMembership(user.id);
 
     if (membershipResult.error) {
       return NextResponse.json({ error: membershipResult.error.message }, { status: 500 });

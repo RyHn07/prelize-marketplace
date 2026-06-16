@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Wholesale Marketplace is a B2B ecommerce platform for sourcing products from China and managing bulk orders for buyers in Bangladesh. The project is built with Next.js, React, TypeScript, Tailwind CSS, and Supabase.
+Wholesale Marketplace is a B2B ecommerce platform for sourcing products from China and managing bulk orders for buyers in Bangladesh. The project is built with Next.js, React, TypeScript, Tailwind CSS, and PostgreSQL.
 
 The app is designed to support three sides of the business:
 
@@ -14,6 +14,19 @@ The platform has already moved into a multivendor implementation phase, with ven
 
 ## Current Status
 
+Last updated: 2026-06-12
+
+The app has moved away from Supabase for normal runtime. Local development now reads live marketplace data from the VPS PostgreSQL database and image assets from the VPS image host.
+
+Current runtime sources:
+
+- Database: VPS PostgreSQL through `process.env.DATABASE_URL`
+- Images/storage URLs: `https://img.prelize.com`
+- Auth/session: app-owned auth routes with signed cookies and PostgreSQL-backed users
+- Admin access: server-side admin layout guard plus `platform_roles`
+
+Supabase files and migrations still exist as historical migration/reference material, but Supabase is not the active backend service for local app runtime.
+
 The project already includes the main commerce flow and a working multivendor foundation:
 
 - Public storefront pages
@@ -21,7 +34,7 @@ The project already includes the main commerce flow and a working multivendor fo
 - Login and signup
 - Quote/cart flow
 - Checkout with buyer information
-- Order creation in Supabase
+- Order creation in PostgreSQL
 - Customer order history
 - Admin dashboard for orders and products
 - Vendor dashboard shell and vendor product management
@@ -37,7 +50,7 @@ The current multivendor and operations gaps are now more specific:
 - stricter vendor-order status rules and parent-order status synchronization
 - removal of remaining legacy email-based admin fallback in favor of role-first access
 - completion of admin category and customer management tools
-- broader QA coverage for multivendor and RLS behavior
+- broader QA coverage for multivendor behavior and PostgreSQL-backed admin APIs
 
 For a detailed roadmap, see [PROJECT_PLAN.md](./PROJECT_PLAN.md).
 
@@ -58,26 +71,29 @@ For a detailed roadmap, see [PROJECT_PLAN.md](./PROJECT_PLAN.md).
 - React 19
 - TypeScript
 - Tailwind CSS 4
-- Supabase
+- PostgreSQL via `pg`
+- Cookie-based app auth
 
 ## Current App Areas
 
 - `app/`: App Router routes for storefront, account, cart, checkout, orders, admin, and vendor areas
 - `components/`: shared UI like header, product cards, product forms, and quote helpers
-- `lib/`: Supabase access, product queries/actions, vendor logic, media helpers, and shared marketplace access checks
+- `lib/`: PostgreSQL access, product queries/actions, vendor logic, media helpers, and shared marketplace access checks
 - `types/`: shared TypeScript models for product, vendor, and order-related data
-- `supabase/migrations/`: schema and RLS changes for platform roles, multivendor support, and order access fixes
+- `supabase/migrations/`: legacy schema history from the previous Supabase phase
+- `db/`: PostgreSQL schema/reference archive for the non-Supabase runtime
 
 ## What Is Working Today
 
-- Storefront product listing and product detail pages load from Supabase
+- Storefront product listing and product detail pages load from VPS PostgreSQL
 - Admin product create/edit flows are live
 - Customer cart/quote flow is live
 - Checkout creates marketplace orders and vendor sub-orders
 - Customer order history and order detail pages are live
 - Admin orders and vendor orders can be reviewed separately
-- Media library exists for admin product media
+- Media library reads existing VPS image URLs from PostgreSQL
 - Vendor product ownership and vendor membership foundation are in place
+- Admin dashboard, products, orders, vendors, customers, categories, brands, reviews, notifications, homepage themes/content/product sections, shipping, and settings now use PostgreSQL-backed admin APIs
 
 ## Safe Development Order
 
@@ -93,7 +109,8 @@ The highest-risk areas remain:
 - checkout flow
 - order creation and status synchronization
 - auth and access control
-- Supabase RLS behavior
+- VPS database connectivity during build/prerender
+- media upload/delete, because the app can read `img.prelize.com` assets but a first-party VPS upload endpoint is not finished yet
 
 Those systems should not be broadly refactored during unrelated work.
 
@@ -117,20 +134,22 @@ npm run build
 ## Environment Notes
 
 - Local environment values are loaded from `.env.local`
-- The app expects a working Supabase project with the required tables and policies
-- Recent multivendor and RLS work lives in `supabase/migrations/`
-- If admin, vendor, or media features behave unexpectedly, confirm the latest migrations have been applied
+- The app expects `DATABASE_URL` to point at the VPS PostgreSQL database
+- `.env.example` documents the expected shape without real secrets
+- Do not use a local database for normal development unless intentionally creating an isolated copy
+- Do not copy image files into `public/storage`; existing image URLs should resolve through `https://img.prelize.com`
+- If admin pages show empty data, check the relevant `/api/admin/*` route and VPS database connectivity first
 
 ## Current Priorities
 
 The current implementation priority is:
 
-1. Improve `README.md` and project documentation
-2. Complete Category CRUD inside the admin area
-3. Complete the Customer Management admin page
+1. Keep the PostgreSQL/VPS runtime documented and stable
+2. Finish first-party VPS media upload/delete endpoints
+3. Continue removing remaining legacy Supabase-backed code paths
 4. Polish vendor display on buyer-facing pages
 
-This order intentionally avoids touching checkout, orders, and auth until the safer admin/documentation work is complete.
+This order intentionally avoids broad checkout/order rewrites unless a targeted bug requires them.
 
 ## Project Direction
 
@@ -138,6 +157,6 @@ The project is moving toward:
 
 - finishing shared product-data alignment between storefront, cart, checkout, and orders
 - hardening multivendor marketplace behavior and permissions
-- completing admin categories, customers, and settings
+- completing remaining admin sections that still have legacy code paths
 - improving search, filters, and wishlist features
-- documenting database setup, policies, and deployment steps
+- documenting PostgreSQL setup, VPS image hosting, and deployment steps

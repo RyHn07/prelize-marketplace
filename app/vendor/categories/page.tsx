@@ -4,11 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { getCategoryProductCounts, getAdminCategories, type AdminCategoryRow } from "@/lib/categories/queries";
+import type { AdminCategoryRow } from "@/lib/categories/queries";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getSupabaseClient } from "@/lib/supabase-client";
 
 type CategoryFilterMode = "all" | "main" | "sub";
+type VendorCatalogResponse = {
+  userEmail?: string | null;
+  vendorId?: string | null;
+  categories?: AdminCategoryRow[];
+  categoryProductCounts?: Record<string, number>;
+  error?: string;
+};
 
 function SortIcon() {
   return (
@@ -80,26 +87,23 @@ export default function VendorCategoriesPage() {
         return;
       }
 
-      const [categoryResult, countResult] = await Promise.all([getAdminCategories(), getCategoryProductCounts()]);
+      const response = await fetch("/api/vendor/catalog", { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as VendorCatalogResponse | null;
 
       if (!isMounted) {
         return;
       }
 
-      if (categoryResult.error) {
-        setErrorMessage(categoryResult.error.message);
+      if (!response.ok || !result) {
+        setErrorMessage(result?.error ?? "Unable to load categories.");
         setCategories([]);
         setProductCounts({});
         setLoading(false);
         return;
       }
 
-      if (countResult.error) {
-        setErrorMessage(countResult.error.message);
-      }
-
-      setCategories(categoryResult.data);
-      setProductCounts(countResult.data);
+      setCategories(result.categories ?? []);
+      setProductCounts(result.categoryProductCounts ?? {});
       setLoading(false);
     };
 

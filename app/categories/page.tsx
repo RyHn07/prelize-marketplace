@@ -3,8 +3,21 @@ import Image from "next/image";
 import Link from "next/link";
 
 import Header from "@/components/Header";
-import { getProductCategoryOptions, getPublicProducts } from "@/lib/products/queries";
+import { query } from "@/lib/db";
 import { createPageMetadata } from "@/lib/seo";
+
+type CategoryOption = {
+  id: string;
+  name: string;
+  slug: string | null;
+  parent_id: string | null;
+  image_url: string | null;
+};
+
+type ProductCategorySummary = {
+  category_id: string | null;
+  image_url: string | null;
+};
 
 export const metadata: Metadata = createPageMetadata({
   title: "Browse Categories",
@@ -22,8 +35,24 @@ function createSlugFallback(value: string) {
 }
 
 export default async function CategoriesPage() {
-  const [{ data: categoryOptions, error: categoryError }, { data: publicProducts, error: productError }] =
-    await Promise.all([getProductCategoryOptions(), getPublicProducts()]);
+  const [categoryResult, productResult] = await Promise.all([
+    query<CategoryOption>(
+      `
+        select id, name, slug, parent_id, coalesce(image_url, image) as image_url
+        from public.categories
+        order by name asc
+      `,
+    ),
+    query<ProductCategorySummary>(
+      `
+        select category_id, coalesce(image_url, image) as image_url
+        from public.products
+        where coalesce(is_active, true) = true and coalesce(status, 'active') = 'active'
+      `,
+    ),
+  ]);
+  const categoryOptions = categoryResult.rows;
+  const publicProducts = productResult.rows;
 
   const countByCategoryId = new Map<string, number>();
   const imageByCategoryId = new Map<string, string>();
@@ -89,11 +118,6 @@ export default async function CategoriesPage() {
           </h1>
           <div className="mt-4 h-px w-full bg-slate-200" />
 
-          {categoryError || productError ? (
-            <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              We could not load some category data from Supabase. Showing currently available results only.
-            </div>
-          ) : null}
         </div>
 
         <div className="columns-1 gap-8 md:columns-2 xl:columns-3">

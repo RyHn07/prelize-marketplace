@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { listAdminReviewRows } from "@/lib/reviews";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { query } from "@/lib/db";
+import { requireAdminRequest } from "@/lib/supabase-admin";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);
@@ -11,14 +11,27 @@ export async function GET(request: Request) {
   }
 
   try {
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await listAdminReviewRows(supabase);
+    const result = await query(
+      `
+        select
+          reviews.id,
+          reviews.product_id,
+          coalesce(products.name, 'Unknown product') as product_name,
+          coalesce(products.slug, '') as product_slug,
+          vendors.name as vendor_name,
+          reviews.user_email,
+          reviews.rating,
+          reviews.title,
+          reviews.comment,
+          reviews.created_at
+        from public.product_reviews reviews
+        left join public.products products on products.id = reviews.product_id
+        left join public.vendors vendors on vendors.id = reviews.vendor_id
+        order by reviews.created_at desc
+      `,
+    );
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ data: result.data });
+    return NextResponse.json({ data: result.rows });
   } catch (error) {
     return NextResponse.json(
       {

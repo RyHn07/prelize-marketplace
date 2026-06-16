@@ -226,7 +226,9 @@ export async function listOrderReviewEligibility(
     }),
   );
 
-  const items = ((orderItems ?? []) as Array<{
+  const groupedItems = new Map<string, ReviewEligibilityItem>();
+
+  ((orderItems ?? []) as Array<{
     id: string;
     order_id: string;
     product_id: string;
@@ -236,21 +238,36 @@ export async function listOrderReviewEligibility(
     quantity: number;
     variant_name?: string | null;
     variant_value?: string | null;
-  }>).map(
-    (item): ReviewEligibilityItem => ({
+  }>).forEach((item) => {
+    const quantity = Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 0;
+    const existing = groupedItems.get(item.product_id);
+
+    if (existing) {
+      groupedItems.set(item.product_id, {
+        ...existing,
+        quantity: existing.quantity + quantity,
+        variant_value: null,
+        variant_name: null,
+      });
+      return;
+    }
+
+    groupedItems.set(item.product_id, {
       order_id: item.order_id,
       order_item_id: item.id,
       product_id: item.product_id,
       product_name: item.product_name,
       product_image: typeof item.product_image === "string" ? item.product_image : null,
       vendor_id: typeof item.vendor_id === "string" ? item.vendor_id : null,
-      quantity: Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 0,
+      quantity,
       variant_name: typeof item.variant_name === "string" ? item.variant_name : null,
       variant_value: typeof item.variant_value === "string" ? item.variant_value : null,
       can_review: order.status === "Delivered",
       review: reviewByProductId.get(item.product_id) ?? null,
-    }),
-  );
+    });
+  });
+
+  const items = Array.from(groupedItems.values());
 
   return {
     data: items,

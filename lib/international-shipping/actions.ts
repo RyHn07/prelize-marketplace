@@ -26,18 +26,16 @@ async function authorizedJsonFetch(
   init?: RequestInit,
 ) {
   const accessToken = await getAccessToken();
+  const headers = new Headers(init?.headers);
+  headers.set("Content-Type", "application/json");
 
-  if (!accessToken) {
-    throw new Error("Please login first.");
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
   const response = await fetch(input, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.headers ?? {}),
-    },
+    headers,
     credentials: "include",
     cache: init?.cache ?? "no-store",
   });

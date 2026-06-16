@@ -1,6 +1,6 @@
 # Wholesale Marketplace Project Plan
 
-Last updated: 2026-05-02
+Last updated: 2026-06-12
 
 ## Current Project Snapshot
 
@@ -13,6 +13,16 @@ This section is the permanent rulebook for the project. Every feature, UI decisi
 ### Core Goal
 
 Build a reliable, scalable wholesale marketplace that supports buyers, platform admins, and future multivendor sellers in one clear system.
+
+### Current Runtime Decision
+
+The active backend is VPS PostgreSQL, not Supabase.
+
+- Runtime database access goes through `DATABASE_URL` and `lib/db.ts`.
+- Image assets are served from `https://img.prelize.com`.
+- Local browser sessions use app-owned signed cookies.
+- Admin authorization is enforced server-side using `platform_roles` and admin API guards.
+- Supabase migrations and helpers may remain as legacy reference material, but new work should not add new Supabase runtime dependencies.
 
 ### Mission
 
@@ -179,7 +189,7 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 6. User continues to checkout.
 7. User enters buyer details such as name, phone, country, city, address, and note.
 8. User places the order.
-9. Order and order items are saved in Supabase.
+9. Order and order items are saved in PostgreSQL.
 10. User is redirected to order details and can later review all orders in the account area.
 
 ### Platform Admin Flow
@@ -221,7 +231,8 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 - [x] Next.js app scaffold is in place.
 - [x] App Router page structure is set up under `app/`.
 - [x] Shared layout and global styling are configured.
-- [x] Supabase client integration exists in `lib/supabase-client.ts`.
+- [x] PostgreSQL connection exists in `lib/db.ts`.
+- [x] Legacy Supabase client guard exists only to prevent old imports from crashing while migration continues.
 - [x] Basic TypeScript types and reusable utilities are in place.
 
 ### 2. Storefront Experience
@@ -255,16 +266,16 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 - [x] Cart totals and shipping calculations exist.
 - [x] Checkout page exists.
 - [x] Checkout collects buyer details.
-- [x] Checkout creates orders in Supabase.
+- [x] Checkout creates orders in PostgreSQL.
 - [x] Checkout creates vendor sub-orders for vendor-owned items.
-- [x] Checkout creates order items in Supabase.
+- [x] Checkout creates order items in PostgreSQL.
 - [x] Checkout clears selected quote/cart items after successful order placement.
 
 ### 5. Customer Order Management
 
 - [x] Orders list page exists.
 - [x] Order detail page exists.
-- [x] Orders are loaded from Supabase for the logged-in customer.
+- [x] Orders are loaded from PostgreSQL for the logged-in customer.
 - [x] Order items are grouped for display.
 - [x] Basic order print/save support exists on the orders page.
 
@@ -279,15 +290,19 @@ The current frontend theme uses a clean, modern marketplace style focused on cla
 - [x] Admin add product page exists.
 - [x] Admin edit product page exists.
 - [x] Product form component exists.
-- [x] Product create/update helpers for Supabase exist.
+- [x] Product create/update helpers for PostgreSQL-backed admin APIs exist.
+- [x] Admin categories page uses PostgreSQL-backed APIs.
+- [x] Admin brands page uses PostgreSQL-backed APIs.
+- [x] Admin customer management reads PostgreSQL data.
+- [x] Admin reviews, notifications, homepage themes/content/product sections, shipping, and settings use PostgreSQL-backed APIs.
 
 ## In Progress or Partially Done
 
 - [x] Admin structure has been started.
-- [ ] Admin categories page is only a placeholder.
-- [ ] Admin customers page still needs real data and tools.
+- [x] Admin categories page is connected to PostgreSQL-backed APIs.
+- [x] Admin customers page reads real PostgreSQL data.
 - [x] Admin settings page now has real persisted settings management.
-- [~] Storefront catalog list and detail pages are Supabase-backed, and the buying flow now uses real variant data, but richer detail parity is still incomplete.
+- [~] Storefront catalog list and detail pages are PostgreSQL-backed, and the buying flow now uses real variant data, but richer detail parity is still incomplete.
 - [~] Admin product management is partially connected to the public storefront, and cart/checkout snapshots are stronger, but the data model is not fully finalized yet.
 - [ ] Search/filter behavior needs full backend-connected implementation.
 - [ ] Wishlist appears started, but the full wishlist user flow is not yet complete.
@@ -301,7 +316,7 @@ The app has moved past the old split where the public catalog pages depended mai
 
 The current gap is now more specific:
 
-- public catalog pages use Supabase
+- public catalog pages use VPS PostgreSQL
 - product detail purchasing now uses real variant data, but richer storefront fields are still partly derived
 - cart and checkout now use intentional lightweight snapshots, but the snapshot-vs-validation boundary still needs to be finalized
 
@@ -351,7 +366,7 @@ This roadmap is the execution layer of the project plan. It is meant to help us 
 - [x] Customer order pages exist
 - [x] Admin orders flow exists
 - [x] Admin product management has started
-- [~] Product data is more strongly aligned between Supabase, storefront UI mapping, and quote/cart snapshots, but the final shared shape is not fully locked
+- [~] Product data is more strongly aligned between PostgreSQL, storefront UI mapping, and quote/cart snapshots, but the final shared shape is not fully locked
 - [~] Admin area is partially complete
 - [~] Multivendor foundation is implemented, but vendor-aware order flow and storefront exposure are not complete yet
 - [ ] Formal schema, QA, and release documentation are not complete yet
@@ -380,21 +395,21 @@ Tasks:
 Deliverables:
 - [ ] Final product field map
 - [ ] Product schema decision note
-- [ ] Clear migration path from mock data to Supabase
+- [ ] Clear migration path from mock data to VPS PostgreSQL
 
 ### Phase B: Storefront Data Migration
 
 Goal:
-Move the public catalog from mock product data to Supabase without breaking browsing or ordering.
+Move the public catalog from mock product data to VPS PostgreSQL without breaking browsing or ordering.
 
 Success criteria:
-- Public product listing reads from Supabase
-- Product details read from Supabase
+- Public product listing reads from PostgreSQL
+- Product details read from PostgreSQL
 - Public catalog shows only valid active products
 
 Tasks:
-- [x] Build Supabase queries for public product list
-- [x] Build Supabase query for product details by slug
+- [x] Build PostgreSQL queries for public product list
+- [x] Build PostgreSQL query for product details by slug
 - [x] Refactor `app/products/page.tsx` to use database-backed data
 - [x] Refactor `app/products/[slug]/page.tsx` to use database-backed data
 - [ ] Refactor category browsing to work with real data
@@ -410,7 +425,7 @@ Deliverables:
 ### Phase C: Cart, Checkout, and Order Data Stabilization
 
 Goal:
-Ensure cart, checkout, and order creation continue working after product data is moved to Supabase.
+Ensure cart, checkout, and order creation continue working after product data is moved to PostgreSQL.
 
 Success criteria:
 - Cart still groups items correctly
@@ -473,15 +488,15 @@ Tasks:
 - [x] Admin order detail exists
 - [x] Admin order status update flow exists
 - [ ] Improve internal notes and order operations workflow
-- [ ] Build real customer management page
+- [x] Build real customer management page
 - [x] Build real admin settings page
-- [~] Replace simple email-based admin gate with role-based authorization
+- [x] Replace simple email-based admin gate with role-based authorization
 - [ ] Define platform admin permissions clearly
 
 Deliverables:
-- [ ] Customer management screen
+- [x] Customer management screen
 - [x] Settings management screen
-- [ ] Role-based platform admin control
+- [x] Role-based platform admin control
 
 ### Phase F: Multivendor Foundation
 
@@ -595,8 +610,8 @@ Success criteria:
 Tasks:
 - [x] Add schema documentation
 - [ ] Add migration/setup documentation
-- [~] Review RLS and access rules for each table
-- [x] Add vendor-specific RLS rules
+- [~] Review app-level route/page guards and database access rules
+- [x] Add vendor-specific access rules in the data model and admin/vendor routes
 - [ ] Add validation rules for product forms
 - [ ] Add validation rules for checkout payloads
 - [ ] Replace starter metadata and branding leftovers
@@ -627,7 +642,7 @@ Deliverables:
 
 ### Current Active Work Area
 
-- [~] Aligning product detail, cart, and checkout data around the real Supabase product source
+- [~] Aligning product detail, cart, and checkout data around the real PostgreSQL product source
 - [~] Expanding the project plan into a full product and architecture guide
 - [~] Extending the shipped multivendor foundation into vendor-aware orders and storefront behavior
 
@@ -649,8 +664,8 @@ Deliverables:
 
 ### Next
 
-- [ ] Category CRUD
-- [ ] Customer admin page
+- [x] Category CRUD
+- [x] Customer admin page
 - [x] Admin settings page
 - [~] Role-based admin authorization
 
@@ -687,7 +702,7 @@ Deliverables:
 - [x] Admin product list
 - [x] Admin product create/edit screens
 - [ ] Product delete or archive flow
-- [ ] Category CRUD
+- [x] Category CRUD
 - [ ] Product/category relationship management
 - [ ] Product media/gallery management
 - [ ] Product status and publish controls
@@ -700,9 +715,9 @@ Deliverables:
 - [x] Admin order status updates
 - [x] Admin order detail page
 - [ ] Internal order notes workflow refinement
-- [ ] Customer management screen with real Supabase data
-- [ ] Admin settings with real persistence
-- [ ] Admin access policy hardening beyond client-side email checks
+- [x] Customer management screen with real PostgreSQL data
+- [x] Admin settings with real persistence
+- [x] Admin access policy hardening beyond client-side email checks
 
 ### Phase 4: Add Multivendor Foundation
 
@@ -732,13 +747,13 @@ Deliverables:
 
 ### Phase 6: Data and Backend Hardening
 
-- [x] Supabase client usage started
+- [x] PostgreSQL client usage started
 - [x] Orders and order items persistence started
 - [x] Product table usage started in admin
 - [x] Add schema documentation
-- [ ] Add row-level security review for all tables
+- [ ] Add authorization review for all admin/vendor/customer routes
 - [ ] Validate insert/update permissions for admin-only actions
-- [ ] Add row-level security for vendor-owned data
+- [ ] Add route-level and query-level checks for vendor-owned data
 - [ ] Add vendor payout/reporting data model
 - [ ] Add input validation for product forms and checkout payloads
 - [ ] Add migration notes for required columns and tables
@@ -802,7 +817,7 @@ Deliverables:
 
 ## Suggested Execution Order
 
-1. Connect public product pages to Supabase so admin-managed products power the storefront.
+1. Connect public product pages to PostgreSQL so admin-managed products power the storefront.
 2. Finalize product schema so it can support vendor ownership cleanly.
 3. Add multivendor database foundation and vendor-aware permissions.
 4. Refactor cart, checkout, and orders to use real vendor data.
@@ -814,17 +829,17 @@ Deliverables:
 - [ ] Audit current product fields used by `mock-products` vs `products` table.
 - [ ] Define final product schema for gallery, specs, description, badge, reviews, and variants.
 - [x] Extend the schema design for vendor ownership and vendor roles.
-- [x] Refactor public catalog pages to read from Supabase.
+- [x] Refactor public catalog pages to read from PostgreSQL.
 - [x] Refactor product detail purchase flow to use real variant data.
 - [~] Remove hardcoded seller labels and replace them with vendor data.
 - [~] Refactor cart/checkout dependencies that still assume mock product records.
 - [~] Update README with real setup instructions.
-- [x] Add a separate schema or setup document for Supabase tables and policies.
+- [x] Add a separate schema/setup document for PostgreSQL tables and access rules.
 
 ## Definition of Done for the Next Milestone
 
-- [x] Public product list uses Supabase data.
-- [x] Public product detail uses Supabase data.
+- [x] Public product list uses PostgreSQL data.
+- [x] Public product detail uses PostgreSQL data.
 - [~] Cart and checkout still work after removing mock dependency, including unavailable-item blocking.
 - [ ] Admin-created product appears correctly on the storefront.
 - [ ] Inactive product does not appear publicly.

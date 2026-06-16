@@ -34,18 +34,19 @@ async function getAccessToken() {
 
 async function authorizedHomepageFetch<T>(input: string, init?: RequestInit) {
   const accessToken = await getAccessToken();
+  const headers = new Headers(init?.headers);
 
-  if (!accessToken) {
-    throw new Error("Please login again.");
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+
+  if (init?.body) {
+    headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(input, {
     ...init,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
-      ...(init?.headers ?? {}),
-    },
+    headers,
   });
 
   const rawBody = await response.text();

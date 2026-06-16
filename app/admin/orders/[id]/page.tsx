@@ -4,10 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
-import { getAdminAccessState } from "@/lib/admin-access";
 import { ORDER_STATUSES, formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
-import { getVendorsByIds } from "@/lib/vendors/queries";
 import type { OrderItemRow, ShippingMethodRow, VendorOrderRow, VendorOrderStatus, VendorRow } from "@/types/product-db";
 
 type OrderStatus = VendorOrderStatus;
@@ -156,37 +153,28 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadOrder = async () => {
       const resolvedParams = await params;
       const orderId = resolvedParams.id;
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch(`/api/admin/orders/${orderId}`, { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        order?: OrderRow | null;
+        orderItems?: OrderItemRow[];
+        vendorOrders?: VendorOrderRow[];
+        vendors?: VendorRow[];
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const [{ data: fetchedOrder, error: orderError }, { data: fetchedItems }, { data: fetchedVendorOrders }] =
-        await Promise.all([
-          supabase.from("orders").select("*").eq("id", orderId).single(),
-          supabase.from("order_items").select("*").eq("order_id", orderId),
-          supabase.from("vendor_orders").select("*").eq("order_id", orderId),
-        ]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (orderError || !fetchedOrder) {
+      if (!response.ok || !payload?.order) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load this order.");
         setOrder(null);
         setOrderItems([]);
         setVendorOrders([]);
@@ -195,12 +183,12 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
       }
 
       const normalizedOrder = {
-        ...(fetchedOrder as Omit<OrderRow, "status"> & { status: unknown }),
-        status: safeOrderStatus((fetchedOrder as { status?: unknown }).status),
+        ...(payload.order as Omit<OrderRow, "status"> & { status: unknown }),
+        status: safeOrderStatus((payload.order as { status?: unknown }).status),
       } satisfies OrderRow;
 
-      const items = (fetchedItems ?? []) as OrderItemRow[];
-      const normalizedVendorOrders = ((fetchedVendorOrders ?? []) as VendorOrderRow[]).map((vendorOrder) => ({
+      const items = payload.orderItems ?? [];
+      const normalizedVendorOrders = (payload.vendorOrders ?? []).map((vendorOrder) => ({
         ...vendorOrder,
         status: safeOrderStatus(vendorOrder.status),
         shipping_method: Array.isArray(vendorOrder.shipping_method) ? vendorOrder.shipping_method : [],
@@ -214,16 +202,11 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
         },
       }));
 
-      const vendorIds = normalizedVendorOrders.map((vendorOrder) => vendorOrder.vendor_id);
-      const vendorResult = await getVendorsByIds(vendorIds);
-
-      if (!isMounted) {
-        return;
-      }
-
-      const vendorById = new Map(vendorResult.data.map((vendor) => [vendor.id, vendor]));
+      const vendorById = new Map((payload.vendors ?? []).map((vendor) => [vendor.id, vendor]));
       const itemsByVendorOrderId = new Map<string, OrderItemRow[]>();
 
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
       items.forEach((item) => {
         if (!item.vendor_order_id) {
           return;
@@ -261,18 +244,18 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
       return;
     }
 
-    const supabase = getSupabaseClient();
-
     setIsUpdatingStatus(true);
     setErrorMessage("");
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: newStatus } as never)
-      .eq("id", order.id);
+    const response = await fetch(`/api/admin/orders/${order.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (error) {
-      setErrorMessage("Unable to update order status right now.");
+    if (!response.ok) {
+      setErrorMessage(payload?.error ?? "Unable to update order status right now.");
       setIsUpdatingStatus(false);
       return;
     }
@@ -289,20 +272,20 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
       return;
     }
 
-    const supabase = getSupabaseClient();
-
     setIsSavingNote(true);
     setErrorMessage("");
     setNoteMessage("");
 
-    const { error } = await supabase
-      .from("orders")
-      .update({ admin_note: adminNote.trim() || null } as never)
-      .eq("id", order.id);
+    const response = await fetch(`/api/admin/orders/${order.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminNote: adminNote.trim() || null }),
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (error) {
+    if (!response.ok) {
       setErrorMessage(
-        error.message.toLowerCase().includes("admin_note")
+        payload?.error?.toLowerCase().includes("admin_note")
           ? "The `admin_note` column is missing. Run: alter table orders add column admin_note text;"
           : "Unable to save admin note right now.",
       );

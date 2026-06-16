@@ -4,14 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 
 import { getEmailAvatarUrl } from "@/lib/account/email-avatar";
-import { getSupabaseClient } from "@/lib/supabase-client";
 
-const hasSupabaseEnv =
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+type HeaderUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  avatarUrl: string | null;
+};
 
 function UserIcon() {
   return (
@@ -33,13 +35,8 @@ function UserIcon() {
   );
 }
 
-function getUserInitial(user: User) {
-  const fullName =
-    typeof user.user_metadata?.full_name === "string"
-      ? user.user_metadata.full_name
-      : typeof user.user_metadata?.name === "string"
-        ? user.user_metadata.name
-        : "";
+function getUserInitial(user: HeaderUser) {
+  const fullName = user.name ?? "";
 
   if (fullName.trim()) {
     return fullName.trim().charAt(0).toUpperCase();
@@ -52,19 +49,15 @@ function getUserInitial(user: User) {
   return "U";
 }
 
-function getUserAvatarUrl(user: User) {
-  if (typeof user.user_metadata?.avatar_url === "string" && user.user_metadata.avatar_url.trim()) {
-    return user.user_metadata.avatar_url;
-  }
-
-  if (typeof user.user_metadata?.picture === "string" && user.user_metadata.picture.trim()) {
-    return user.user_metadata.picture;
+function getUserAvatarUrl(user: HeaderUser) {
+  if (user.avatarUrl?.trim()) {
+    return user.avatarUrl;
   }
 
   return getEmailAvatarUrl(user.email, 88);
 }
 
-function HeaderAvatar({ user }: { user: User }) {
+function HeaderAvatar({ user }: { user: HeaderUser }) {
   const avatarUrl = getUserAvatarUrl(user);
   const [imageFailed, setImageFailed] = useState(false);
 
@@ -90,39 +83,35 @@ function HeaderAvatar({ user }: { user: User }) {
 
 export default function HeaderAuthButton() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(hasSupabaseEnv);
+  const [user, setUser] = useState<HeaderUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!hasSupabaseEnv) {
-      return;
+    let isMounted = true;
+
+    async function loadCurrentUser() {
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = (await response.json()) as { user?: HeaderUser | null };
+
+        if (isMounted) {
+          setUser(data.user ?? null);
+        }
+      } catch {
+        if (isMounted) {
+          setUser(null);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     }
 
-    let isMounted = true;
-    let authSubscription: { unsubscribe: () => void } | null = null;
-    const supabase = getSupabaseClient();
-
-    supabase.auth.getUser().then(({ data }) => {
-      if (isMounted) {
-        setUser(data.user ?? null);
-        setIsLoading(false);
-      }
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        setUser(session?.user ?? null);
-        setIsLoading(false);
-      }
-    });
-
-    authSubscription = subscription;
+    void loadCurrentUser();
 
     return () => {
       isMounted = false;
-      authSubscription?.unsubscribe();
     };
   }, []);
 

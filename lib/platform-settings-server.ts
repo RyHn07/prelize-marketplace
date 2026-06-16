@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { cache } from "react";
 
+import { query } from "@/lib/db";
 import {
   PLATFORM_SETTINGS_SINGLETON_KEY,
   toPlatformSettingsFormValues,
@@ -24,6 +25,15 @@ const getServerSupabasePublicClient = cache(() => {
 });
 
 export async function getPlatformSettingsRecord(): Promise<PlatformSettingsRow | null> {
+  if (process.env.DATABASE_URL && (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+    const result = await query<PlatformSettingsRow>(
+      "select * from public.platform_settings where singleton_key = $1 limit 1",
+      [PLATFORM_SETTINGS_SINGLETON_KEY],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   const supabase = getServerSupabasePublicClient();
 
   if (!supabase) {

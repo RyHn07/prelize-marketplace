@@ -3,15 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { getAdminAccessState } from "@/lib/admin-access";
 import {
   DEFAULT_PLATFORM_SETTINGS,
-  PLATFORM_SETTINGS_SINGLETON_KEY,
   toPlatformSettingsFormValues,
   toPlatformSettingsUpsertPayload,
 } from "@/lib/platform-settings";
-import { uploadProductMedia } from "@/lib/media/storage";
-import { getSupabaseClient } from "@/lib/supabase-client";
 import type { PlatformSettingsFormValues, PlatformSettingsRow } from "@/types/platform-settings";
 
 function formatDateTime(value: string | null) {
@@ -141,50 +137,31 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadSettings = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/settings", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        settings?: PlatformSettingsRow | null;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail) {
-        setLoading(false);
-        return;
-      }
-
-      if (!access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("platform_settings")
-        .select("*")
-        .eq("singleton_key", PLATFORM_SETTINGS_SINGLETON_KEY)
-        .maybeSingle();
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (error) {
-        setErrorMessage(
-          error.message.toLowerCase().includes("relation")
-            ? "Platform settings table is missing. Run the latest Supabase migration, then reload this page."
-            : error.message,
-        );
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load settings.");
         setFormValues(DEFAULT_PLATFORM_SETTINGS);
         setLoading(false);
         return;
       }
 
-      const settings = (data ?? null) as PlatformSettingsRow | null;
+      const settings = payload.settings ?? null;
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
       setFormValues(toPlatformSettingsFormValues(settings));
       setLastUpdatedAt(settings?.updated_at ?? null);
       setLoading(false);
@@ -228,15 +205,7 @@ export default function AdminSettingsPage() {
     setSuccessMessage("");
 
     try {
-      const result = await uploadProductMedia(file);
-
-      if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? "Unable to upload image right now.");
-        return;
-      }
-
-      handleFieldChange(field, result.data.publicUrl);
-      setSuccessMessage("Image uploaded successfully.");
+      setErrorMessage("VPS media upload endpoint is not configured yet. Paste an existing image URL instead.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to upload image right now.");
     } finally {
@@ -247,32 +216,29 @@ export default function AdminSettingsPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const supabase = getSupabaseClient();
     const payload = toPlatformSettingsUpsertPayload(formValues);
 
     setSaving(true);
     setErrorMessage("");
     setSuccessMessage("");
 
-    const { data, error } = await supabase
-      .from("platform_settings")
-      .upsert(payload as never, {
-        onConflict: "singleton_key",
-      })
-      .select("*")
-      .single();
+    const response = await fetch("/api/admin/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = (await response.json().catch(() => null)) as {
+      error?: string;
+      settings?: PlatformSettingsRow;
+    } | null;
 
-    if (error) {
-      setErrorMessage(
-        error.message.toLowerCase().includes("relation")
-          ? "Platform settings table is missing. Run the latest Supabase migration, then save again."
-          : error.message,
-      );
+    if (!response.ok || !result?.settings) {
+      setErrorMessage(result?.error ?? "Unable to save settings.");
       setSaving(false);
       return;
     }
 
-    const settings = data as PlatformSettingsRow;
+    const settings = result.settings;
     setFormValues(toPlatformSettingsFormValues(settings));
     setLastUpdatedAt(settings.updated_at);
     setSuccessMessage("Platform settings saved successfully.");

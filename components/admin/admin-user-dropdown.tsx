@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import React from "react";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
 import { AdminDropdown } from "./admin-dropdown";
 import { AdminDropdownItem } from "./admin-dropdown-item";
 import { useAdminBranding } from "./use-admin-branding";
 
 export default function AdminUserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [adminEmail, setAdminEmail] = useState("admin@example.com");
+  const [adminEmail, setAdminEmail] = useState("");
   const brand = useAdminBranding();
 
   useEffect(() => {
@@ -19,8 +18,8 @@ export default function AdminUserDropdown() {
 
     const loadAdminUser = async () => {
       try {
-        const supabase = getSupabaseClient();
-        const { data } = await supabase.auth.getUser();
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = (await response.json()) as { user?: { email?: string | null } | null };
         const email = data.user?.email?.trim();
 
         if (isMounted && email) {
@@ -83,7 +82,7 @@ export default function AdminUserDropdown() {
       >
         <div>
           <span className="block text-sm font-medium text-gray-700">{brand.adminLabel}</span>
-          <span className="mt-0.5 block text-xs text-gray-500">{adminEmail}</span>
+          <span className="mt-0.5 block text-xs text-gray-500">{adminEmail || "Signed in"}</span>
         </div>
 
         <ul className="flex flex-col gap-1 border-b border-gray-200 pb-3 pt-4">

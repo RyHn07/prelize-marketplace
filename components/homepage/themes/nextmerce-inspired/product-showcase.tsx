@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import ProductCard from "@/components/product/product-card";
 import type { HomepageResolvedProductSection } from "@/types/product-db";
 
@@ -14,15 +16,15 @@ export default function ProductShowcase({ sections }: { sections: HomepageResolv
             <div>
               <h2 className="text-[14px] font-semibold tracking-tight text-slate-900 sm:text-3xl">{section.title}</h2>
             </div>
-            <a href="/products" className="text-[10px] font-medium text-[#615FFF] hover:text-[#5552e6] sm:text-sm sm:font-semibold sm:text-slate-500 sm:hover:text-slate-900">
+            <Link href="/products" className="text-[10px] font-medium text-[#615FFF] hover:text-[#5552e6] sm:text-sm sm:font-semibold sm:text-slate-500 sm:hover:text-slate-900">
               Browse all
-            </a>
+            </Link>
           </div>
 
           {section.products.length > 0 ? (
             <div className="grid grid-cols-2 gap-2 sm:gap-5 xl:grid-cols-4">
               {section.products.map((product) => (
-                <ProductCard key={`${section.id}-${product.id}`} product={product} />
+                <ProductCard key={`${section.id}-${product.id}`} product={product} showVendorName={false} />
               ))}
             </div>
           ) : (

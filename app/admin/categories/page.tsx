@@ -4,11 +4,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
-import { createCategory, deleteCategory, updateCategory } from "@/lib/categories/actions";
-import { getAdminCategories, getCategoryProductCounts, type AdminCategoryRow } from "@/lib/categories/queries";
-import { getAdminAccessState } from "@/lib/admin-access";
-import { uploadProductMedia } from "@/lib/media/storage";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import type { CategoryUpsertPayload } from "@/lib/categories/actions";
+import type { AdminCategoryRow } from "@/lib/categories/queries";
 
 type CategoryFormState = {
   name: string;
@@ -95,43 +92,34 @@ export default function AdminCategoriesPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const response = await fetch("/api/admin/categories", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        error?: string;
+        userEmail?: string | null;
+        categories?: AdminCategoryRow[];
+        productCounts?: Record<string, number>;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasAdminAccess(access.hasAdminAccess);
-
-      if (!access.userEmail || !access.hasAdminAccess) {
-        setLoading(false);
-        return;
-      }
-
-      const [categoryResult, countResult] = await Promise.all([getAdminCategories(), getCategoryProductCounts()]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (categoryResult.error) {
-        setErrorMessage(categoryResult.error.message);
+      if (!response.ok || !payload) {
+        setUserEmail(response.status === 401 ? null : "");
+        setHasAdminAccess(response.status !== 403);
+        setErrorMessage(payload?.error ?? "Unable to load categories.");
         setCategories([]);
         setProductCounts({});
         setLoading(false);
         return;
       }
 
-      if (countResult.error) {
-        setErrorMessage(countResult.error.message);
-      }
-
-      setCategories(categoryResult.data);
-      setProductCounts(countResult.data);
+      setUserEmail(payload.userEmail ?? null);
+      setHasAdminAccess(true);
+      setCategories(payload.categories ?? []);
+      setProductCounts(payload.productCounts ?? {});
       setLoading(false);
     };
 
@@ -226,19 +214,25 @@ export default function AdminCategoriesPage() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const payload = {
+    const payload: CategoryUpsertPayload = {
       name: trimmedName,
       slug: form.slug.trim() || toSlug(trimmedName),
       parent_id: form.parent_id || null,
       image_url: form.image_url.trim() || null,
     };
 
-    const result = editingCategoryId
-      ? await updateCategory(editingCategoryId, payload)
-      : await createCategory(payload);
+    const response = await fetch(editingCategoryId ? `/api/admin/categories/${editingCategoryId}` : "/api/admin/categories", {
+      method: editingCategoryId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = (await response.json().catch(() => null)) as {
+      data?: AdminCategoryRow | null;
+      error?: string;
+    } | null;
 
-    if (result.error || !result.data) {
-      setErrorMessage(result.error?.message ?? "Unable to save the category right now.");
+    if (!response.ok || !result?.data) {
+      setErrorMessage(result?.error ?? "Unable to save the category right now.");
       setIsSaving(false);
       return;
     }
@@ -278,19 +272,7 @@ export default function AdminCategoriesPage() {
     setSuccessMessage("");
 
     try {
-      const result = await uploadProductMedia(file);
-
-      if (result.error || !result.data) {
-        setErrorMessage(result.error?.message ?? "Unable to upload category image.");
-        setIsUploadingImage(false);
-        return;
-      }
-
-      setForm((current) => ({
-        ...current,
-        image_url: result.data!.publicUrl,
-      }));
-      setSuccessMessage("Category image uploaded successfully.");
+      setErrorMessage("VPS media upload endpoint is not configured yet. Paste an existing image URL instead.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to upload category image.");
     } finally {
@@ -303,10 +285,11 @@ export default function AdminCategoriesPage() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    const result = await deleteCategory(category.id);
+    const response = await fetch(`/api/admin/categories/${category.id}`, { method: "DELETE" });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (result.error) {
-      setErrorMessage(result.error.message);
+    if (!response.ok) {
+      setErrorMessage(result?.error ?? "Unable to delete category.");
       setDeletingCategoryId(null);
       return;
     }

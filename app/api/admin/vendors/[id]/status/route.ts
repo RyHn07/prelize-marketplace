@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { requireAdminRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { query } from "@/lib/db";
+import { requireAdminRequest } from "@/lib/supabase-admin";
 import type { VendorStatus } from "@/types/product-db";
 
 type StatusBody = {
@@ -23,18 +24,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "A valid vendor status is required." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const { error } = await supabase
-      .from("vendors")
-      .update({
-        status: nextStatus,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq("id", id);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    await query("update public.vendors set status = $1, updated_at = now() where id = $2", [nextStatus, id]);
 
     return NextResponse.json({ success: true, status: nextStatus });
   } catch (error) {

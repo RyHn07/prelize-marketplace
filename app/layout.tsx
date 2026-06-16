@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import "./globals.css";
-import PasswordRecoveryRedirect from "@/components/auth/password-recovery-redirect";
 import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 import { createRootMetadata } from "@/lib/seo";
 
@@ -19,7 +18,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body className="min-h-full flex flex-col font-sans antialiased">
-        <PasswordRecoveryRedirect />
         {children}
       </body>
     </html>

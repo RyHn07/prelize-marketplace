@@ -6,8 +6,6 @@ import Link from "next/link";
 import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
 import { createAdminProductRecord, updateAdminProductRecord } from "@/lib/admin-product-actions";
-import { getProductManagementAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
 
 export default function AdminNewProductPage() {
   const [loading, setLoading] = useState(true);
@@ -18,19 +16,23 @@ export default function AdminNewProductPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
 
     const validateAccess = async () => {
-      const access = await getProductManagementAccessState(supabase);
+      const response = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = (await response.json().catch(() => null)) as {
+        user?: { email?: string | null; role?: string | null } | null;
+      } | null;
 
       if (!isMounted) {
         return;
       }
 
-      setUserEmail(access.userEmail);
-      setHasProductManagementAccess(access.hasProductManagementAccess);
-      setManageableVendorIds(access.manageableVendorIds);
-      setCanAssignPlatformProducts(access.hasPlatformAdminAccess);
+      const user = response.ok ? payload?.user ?? null : null;
+      const isAdmin = user?.role === "platform_admin";
+      setUserEmail(user?.email ?? null);
+      setHasProductManagementAccess(isAdmin);
+      setManageableVendorIds([]);
+      setCanAssignPlatformProducts(isAdmin);
       setLoading(false);
     };
 

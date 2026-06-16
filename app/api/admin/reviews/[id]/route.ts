@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { deleteProductReview } from "@/lib/reviews";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { query } from "@/lib/db";
+import { requireAdminRequest } from "@/lib/supabase-admin";
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRequest(request);
@@ -12,14 +12,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   try {
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await deleteProductReview(id, supabase);
+    const result = await query("delete from public.product_reviews where id = $1 returning id", [id]);
 
-    if (result.error) {
-      return NextResponse.json({ error: result.error.message }, { status: 400 });
+    if (!result.rows[0]) {
+      return NextResponse.json({ error: "Review not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ data: result.data });
+    return NextResponse.json({ data: result.rows[0] });
   } catch (error) {
     return NextResponse.json(
       {
