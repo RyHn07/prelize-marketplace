@@ -22,8 +22,6 @@ import {
 } from "@/lib/international-shipping/utils";
 import { calculateProductGroupPricing, normalizeExchangeRate, roundCurrency } from "@/lib/product-pricing";
 import { createVendorOrderSummary } from "@/lib/orders/utils";
-import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
-import { getProductVariantMapByProductIds, getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
 import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
@@ -72,6 +70,13 @@ type CheckoutDraft = {
   selectedKeys: string[];
   selectedShippingProfiles: Record<string, string>;
   selectedInternationalShippingMethodId?: string;
+};
+
+type CartCatalogResponse = {
+  products?: ProductDbRow[];
+  variantsByProductId?: Record<string, ProductDbVariantRow[]>;
+  pricingByProductId?: Record<string, ResolvedProductPricingConfig>;
+  error?: string;
 };
 
 type BuyerForm = {
@@ -356,31 +361,28 @@ export default function CheckoutPage() {
         return;
       }
 
-      const result = await getProductsByIds(items.map((item) => item.productId));
+      const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
+      const params = new URLSearchParams();
+      params.set("ids", productIds.join(","));
+      const response = await fetch(`/api/public/cart?${params.toString()}`, { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as CartCatalogResponse | null;
 
       if (!isMounted) {
         return;
       }
 
-      setProductRecords(result.data);
-      const variantsResult = await getProductVariantMapByProductIds(result.data.map((product) => product.id));
-
-      if (!isMounted) {
-        return;
+      if (!response.ok || !result) {
+        throw new Error(result?.error ?? "Unable to load checkout item details.");
       }
 
-      setProductVariantsByProductId(variantsResult.data);
-      const pricingTierResult = await fetchResolvedProductPricingMap(result.data.map((product) => product.id));
-
-      if (!isMounted) {
-        return;
-      }
-
-      setPricingConfigByProductId(pricingTierResult.data);
+      const products = result.products ?? [];
+      setProductRecords(products);
+      setProductVariantsByProductId(new Map(Object.entries(result.variantsByProductId ?? {})));
+      setPricingConfigByProductId(result.pricingByProductId ?? {});
 
       const cndsProfileIds = Array.from(
         new Set(
-          result.data
+          products
             .map((product) => product.cnds_profile_id)
             .filter((profileId): profileId is string => typeof profileId === "string" && profileId.length > 0),
         ),
