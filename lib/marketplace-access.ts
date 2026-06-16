@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
-import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { hasPgDataClientEnv } from "@/lib/browser-app-client";
 import type { VendorMemberRole, VendorMemberStatus } from "@/types/product-db";
 
 const PLATFORM_ADMIN_ROLE = "platform_admin";
@@ -50,9 +50,9 @@ function normalizeVendorMemberStatus(value: unknown): VendorMemberStatus {
 }
 
 export async function getMarketplaceAccessState(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
 ): Promise<MarketplaceAccessState> {
-  if (!hasSupabaseClientEnv() && typeof window !== "undefined") {
+  if (!hasPgDataClientEnv() && typeof window !== "undefined") {
     const response = await fetch("/api/vendor/onboarding-status", { cache: "no-store" });
     const status = (await response.json().catch(() => null)) as {
       userId?: string | null;
@@ -96,7 +96,7 @@ export async function getMarketplaceAccessState(
     };
   }
 
-  const { data: authData } = await supabase.auth.getUser();
+  const { data: authData } = await dataClient.auth.getUser();
   const user = authData.user;
   const userId = user?.id ?? null;
   const userEmail = user?.email ?? null;
@@ -111,13 +111,13 @@ export async function getMarketplaceAccessState(
   }
 
   const [platformRoleResult, vendorMembersResult] = await Promise.all([
-    supabase
+    dataClient
       .from("platform_roles")
       .select("role")
       .eq("user_id", userId)
       .eq("role", PLATFORM_ADMIN_ROLE)
       .maybeSingle(),
-    supabase
+    dataClient
       .from("vendor_members")
       .select("vendor_id, role, status")
       .eq("user_id", userId)
@@ -148,9 +148,9 @@ export async function getMarketplaceAccessState(
 }
 
 export async function getProductManagementAccessState(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
 ): Promise<ProductManagementAccessState> {
-  const accessState = await getMarketplaceAccessState(supabase);
+  const accessState = await getMarketplaceAccessState(dataClient);
   const manageableVendorIds = accessState.vendorMemberships
     .filter((membership) => membership.status === "active")
     .map((membership) => membership.vendor_id);
@@ -164,9 +164,9 @@ export async function getProductManagementAccessState(
 }
 
 export async function getVendorWorkspaceAccessState(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
 ): Promise<VendorWorkspaceAccessState> {
-  const accessState = await getMarketplaceAccessState(supabase);
+  const accessState = await getMarketplaceAccessState(dataClient);
   const activeMembership = getCurrentVendorMembershipFromAccessState(accessState);
 
   return {
@@ -184,8 +184,8 @@ export function getCurrentVendorMembershipFromAccessState(
 }
 
 export async function getCurrentVendorMembership(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
 ): Promise<CurrentVendorMembership> {
-  const accessState = await getMarketplaceAccessState(supabase);
+  const accessState = await getMarketplaceAccessState(dataClient);
   return getCurrentVendorMembershipFromAccessState(accessState);
 }

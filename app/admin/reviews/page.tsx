@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type AdminReviewRow = {
   id: string;
@@ -20,8 +20,8 @@ type AdminReviewRow = {
 };
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
@@ -73,10 +73,10 @@ export default function AdminReviewsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadReviews = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

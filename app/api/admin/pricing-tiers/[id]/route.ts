@@ -5,7 +5,7 @@ import {
   updateAdminPricingTierProfile,
   validatePricingTierProfileInput,
 } from "@/lib/pricing-tiers/admin";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRequest(request);
@@ -23,8 +23,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await updateAdminPricingTierProfile(supabase, id, input);
+    const dataClient = getDatabaseServiceClient();
+    const result = await updateAdminPricingTierProfile(dataClient, id, input);
 
     if (result.error || !result.data) {
       return NextResponse.json(

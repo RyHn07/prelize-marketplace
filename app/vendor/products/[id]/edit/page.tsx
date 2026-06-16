@@ -6,7 +6,7 @@ import Link from "next/link";
 import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
 import ProductForm from "@/components/product/product-form";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { createVendorProductRecord, getVendorProductEditorRecord, updateVendorProductRecord } from "@/lib/vendor-product-actions";
 import type { ProductEditorRecord } from "@/types/product-db";
 
@@ -20,12 +20,12 @@ export default function VendorEditProductPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
       const resolvedParams = await params;
-      const access = await getVendorWorkspaceAccessState(supabase);
-      const membership = await getCurrentVendorMembership(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
+      const membership = await getCurrentVendorMembership(dataClient);
 
       if (!isMounted) {
         return;

@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export type AdminCategoryRow = {
   id: string;
@@ -29,8 +29,8 @@ function normalizeCategory(row: AdminCategoryRow): AdminCategoryRow {
 }
 
 export async function getAdminCategories() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, image_url, created_at").order("name", {
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("categories").select("id, name, slug, parent_id, image_url, created_at").order("name", {
     ascending: true,
   });
 
@@ -48,8 +48,8 @@ export async function getAdminCategories() {
 }
 
 export async function getCategoryProductCounts() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("products").select("category_id").not("category_id", "is", null);
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("products").select("category_id").not("category_id", "is", null);
 
   if (error && isMissingRelationError(error.message)) {
     return {

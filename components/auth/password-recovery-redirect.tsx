@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export const PASSWORD_RECOVERY_STORAGE_KEY = "prelize-password-recovery";
 
@@ -25,7 +25,7 @@ export default function PasswordRecoveryRedirect() {
 
     const {
       data: { subscription },
-    } = getSupabaseClient().auth.onAuthStateChange((event) => {
+    } = getPgDataClient().auth.onAuthStateChange((event) => {
       if (event !== "PASSWORD_RECOVERY") {
         return;
       }

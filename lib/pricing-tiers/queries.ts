@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   PricingTierProfileOption,
   PricingTierProfileRow,
@@ -98,8 +98,8 @@ function getPricingTierProfileSelect() {
 }
 
 export async function getPricingTierProfilesForAdmin() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .select(getPricingTierProfileSelect())
     .order("created_at", { ascending: false });
@@ -128,8 +128,8 @@ export async function getPricingTierProfilesForVendor(
     };
   }
 
-  const supabase = getSupabaseClient();
-  let query = supabase
+  const dataClient = getPgDataClient();
+  let query = dataClient
     .from("pricing_tier_profiles")
     .select(getPricingTierProfileSelect())
     .order("created_at", { ascending: false });
@@ -169,8 +169,8 @@ export async function getPricingTierProfileById(id: string) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .select(getPricingTierProfileSelect())
     .eq("id", id)
@@ -199,8 +199,8 @@ export async function getPricingTierProfileMapByIds(profileIds: string[]) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .select(getPricingTierProfileSelect())
     .in("id", uniqueIds);

@@ -15,7 +15,7 @@ import {
   safeOrderStatus,
 } from "@/lib/orders/utils";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { OrderItemRow, ShippingMethodRow, VendorOrderRow } from "@/types/product-db";
 
 type ParentOrderRow = {
@@ -67,11 +67,11 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadVendorOrder = async () => {
       const resolvedParams = await params;
-      const access = await getVendorWorkspaceAccessState(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
 
       if (!isMounted) {
         return;
@@ -86,7 +86,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
         return;
       }
 
-      const { data: fetchedVendorOrder, error: vendorOrderError } = await supabase
+      const { data: fetchedVendorOrder, error: vendorOrderError } = await dataClient
         .from("vendor_orders")
         .select("*")
         .eq("id", resolvedParams.id)
@@ -114,12 +114,12 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       };
 
       const [{ data: fetchedParentOrder }, { data: fetchedItems }] = await Promise.all([
-        supabase
+        dataClient
           .from("orders")
           .select("id, order_number, user_email, status, buyer, created_at")
           .eq("id", normalizedVendorOrder.order_id)
           .maybeSingle(),
-        supabase
+        dataClient
           .from("order_items")
           .select("*")
           .eq("vendor_order_id", normalizedVendorOrder.id),
@@ -163,11 +163,11 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       return;
     }
 
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
     setIsUpdatingStatus(true);
     setErrorMessage("");
 
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("vendor_orders")
       .update({ status: nextStatus } as never)
       .eq("id", vendorOrder.id)
@@ -179,7 +179,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       return;
     }
 
-    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await supabase
+    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await dataClient
       .from("vendor_orders")
       .select("status")
       .eq("order_id", vendorOrder.order_id);
@@ -211,7 +211,7 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
     const currentParentStatus = safeOrderStatus(parentOrder.status);
 
     if (currentParentStatus !== derivedParentStatus) {
-      const { error: parentOrderSyncError } = await supabase
+      const { error: parentOrderSyncError } = await dataClient
         .from("orders")
         .update({ status: derivedParentStatus } as never)
         .eq("id", vendorOrder.order_id);
@@ -249,12 +249,12 @@ export default function VendorOrderDetailsPage({ params }: { params: Promise<{ i
       return;
     }
 
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
     setIsSavingNote(true);
     setErrorMessage("");
     setNoteMessage("");
 
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("vendor_orders")
       .update({ vendor_note: vendorNote.trim() || null } as never)
       .eq("id", vendorOrder.id)

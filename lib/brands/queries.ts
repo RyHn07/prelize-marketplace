@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export type AdminBrandRow = {
   id: string;
@@ -27,8 +27,8 @@ function normalizeBrand(row: AdminBrandRow): AdminBrandRow {
 }
 
 export async function getAdminBrands() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("brands")
     .select("id, name, slug, image_url, created_at")
     .order("name", { ascending: true });
@@ -47,8 +47,8 @@ export async function getAdminBrands() {
 }
 
 export async function getBrandProductCounts() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("products").select("brand_id").not("brand_id", "is", null);
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("products").select("brand_id").not("brand_id", "is", null);
 
   if (error && isMissingRelationError(error.message)) {
     return {

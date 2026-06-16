@@ -9,7 +9,7 @@ import { EcommerceMetrics } from "@/components/admin/dashboard/ecommerce-metrics
 import type { DashboardMetricItem } from "@/components/admin/dashboard/types";
 import { getProductsForVendors } from "@/lib/products/queries";
 import { formatBDT, formatOrderDate, getStatusColor, safeOrderStatus } from "@/lib/orders/utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 import type {
   CndsShippingProfileRow,
@@ -106,7 +106,7 @@ export default function VendorDashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadStatus = async () => {
       try {
@@ -129,12 +129,12 @@ export default function VendorDashboardPage() {
         const vendorId = onboardingStatus.vendorId;
         const [{ data: vendor }, productResult, { data: orders }, { data: cndsProfiles }, { data: pricingProfiles }, { data: parentOrders }] =
           await Promise.all([
-            supabase.from("vendors").select("*").eq("id", vendorId).maybeSingle(),
-            getProductsForVendors([vendorId], supabase),
-            supabase.from("vendor_orders").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
-            supabase.from("cnds_shipping_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
-            supabase.from("pricing_tier_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
-            supabase.from("orders").select("id, order_number").order("created_at", { ascending: false }),
+            dataClient.from("vendors").select("*").eq("id", vendorId).maybeSingle(),
+            getProductsForVendors([vendorId], dataClient),
+            dataClient.from("vendor_orders").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
+            dataClient.from("cnds_shipping_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
+            dataClient.from("pricing_tier_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
+            dataClient.from("orders").select("id, order_number").order("created_at", { ascending: false }),
           ]);
 
         if (!isMounted) {

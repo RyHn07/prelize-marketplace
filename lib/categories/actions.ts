@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { AdminCategoryRow } from "@/lib/categories/queries";
 
 export type CategoryUpsertPayload = {
@@ -36,13 +36,13 @@ function isSlugConstraintError(message: string) {
 }
 
 async function resolveUniqueCategorySlug(
-  supabase: ReturnType<typeof getSupabaseClient>,
+  dataClient: ReturnType<typeof getPgDataClient>,
   rawSlug: string,
   excludeId?: string,
 ) {
   const baseSlug = normalizeCategorySlug(rawSlug);
   const slugPattern = `${baseSlug}-%`;
-  let query = supabase
+  let query = dataClient
     .from("categories")
     .select("id, slug")
     .or(`slug.eq.${baseSlug},slug.like.${slugPattern}`);
@@ -94,8 +94,8 @@ function buildSchemaErrorMessage(message: string) {
 }
 
 export async function createCategory(payload: CategoryUpsertPayload) {
-  const supabase = getSupabaseClient();
-  const slugResult = await resolveUniqueCategorySlug(supabase, payload.slug || payload.name);
+  const dataClient = getPgDataClient();
+  const slugResult = await resolveUniqueCategorySlug(dataClient, payload.slug || payload.name);
 
   if (slugResult.error) {
     return {
@@ -104,7 +104,7 @@ export async function createCategory(payload: CategoryUpsertPayload) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("categories")
     .insert({
       name: payload.name.trim(),
@@ -135,8 +135,8 @@ export async function createCategory(payload: CategoryUpsertPayload) {
 }
 
 export async function updateCategory(id: string, payload: CategoryUpsertPayload) {
-  const supabase = getSupabaseClient();
-  const slugResult = await resolveUniqueCategorySlug(supabase, payload.slug || payload.name, id);
+  const dataClient = getPgDataClient();
+  const slugResult = await resolveUniqueCategorySlug(dataClient, payload.slug || payload.name, id);
 
   if (slugResult.error) {
     return {
@@ -145,7 +145,7 @@ export async function updateCategory(id: string, payload: CategoryUpsertPayload)
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("categories")
     .update({
       name: payload.name.trim(),
@@ -177,13 +177,13 @@ export async function updateCategory(id: string, payload: CategoryUpsertPayload)
 }
 
 export async function deleteCategory(id: string) {
-  const supabase = getSupabaseClient();
+  const dataClient = getPgDataClient();
   const [{ count, error: linkedProductsError }, { count: childCount, error: childCountError }] = await Promise.all([
-    supabase
+    dataClient
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("category_id", id),
-    supabase
+    dataClient
       .from("categories")
       .select("id", { count: "exact", head: true })
       .eq("parent_id", id),
@@ -223,7 +223,7 @@ export async function deleteCategory(id: string) {
     };
   }
 
-  const { error } = await supabase.from("categories").delete().eq("id", id);
+  const { error } = await dataClient.from("categories").delete().eq("id", id);
 
   if (error) {
     return {

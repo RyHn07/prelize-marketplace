@@ -1,7 +1,7 @@
 "use client";
 
 import type { HomepageThemeEditorRecord, HomepageThemeInput } from "@/lib/homepage/admin";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   HomepageBannerRow,
   HomepageContentBlockRow,
@@ -27,8 +27,8 @@ type HomepageBannerPayload = Omit<HomepageBannerRow, "id" | "created_at">;
 type HomepageProductSectionPayload = Omit<HomepageProductSectionRow, "id" | "created_at">;
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 

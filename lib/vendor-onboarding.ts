@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   VendorInvitationStatus,
   VendorMemberStatus,
@@ -42,8 +42,8 @@ export type VendorRegistrationPayload = {
 };
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 

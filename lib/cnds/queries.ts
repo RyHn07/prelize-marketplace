@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   CndsShippingPricingType,
   CndsShippingProfileOption,
@@ -94,8 +94,8 @@ function toProfileOption(profile: CndsShippingProfileRow): CndsShippingProfileOp
 }
 
 export async function getActiveCndsShippingProfiles() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
@@ -120,8 +120,8 @@ export async function getActiveCndsShippingProfilesByIds(profileIds: string[]) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
@@ -148,8 +148,8 @@ export async function getCndsShippingProfilesForVendor(
     };
   }
 
-  const supabase = getSupabaseClient();
-  let query = supabase
+  const dataClient = getPgDataClient();
+  let query = dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",

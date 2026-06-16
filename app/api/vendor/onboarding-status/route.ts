@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUserFromCookie, type AuthUser } from "@/lib/auth/session";
 import { query } from "@/lib/db";
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 import type { VendorInvitationStatus, VendorMemberRole, VendorMemberStatus, VendorStatus } from "@/types/product-db";
 
 type OnboardingUser = {
@@ -103,18 +103,18 @@ export async function GET(request: Request) {
   }
 
   try {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
       return NextResponse.json(await getCookieVendorStatus(user));
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const dataClient = getDatabaseServiceClient();
     const [{ data: invitation }, { data: membership }] = await Promise.all([
-      supabase
+      dataClient
         .from("vendor_invitations")
         .select("status")
         .eq("user_id", user.id)
         .maybeSingle(),
-      supabase
+      dataClient
         .from("vendor_members")
         .select("vendor_id, role, status")
         .eq("user_id", user.id)
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
 
     const vendorId = (membership as { vendor_id?: string } | null)?.vendor_id ?? null;
     const vendorStatusResult = vendorId
-      ? await supabase.from("vendors").select("name, status").eq("id", vendorId).maybeSingle()
+      ? await dataClient.from("vendors").select("name, status").eq("id", vendorId).maybeSingle()
       : { data: null, error: null };
 
     const invitationStatus = ((invitation as { status?: VendorInvitationStatus } | null)?.status ?? null) as VendorInvitationStatus | null;

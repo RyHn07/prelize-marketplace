@@ -11,7 +11,7 @@ import {
   type CndsProfileEditorPayload,
 } from "@/lib/cnds/actions";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { CndsShippingPricingType, CndsShippingProfileRow } from "@/types/product-db";
 
 type TierFormValue = {
@@ -142,11 +142,11 @@ export default function VendorCndsContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
-      const membership = await getCurrentVendorMembership(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
+      const membership = await getCurrentVendorMembership(dataClient);
 
       if (!isMounted) {
         return;

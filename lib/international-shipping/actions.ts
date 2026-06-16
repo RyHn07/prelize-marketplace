@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { InternationalShippingMethodRow } from "@/types/product-db";
 
 async function parseResponse(response: Response) {
@@ -16,8 +16,8 @@ async function parseResponse(response: Response) {
 }
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 

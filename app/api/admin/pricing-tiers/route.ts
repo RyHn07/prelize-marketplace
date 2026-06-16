@@ -6,7 +6,7 @@ import {
   parsePricingTierProfileInput,
   validatePricingTierProfileInput,
 } from "@/lib/pricing-tiers/admin";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);
@@ -16,8 +16,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await listAdminPricingTierProfiles(supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await listAdminPricingTierProfiles(dataClient);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 500 });
@@ -49,8 +49,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await createAdminPricingTierProfile(supabase, input);
+    const dataClient = getDatabaseServiceClient();
+    const result = await createAdminPricingTierProfile(dataClient, input);
 
     if (result.error || !result.data) {
       return NextResponse.json(

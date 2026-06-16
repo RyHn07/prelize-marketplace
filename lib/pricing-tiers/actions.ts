@@ -8,7 +8,7 @@ import {
   updatePricingTierProfileForVendor,
 } from "@/lib/pricing-tiers/admin";
 import type { PricingTierProfileRow, ProductPricingType } from "@/types/product-db";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export type PricingTierProfileEditorPayload = {
   name: string;
@@ -23,8 +23,8 @@ export type PricingTierProfileEditorPayload = {
 };
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
@@ -72,8 +72,8 @@ export async function updateAdminPricingTierProfileRequest(id: string, payload: 
 }
 
 export async function fetchVendorPricingTierProfiles(vendorId: string, options?: { includeInactive?: boolean }) {
-  const supabase = getSupabaseClient();
-  const result = await listPricingTierProfilesForVendor(supabase, vendorId, options);
+  const dataClient = getPgDataClient();
+  const result = await listPricingTierProfilesForVendor(dataClient, vendorId, options);
 
   if (result.error) {
     throw new Error(result.error.message);
@@ -88,8 +88,8 @@ export async function createVendorPricingTierProfileRequest(
   vendorId: string,
   payload: PricingTierProfileEditorPayload,
 ) {
-  const supabase = getSupabaseClient();
-  const result = await createPricingTierProfileForVendor(supabase, vendorId, payload);
+  const dataClient = getPgDataClient();
+  const result = await createPricingTierProfileForVendor(dataClient, vendorId, payload);
 
   if (result.error || !result.data) {
     throw new Error(result.error?.message ?? "Unable to create the pricing tier profile.");
@@ -105,8 +105,8 @@ export async function updateVendorPricingTierProfileRequest(
   id: string,
   payload: PricingTierProfileEditorPayload,
 ) {
-  const supabase = getSupabaseClient();
-  const result = await updatePricingTierProfileForVendor(supabase, id, vendorId, payload);
+  const dataClient = getPgDataClient();
+  const result = await updatePricingTierProfileForVendor(dataClient, id, vendorId, payload);
 
   if (result.error || !result.data) {
     throw new Error(result.error?.message ?? "Unable to update the pricing tier profile.");

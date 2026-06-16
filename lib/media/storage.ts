@@ -1,7 +1,7 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export const PRODUCT_MEDIA_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_PRODUCT_MEDIA_BUCKET ?? "product-media";
+  process.env.NEXT_PUBLIC_PRODUCT_MEDIA_BUCKET ?? "product-media";
 export const PRODUCT_MEDIA_FOLDER = "products";
 export const VENDOR_MEDIA_FOLDER = "vendors";
 
@@ -22,7 +22,7 @@ type ProductMediaMetadataRow = {
 };
 
 function getStorageClient() {
-  return getSupabaseClient().storage.from(PRODUCT_MEDIA_BUCKET);
+  return getPgDataClient().storage.from(PRODUCT_MEDIA_BUCKET);
 }
 
 function getVendorMediaPrefix(vendorId: string) {
@@ -73,7 +73,7 @@ export async function listProductMedia(options?: { vendorId?: string | null }) {
   const metadataMap = new Map<string, ProductMediaMetadataRow>();
 
   if (paths.length > 0) {
-    const metadataResult = await getSupabaseClient()
+    const metadataResult = await getPgDataClient()
       .from("product_media_metadata")
       .select("path, alt_text, created_at, updated_at")
       .in("path", paths);
@@ -172,7 +172,7 @@ export async function uploadVendorOnboardingMedia(
 
 export async function upsertProductMediaAltText(path: string, altText: string | null) {
   const normalizedAltText = altText?.trim() ? altText.trim() : null;
-  const supabase = getSupabaseClient() as unknown as {
+  const dataClient = getPgDataClient() as unknown as {
     from: (table: string) => {
       upsert: (values: Record<string, unknown>, options?: { onConflict?: string }) => {
         select: (columns: string) => {
@@ -182,7 +182,7 @@ export async function upsertProductMediaAltText(path: string, altText: string | 
     };
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("product_media_metadata")
     .upsert(
       {
@@ -212,7 +212,7 @@ export async function removeProductMedia(path: string) {
   const { error } = await getStorageClient().remove([path]);
 
   if (!error) {
-    const metadataDeleteResult = await getSupabaseClient()
+    const metadataDeleteResult = await getPgDataClient()
       .from("product_media_metadata")
       .delete()
       .eq("path", path);

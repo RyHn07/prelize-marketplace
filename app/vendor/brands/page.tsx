@@ -8,7 +8,7 @@ import { createBrand, deleteBrand, updateBrand } from "@/lib/brands/actions";
 import type { AdminBrandRow } from "@/lib/brands/queries";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { uploadProductMedia } from "@/lib/media/storage";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type BrandFormState = {
   name: string;
@@ -98,10 +98,10 @@ export default function VendorBrandsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
 
       if (!isMounted) {
         return;

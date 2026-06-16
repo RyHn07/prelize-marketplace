@@ -1,10 +1,10 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export const PAYMENT_PROOF_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_PAYMENT_PROOF_BUCKET ?? "payment-proofs";
+  process.env.NEXT_PUBLIC_PAYMENT_PROOF_BUCKET ?? "payment-proofs";
 
 function getPaymentProofStorageClient() {
-  return getSupabaseClient().storage.from(PAYMENT_PROOF_BUCKET);
+  return getPgDataClient().storage.from(PAYMENT_PROOF_BUCKET);
 }
 
 function sanitizeFileName(fileName: string) {

@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 
 import GoogleAuthButton from "@/components/auth/google-auth-button";
 
-const hasSupabaseEnv =
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) &&
-  Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const hasDataClientEnv =
+  Boolean(process.env.DATABASE_URL) &&
+  Boolean(process.env.DATABASE_URL);
 
 export default function LoginForm() {
   const router = useRouter();
@@ -140,7 +140,7 @@ export default function LoginForm() {
         </button>
       </form>
 
-      {hasSupabaseEnv ? (
+      {hasDataClientEnv ? (
         <div className="mt-5">
           <GoogleAuthButton />
         </div>

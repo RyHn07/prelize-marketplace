@@ -24,7 +24,7 @@ import { getCategoryById, mapProductDbToStorefrontProduct } from "@/lib/products
 import { getProductReviewSummaryMap, listProductReviews, mapReviewRowToStorefrontReview } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import { absoluteUrl, createPageMetadata, toJsonLdScriptContent } from "@/lib/seo";
-import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { hasPgDataClientEnv } from "@/lib/browser-app-client";
 import type { ProductSpecification } from "@/types/product";
 import type {
   CndsShippingProfileRow,
@@ -405,7 +405,7 @@ async function getLocalProductDetailBySlug(slug: string) {
 
 export async function generateMetadata({ params }: ProductDetailsPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const productDetail = hasSupabaseClientEnv()
+  const productDetail = hasPgDataClientEnv()
     ? (await getPublicProductDetailBySlug(slug)).data
     : await getLocalProductDetailBySlug(slug);
 
@@ -428,7 +428,7 @@ export async function generateMetadata({ params }: ProductDetailsPageProps): Pro
 
 export default async function ProductDetailsPage({ params }: ProductDetailsPageProps) {
   const { slug } = await params;
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     const localData = await getLocalProductDetailBySlug(slug);
 
     if (!localData) {

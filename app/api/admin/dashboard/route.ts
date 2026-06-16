@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getAdminOrders, getAdminProducts, getAdminVendors } from "@/lib/admin/vps-data";
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);

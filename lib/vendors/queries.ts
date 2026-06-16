@@ -1,4 +1,4 @@
-import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getPgDataClient, hasPgDataClientEnv } from "@/lib/browser-app-client";
 import type { ProductVendorOption, VendorMemberRow, VendorRow, VendorStatus } from "@/types/product-db";
 
 function normalizeVendorStatus(value: unknown): VendorStatus {
@@ -50,7 +50,7 @@ async function fetchVendorsFromApi() {
 }
 
 export async function getVendors() {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     if (typeof window !== "undefined") {
       return fetchVendorsFromApi();
     }
@@ -61,8 +61,8 @@ export async function getVendors() {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("vendors").select("*").order("name", { ascending: true });
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("vendors").select("*").order("name", { ascending: true });
 
   if (error && isMissingRelationError(error.message)) {
     return {
@@ -78,15 +78,15 @@ export async function getVendors() {
 }
 
 export async function getVendorById(id: string) {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: null as VendorRow | null,
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("vendors").select("*").eq("id", id).maybeSingle();
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("vendors").select("*").eq("id", id).maybeSingle();
 
   if (error && isMissingRelationError(error.message)) {
     return {
@@ -102,15 +102,15 @@ export async function getVendorById(id: string) {
 }
 
 export async function getVendorBySlug(slug: string) {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: null as VendorRow | null,
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("vendors").select("*").eq("slug", slug).maybeSingle();
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("vendors").select("*").eq("slug", slug).maybeSingle();
 
   if (error && isMissingRelationError(error.message)) {
     return {
@@ -135,15 +135,15 @@ export async function getVendorsByIds(ids: string[]) {
     };
   }
 
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: [] as VendorRow[],
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("vendors").select("*").in("id", scopedIds);
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("vendors").select("*").in("id", scopedIds);
 
   if (error && isMissingRelationError(error.message)) {
     return {
@@ -173,15 +173,15 @@ export async function getVendorOptions() {
 }
 
 export async function getVendorProductCounts() {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: {} as Record<string, number>,
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("products").select("vendor_id").not("vendor_id", "is", null);
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("products").select("vendor_id").not("vendor_id", "is", null);
 
   if (error && isMissingRelationError(error.message)) {
     return {
@@ -214,15 +214,15 @@ export async function getVendorProductCounts() {
 }
 
 export async function getVendorMemberships() {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: [] as VendorMemberRow[],
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("vendor_members")
     .select("id, vendor_id, user_id, role, status, created_at")
     .order("created_at", { ascending: false });
@@ -250,15 +250,15 @@ export type VendorOwnedProductDebugRow = {
 };
 
 export async function getVendorOwnedProductsDebug() {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: [] as VendorOwnedProductDebugRow[],
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("products")
     .select("id, name, slug, vendor_id, status, created_at")
     .not("vendor_id", "is", null)

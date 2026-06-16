@@ -10,7 +10,7 @@ import { HeaderCategoriesDesktop } from "@/components/header-categories-dropdown
 import HeaderServicesDropdown from "@/components/header-services-dropdown";
 import { query } from "@/lib/db";
 import { getProductCategoryOptions } from "@/lib/products/queries";
-import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { hasPgDataClientEnv } from "@/lib/browser-app-client";
 import type { ProductCategoryOption } from "@/types/product-db";
 
 const topBarLinks = [
@@ -234,7 +234,7 @@ function createSlugFallback(value: string) {
 
 async function getHeaderCategoryOptions() {
   try {
-    if (hasSupabaseClientEnv()) {
+    if (hasPgDataClientEnv()) {
       return getProductCategoryOptions();
     }
 

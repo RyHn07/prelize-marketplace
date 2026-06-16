@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import { normalizeCndsProfile } from "@/lib/cnds/queries";
 import type {
@@ -112,8 +112,8 @@ export function validateCndsProfileInput(input: CndsProfileInput) {
   return null;
 }
 
-async function fetchProfileById(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase
+async function fetchProfileById(dataClient: PgDataClient, id: string) {
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
@@ -127,8 +127,8 @@ async function fetchProfileById(supabase: SupabaseClient, id: string) {
   };
 }
 
-export async function listAdminCndsProfiles(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listAdminCndsProfiles(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
@@ -142,11 +142,11 @@ export async function listAdminCndsProfiles(supabase: SupabaseClient) {
 }
 
 export async function listCndsProfilesForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   vendorId: string,
   options?: { includeInactive?: boolean },
 ) {
-  let query = supabase
+  let query = dataClient
     .from("cnds_shipping_profiles")
     .select(
       "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",
@@ -167,11 +167,11 @@ export async function listCndsProfilesForVendor(
 }
 
 async function replaceProfileTiers(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   profileId: string,
   tiers: CndsProfileInput["tiers"],
 ) {
-  const { error: deleteError } = await supabase.from("cnds_shipping_tiers").delete().eq("profile_id", profileId);
+  const { error: deleteError } = await dataClient.from("cnds_shipping_tiers").delete().eq("profile_id", profileId);
 
   if (deleteError) {
     return deleteError;
@@ -189,12 +189,12 @@ async function replaceProfileTiers(
     sort_order: tier.sort_order ?? index,
   })) satisfies Array<Pick<CndsShippingTierRow, "profile_id" | "min_qty" | "max_qty" | "price" | "sort_order">>;
 
-  const { error: insertError } = await supabase.from("cnds_shipping_tiers").insert(rows as never);
+  const { error: insertError } = await dataClient.from("cnds_shipping_tiers").insert(rows as never);
   return insertError;
 }
 
-export async function createAdminCndsProfile(supabase: SupabaseClient, input: CndsProfileInput) {
-  const { data, error } = await supabase
+export async function createAdminCndsProfile(dataClient: PgDataClient, input: CndsProfileInput) {
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .insert({
       vendor_id: null,
@@ -213,7 +213,7 @@ export async function createAdminCndsProfile(supabase: SupabaseClient, input: Cn
     };
   }
 
-  const tiersError = await replaceProfileTiers(supabase, (data as { id: string }).id, input.tiers);
+  const tiersError = await replaceProfileTiers(dataClient, (data as { id: string }).id, input.tiers);
   if (tiersError) {
     return {
       data: null as CndsShippingProfileRow | null,
@@ -221,15 +221,15 @@ export async function createAdminCndsProfile(supabase: SupabaseClient, input: Cn
     };
   }
 
-  return fetchProfileById(supabase, (data as { id: string }).id);
+  return fetchProfileById(dataClient, (data as { id: string }).id);
 }
 
 export async function createCndsProfileForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   vendorId: string,
   input: CndsProfileInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("cnds_shipping_profiles")
     .insert({
       vendor_id: vendorId,
@@ -248,7 +248,7 @@ export async function createCndsProfileForVendor(
     };
   }
 
-  const tiersError = await replaceProfileTiers(supabase, (data as { id: string }).id, input.tiers);
+  const tiersError = await replaceProfileTiers(dataClient, (data as { id: string }).id, input.tiers);
   if (tiersError) {
     return {
       data: null as CndsShippingProfileRow | null,
@@ -256,15 +256,15 @@ export async function createCndsProfileForVendor(
     };
   }
 
-  return fetchProfileById(supabase, (data as { id: string }).id);
+  return fetchProfileById(dataClient, (data as { id: string }).id);
 }
 
 export async function updateAdminCndsProfile(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: CndsProfileInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("cnds_shipping_profiles")
     .update({
       name: input.name.trim(),
@@ -281,7 +281,7 @@ export async function updateAdminCndsProfile(
     };
   }
 
-  const tiersError = await replaceProfileTiers(supabase, id, input.tiers);
+  const tiersError = await replaceProfileTiers(dataClient, id, input.tiers);
   if (tiersError) {
     return {
       data: null as CndsShippingProfileRow | null,
@@ -289,16 +289,16 @@ export async function updateAdminCndsProfile(
     };
   }
 
-  return fetchProfileById(supabase, id);
+  return fetchProfileById(dataClient, id);
 }
 
 export async function updateCndsProfileForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   vendorId: string,
   input: CndsProfileInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("cnds_shipping_profiles")
     .update({
       name: input.name.trim(),
@@ -316,7 +316,7 @@ export async function updateCndsProfileForVendor(
     };
   }
 
-  const tiersError = await replaceProfileTiers(supabase, id, input.tiers);
+  const tiersError = await replaceProfileTiers(dataClient, id, input.tiers);
   if (tiersError) {
     return {
       data: null as CndsShippingProfileRow | null,
@@ -324,5 +324,5 @@ export async function updateCndsProfileForVendor(
     };
   }
 
-  return fetchProfileById(supabase, id);
+  return fetchProfileById(dataClient, id);
 }

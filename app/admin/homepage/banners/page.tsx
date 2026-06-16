@@ -10,7 +10,7 @@ import {
   fetchHomepageBanners,
   updateHomepageBannerRequest,
 } from "@/lib/homepage/actions";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { HomepageBannerRow } from "@/types/product-db";
 
 type EditableBanner = HomepageBannerRow;
@@ -46,10 +46,10 @@ export default function HomepageBannersPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

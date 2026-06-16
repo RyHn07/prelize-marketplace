@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { PLATFORM_SETTINGS_SINGLETON_KEY } from "@/lib/platform-settings";
 import { query } from "@/lib/db";
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 import type { PlatformSettingsUpsertPayload } from "@/types/platform-settings";
 
 export async function GET(request: Request) {

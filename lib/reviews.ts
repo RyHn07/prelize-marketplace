@@ -1,11 +1,11 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { ProductReview as StorefrontProductReview } from "@/types/product";
 import type { ProductReviewRow, ReviewEligibilityItem, VendorReviewNotificationStateRow } from "@/types/product-db";
 
-function resolveSupabaseClient(client?: SupabaseClient) {
-  return client ?? getSupabaseClient();
+function resolvePgDataClient(client?: PgDataClient) {
+  return client ?? getPgDataClient();
 }
 
 function isMissingRelationError(message: string) {
@@ -61,9 +61,9 @@ export function mapReviewRowToStorefrontReview(review: ProductReviewRow): Storef
   };
 }
 
-export async function listProductReviews(productId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+export async function listProductReviews(productId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_reviews")
     .select("id, product_id, vendor_id, order_id, order_item_id, user_id, user_email, rating, title, comment, created_at, updated_at")
     .eq("product_id", productId)
@@ -82,7 +82,7 @@ export async function listProductReviews(productId: string, client?: SupabaseCli
   };
 }
 
-export async function listProductReviewsByProductIds(productIds: string[], client?: SupabaseClient) {
+export async function listProductReviewsByProductIds(productIds: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -92,8 +92,8 @@ export async function listProductReviewsByProductIds(productIds: string[], clien
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_reviews")
     .select("id, product_id, vendor_id, order_id, order_item_id, user_id, user_email, rating, title, comment, created_at, updated_at")
     .in("product_id", uniqueIds)
@@ -121,7 +121,7 @@ export async function listProductReviewsByProductIds(productIds: string[], clien
   };
 }
 
-export async function getProductReviewSummaryMap(productIds: string[], client?: SupabaseClient) {
+export async function getProductReviewSummaryMap(productIds: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -131,8 +131,8 @@ export async function getProductReviewSummaryMap(productIds: string[], client?: 
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_reviews")
     .select("product_id, rating")
     .in("product_id", uniqueIds);
@@ -171,10 +171,10 @@ export async function listOrderReviewEligibility(
   userId: string,
   userEmail: string | null,
   orderId: string,
-  client?: SupabaseClient,
+  client?: PgDataClient,
 ) {
-  const supabase = resolveSupabaseClient(client);
-  const { data: order, error: orderError } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data: order, error: orderError } = await dataClient
     .from("orders")
     .select("id, user_id, user_email, status")
     .eq("id", orderId)
@@ -201,11 +201,11 @@ export async function listOrderReviewEligibility(
   }
 
   const [{ data: orderItems, error: itemsError }, { data: reviews, error: reviewsError }] = await Promise.all([
-    supabase
+    dataClient
       .from("order_items")
       .select("id, order_id, product_id, product_name, product_image, vendor_id, quantity, variant_name, variant_value")
       .eq("order_id", orderId),
-    supabase
+    dataClient
       .from("product_reviews")
       .select("id, product_id, vendor_id, order_id, order_item_id, user_id, user_email, rating, title, comment, created_at, updated_at")
       .eq("order_id", orderId)
@@ -287,11 +287,11 @@ export async function createProductReview(
     title: string | null;
     comment: string;
   },
-  client?: SupabaseClient,
+  client?: PgDataClient,
 ) {
-  const supabase = resolveSupabaseClient(client);
+  const dataClient = resolvePgDataClient(client);
   const now = new Date().toISOString();
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("product_reviews")
     .insert({
       ...payload,
@@ -307,9 +307,9 @@ export async function createProductReview(
   };
 }
 
-export async function deleteProductReview(reviewId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { error } = await supabase.from("product_reviews").delete().eq("id", reviewId);
+export async function deleteProductReview(reviewId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { error } = await dataClient.from("product_reviews").delete().eq("id", reviewId);
 
   return {
     data: { id: reviewId },
@@ -317,9 +317,9 @@ export async function deleteProductReview(reviewId: string, client?: SupabaseCli
   };
 }
 
-export async function ensureCustomerRole(userId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { error } = await supabase
+export async function ensureCustomerRole(userId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { error } = await dataClient
     .from("platform_roles")
     .upsert(
       {
@@ -335,15 +335,15 @@ export async function ensureCustomerRole(userId: string, client?: SupabaseClient
   };
 }
 
-export async function listAdminReviewRows(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function listAdminReviewRows(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
   const [reviewsResult, productsResult, vendorsResult] = await Promise.all([
-    supabase
+    dataClient
       .from("product_reviews")
       .select("id, product_id, vendor_id, order_id, order_item_id, user_id, user_email, rating, title, comment, created_at, updated_at")
       .order("created_at", { ascending: false }),
-    supabase.from("products").select("id, name, slug, vendor_id"),
-    supabase.from("vendors").select("id, name"),
+    dataClient.from("products").select("id, name, slug, vendor_id"),
+    dataClient.from("vendors").select("id, name"),
   ]);
 
   const productsById = new Map(
@@ -373,15 +373,15 @@ export async function listAdminReviewRows(client?: SupabaseClient) {
   };
 }
 
-export async function listVendorReviewRows(vendorId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function listVendorReviewRows(vendorId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
   const [{ data: reviews, error: reviewsError }, { data: products, error: productsError }] = await Promise.all([
-    supabase
+    dataClient
       .from("product_reviews")
       .select("id, product_id, vendor_id, order_id, order_item_id, user_id, user_email, rating, title, comment, created_at, updated_at")
       .eq("vendor_id", vendorId)
       .order("created_at", { ascending: false }),
-    supabase.from("products").select("id, name, slug").eq("vendor_id", vendorId),
+    dataClient.from("products").select("id, name, slug").eq("vendor_id", vendorId),
   ]);
 
   const productsById = new Map(
@@ -406,10 +406,10 @@ export async function listVendorReviewRows(vendorId: string, client?: SupabaseCl
 export async function getVendorReviewNotificationState(
   userId: string,
   vendorId: string,
-  client?: SupabaseClient,
+  client?: PgDataClient,
 ) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("vendor_review_notification_states")
     .select("user_id, vendor_id, last_read_at, created_at, updated_at")
     .eq("user_id", userId)
@@ -438,11 +438,11 @@ export async function getVendorReviewNotificationState(
 export async function markVendorReviewNotificationsRead(
   userId: string,
   vendorId: string,
-  client?: SupabaseClient,
+  client?: PgDataClient,
 ) {
-  const supabase = resolveSupabaseClient(client);
+  const dataClient = resolvePgDataClient(client);
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("vendor_review_notification_states")
     .upsert(
       {

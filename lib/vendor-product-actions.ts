@@ -2,7 +2,7 @@
 
 import type { ProductDbRow, ProductEditorRecord } from "@/types/product-db";
 import type { ProductEditorSavePayload } from "@/lib/products/actions";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type SaveProductResponse = {
   data: ProductDbRow | null;
@@ -10,8 +10,8 @@ type SaveProductResponse = {
 };
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 

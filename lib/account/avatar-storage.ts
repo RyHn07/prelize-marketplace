@@ -1,10 +1,10 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export const CUSTOMER_AVATAR_BUCKET =
-  process.env.NEXT_PUBLIC_SUPABASE_CUSTOMER_AVATAR_BUCKET ?? "customer-avatars";
+  process.env.NEXT_PUBLIC_CUSTOMER_AVATAR_BUCKET ?? "customer-avatars";
 
 function getAvatarStorageClient() {
-  return getSupabaseClient().storage.from(CUSTOMER_AVATAR_BUCKET);
+  return getPgDataClient().storage.from(CUSTOMER_AVATAR_BUCKET);
 }
 
 export async function uploadCustomerAvatar(userId: string, file: File) {

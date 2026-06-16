@@ -82,7 +82,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {error ? (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            We could not load some catalog data from Supabase. Showing currently available results only.
+            We could not load some catalog data from DataClient. Showing currently available results only.
           </div>
         ) : null}
 

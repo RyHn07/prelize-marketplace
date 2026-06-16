@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 export type AdminNotificationItem = {
   id: string;
@@ -76,8 +76,8 @@ function mapRowsToNotifications(rows: NotificationSourceRow[], lastReadAt: strin
     );
 }
 
-async function getAdminNotificationState(supabase: SupabaseClient, userId: string) {
-  const { data, error } = await supabase
+async function getAdminNotificationState(dataClient: PgDataClient, userId: string) {
+  const { data, error } = await dataClient
     .from("admin_notification_states")
     .select("user_id, last_read_at, created_at, updated_at")
     .eq("user_id", userId)
@@ -101,8 +101,8 @@ async function getAdminNotificationState(supabase: SupabaseClient, userId: strin
   };
 }
 
-async function getOrderNotifications(supabase: SupabaseClient) {
-  const { data } = await supabase
+async function getOrderNotifications(dataClient: PgDataClient) {
+  const { data } = await dataClient
     .from("orders")
     .select("id, order_number, user_email, status, created_at")
     .order("created_at", { ascending: false })
@@ -126,8 +126,8 @@ async function getOrderNotifications(supabase: SupabaseClient) {
   );
 }
 
-async function getProductNotifications(supabase: SupabaseClient) {
-  const { data } = await supabase
+async function getProductNotifications(dataClient: PgDataClient) {
+  const { data } = await dataClient
     .from("products")
     .select("id, name, status, created_at, updated_at")
     .order("created_at", { ascending: false })
@@ -155,15 +155,15 @@ async function getProductNotifications(supabase: SupabaseClient) {
   });
 }
 
-async function getReviewNotifications(supabase: SupabaseClient) {
+async function getReviewNotifications(dataClient: PgDataClient) {
   const [reviewsResult, productsResult, vendorsResult] = await Promise.all([
-    supabase
+    dataClient
       .from("product_reviews")
       .select("id, product_id, vendor_id, rating, comment, created_at")
       .order("created_at", { ascending: false })
       .limit(8),
-    supabase.from("products").select("id, name"),
-    supabase.from("vendors").select("id, name"),
+    dataClient.from("products").select("id, name"),
+    dataClient.from("vendors").select("id, name"),
   ]);
 
   const productsById = new Map(
@@ -203,14 +203,14 @@ async function getReviewNotifications(supabase: SupabaseClient) {
   });
 }
 
-async function getVendorNotifications(supabase: SupabaseClient) {
+async function getVendorNotifications(dataClient: PgDataClient) {
   const [vendorsResult, invitationsResult] = await Promise.all([
-    supabase
+    dataClient
       .from("vendors")
       .select("id, name, status, created_at, updated_at")
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase
+    dataClient
       .from("vendor_invitations")
       .select("user_id, status, created_at")
       .order("created_at", { ascending: false })
@@ -253,12 +253,12 @@ async function getVendorNotifications(supabase: SupabaseClient) {
 }
 
 async function getCatalogNotifications(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   table: "brands" | "categories",
   href: string,
   category: AdminNotificationItem["category"],
 ) {
-  const { data } = await supabase
+  const { data } = await dataClient
     .from(table)
     .select("id, name, created_at")
     .order("created_at", { ascending: false })
@@ -280,19 +280,19 @@ async function getCatalogNotifications(
   );
 }
 
-async function getHomepageNotifications(supabase: SupabaseClient) {
+async function getHomepageNotifications(dataClient: PgDataClient) {
   const [themesResult, sectionsResult, bannersResult] = await Promise.all([
-    supabase
+    dataClient
       .from("homepage_themes")
       .select("id, name, updated_at")
       .order("updated_at", { ascending: false })
       .limit(3),
-    supabase
+    dataClient
       .from("homepage_product_sections")
       .select("id, title, created_at")
       .order("created_at", { ascending: false })
       .limit(3),
-    supabase
+    dataClient
       .from("homepage_banners")
       .select("id, title, created_at")
       .order("created_at", { ascending: false })
@@ -347,8 +347,8 @@ async function getHomepageNotifications(supabase: SupabaseClient) {
   return [...themeRows, ...sectionRows, ...bannerRows];
 }
 
-async function getSettingsNotifications(supabase: SupabaseClient) {
-  const { data } = await supabase
+async function getSettingsNotifications(dataClient: PgDataClient) {
+  const { data } = await dataClient
     .from("platform_settings")
     .select("site_title, updated_at")
     .eq("singleton_key", "default")
@@ -370,19 +370,19 @@ async function getSettingsNotifications(supabase: SupabaseClient) {
   ];
 }
 
-export async function listAdminNotifications(supabase: SupabaseClient, userId: string) {
-  const stateResult = await getAdminNotificationState(supabase, userId);
+export async function listAdminNotifications(dataClient: PgDataClient, userId: string) {
+  const stateResult = await getAdminNotificationState(dataClient, userId);
   const lastReadAt = stateResult.data.last_read_at;
 
   const [reviews, orders, products, vendors, brands, categories, homepage, settings] = await Promise.all([
-    getReviewNotifications(supabase),
-    getOrderNotifications(supabase),
-    getProductNotifications(supabase),
-    getVendorNotifications(supabase),
-    getCatalogNotifications(supabase, "brands", "/admin/brands", "brands"),
-    getCatalogNotifications(supabase, "categories", "/admin/categories", "categories"),
-    getHomepageNotifications(supabase),
-    getSettingsNotifications(supabase),
+    getReviewNotifications(dataClient),
+    getOrderNotifications(dataClient),
+    getProductNotifications(dataClient),
+    getVendorNotifications(dataClient),
+    getCatalogNotifications(dataClient, "brands", "/admin/brands", "brands"),
+    getCatalogNotifications(dataClient, "categories", "/admin/categories", "categories"),
+    getHomepageNotifications(dataClient),
+    getSettingsNotifications(dataClient),
   ]);
 
   const notifications = mapRowsToNotifications(
@@ -398,9 +398,9 @@ export async function listAdminNotifications(supabase: SupabaseClient, userId: s
   };
 }
 
-export async function markAdminNotificationsRead(supabase: SupabaseClient, userId: string) {
+export async function markAdminNotificationsRead(dataClient: PgDataClient, userId: string) {
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("admin_notification_states")
     .upsert(
       {
@@ -420,19 +420,19 @@ export async function markAdminNotificationsRead(supabase: SupabaseClient, userI
 }
 
 export async function markAdminNotificationsReadUpTo(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   userId: string,
   occurredAt: string,
 ) {
   const normalizedOccurredAt = normalizeTimestamp(occurredAt) ?? new Date().toISOString();
-  const stateResult = await getAdminNotificationState(supabase, userId);
+  const stateResult = await getAdminNotificationState(dataClient, userId);
   const currentLastReadAt = normalizeTimestamp(stateResult.data.last_read_at) ?? "1970-01-01T00:00:00.000Z";
   const nextLastReadAt =
     new Date(normalizedOccurredAt).getTime() > new Date(currentLastReadAt).getTime()
       ? normalizedOccurredAt
       : currentLastReadAt;
 
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("admin_notification_states")
     .upsert(
       {

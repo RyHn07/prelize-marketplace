@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 import { normalizeCndsProfile } from "@/lib/cnds/queries";
 
 type RawCndsProfileLookupRow = {
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ profiles: [] });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const { data, error } = await supabase
+    const dataClient = getDatabaseServiceClient();
+    const { data, error } = await dataClient
       .from("cnds_shipping_profiles")
       .select(
         "id, vendor_id, name, description, pricing_type, is_active, created_at, cnds_shipping_tiers(id, profile_id, min_qty, max_qty, price, sort_order, created_at)",

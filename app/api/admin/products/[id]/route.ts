@@ -7,8 +7,8 @@ import {
 } from "@/lib/products/actions";
 import { getAdminProductEditorRecord } from "@/lib/admin/vps-data";
 import { getProductEditorRecord } from "@/lib/products/queries";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
-import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
+import { hasPgDataClientEnv } from "@/lib/browser-app-client";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRequest(request);
@@ -19,8 +19,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     const { id } = await params;
-    const result = hasSupabaseClientEnv()
-      ? await getProductEditorRecord(id, getSupabaseServiceRoleClient())
+    const result = hasPgDataClientEnv()
+      ? await getProductEditorRecord(id, getDatabaseServiceClient())
       : await getAdminProductEditorRecord(id);
 
     if (result.error) {
@@ -48,8 +48,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = (await request.json()) as ProductEditorSavePayload;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await updateProductEditorRecordWithClient(supabase, id, body);
+    const dataClient = getDatabaseServiceClient();
+    const result = await updateProductEditorRecordWithClient(dataClient, id, body);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });
@@ -75,8 +75,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   try {
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await deleteProductRecordWithClient(supabase, id);
+    const dataClient = getDatabaseServiceClient();
+    const result = await deleteProductRecordWithClient(dataClient, id);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });

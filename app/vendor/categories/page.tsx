@@ -6,7 +6,7 @@ import Link from "next/link";
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import type { AdminCategoryRow } from "@/lib/categories/queries";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type CategoryFilterMode = "all" | "main" | "sub";
 type VendorCatalogResponse = {
@@ -70,10 +70,10 @@ export default function VendorCategoriesPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
 
       if (!isMounted) {
         return;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AdminDropdown } from "@/components/admin/admin-dropdown";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type VendorUserDropdownProps = {
   email: string;
@@ -23,7 +23,7 @@ export default function VendorUserDropdown({ email, vendorName, vendorRole }: Ve
     setIsSigningOut(true);
 
     try {
-      await getSupabaseClient().auth.signOut();
+      await getPgDataClient().auth.signOut();
       router.push("/");
       router.refresh();
     } finally {

@@ -9,7 +9,7 @@ import {
   updateAdminInternationalShippingMethodRequest,
 } from "@/lib/international-shipping/actions";
 import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { InternationalShippingMethodRow } from "@/types/product-db";
 
 type TierFormValue = {
@@ -169,10 +169,10 @@ export default function InternationalShippingContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

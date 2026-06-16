@@ -8,10 +8,10 @@ import {
   type ProductEditorSavePayload,
 } from "@/lib/products/actions";
 import { getProductEditorRecordForVendors } from "@/lib/products/queries";
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 
 async function getActiveVendorMembership(userId: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
     const result = await query<{ vendor_id: string; status: string }>(
       `
         select vendor_id, status
@@ -29,8 +29,8 @@ async function getActiveVendorMembership(userId: string) {
     };
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const { data, error } = await supabase
+  const dataClient = getDatabaseServiceClient();
+  const { data, error } = await dataClient
     .from("vendor_members")
     .select("vendor_id, status")
     .eq("user_id", userId)
@@ -81,8 +81,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const { data: existingProduct, error: existingProductError } = await supabase
+    const dataClient = getDatabaseServiceClient();
+    const { data: existingProduct, error: existingProductError } = await dataClient
       .from("products")
       .select("id, vendor_id")
       .eq("id", id)
@@ -100,7 +100,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     const body = (await request.json()) as ProductEditorSavePayload;
-    const result = await updateProductEditorRecordWithClient(supabase, id, {
+    const result = await updateProductEditorRecordWithClient(dataClient, id, {
       ...body,
       product: {
         ...body.product,
@@ -142,8 +142,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await getProductEditorRecordForVendors(id, [membershipResult.data.vendor_id], supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await getProductEditorRecordForVendors(id, [membershipResult.data.vendor_id], dataClient);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });
@@ -179,8 +179,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     const { id } = await params;
-    const supabase = getSupabaseServiceRoleClient();
-    const { data: existingProduct, error: existingProductError } = await supabase
+    const dataClient = getDatabaseServiceClient();
+    const { data: existingProduct, error: existingProductError } = await dataClient
       .from("products")
       .select("id, vendor_id")
       .eq("id", id)
@@ -197,7 +197,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       );
     }
 
-    const result = await deleteProductRecordWithClient(supabase, id);
+    const result = await deleteProductRecordWithClient(dataClient, id);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });

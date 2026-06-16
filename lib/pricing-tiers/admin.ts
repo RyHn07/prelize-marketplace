@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import { normalizePricingTierProfile } from "@/lib/pricing-tiers/queries";
 import type {
@@ -111,8 +111,8 @@ function getProfileSelect() {
   return "id, vendor_id, name, pricing_type, is_active, created_at, pricing_tier_profile_rows(id, profile_id, min_qty, max_qty, price, sort_order, created_at)";
 }
 
-async function fetchProfileById(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase
+async function fetchProfileById(dataClient: PgDataClient, id: string) {
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .select(getProfileSelect())
     .eq("id", id)
@@ -124,8 +124,8 @@ async function fetchProfileById(supabase: SupabaseClient, id: string) {
   };
 }
 
-export async function listAdminPricingTierProfiles(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listAdminPricingTierProfiles(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .select(getProfileSelect())
     .order("created_at", { ascending: false });
@@ -137,11 +137,11 @@ export async function listAdminPricingTierProfiles(supabase: SupabaseClient) {
 }
 
 export async function listPricingTierProfilesForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   vendorId: string,
   options?: { includeInactive?: boolean },
 ) {
-  let query = supabase
+  let query = dataClient
     .from("pricing_tier_profiles")
     .select(getProfileSelect())
     .eq("vendor_id", vendorId)
@@ -160,11 +160,11 @@ export async function listPricingTierProfilesForVendor(
 }
 
 async function replaceProfileRows(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   profileId: string,
   tiers: PricingTierProfileInput["tiers"],
 ) {
-  const { error: deleteError } = await supabase
+  const { error: deleteError } = await dataClient
     .from("pricing_tier_profile_rows")
     .delete()
     .eq("profile_id", profileId);
@@ -185,15 +185,15 @@ async function replaceProfileRows(
     sort_order: tier.sort_order ?? index,
   })) satisfies Array<Pick<PricingTierProfileRowRecord, "profile_id" | "min_qty" | "max_qty" | "price" | "sort_order">>;
 
-  const { error: insertError } = await supabase.from("pricing_tier_profile_rows").insert(rows as never);
+  const { error: insertError } = await dataClient.from("pricing_tier_profile_rows").insert(rows as never);
   return insertError;
 }
 
 export async function createAdminPricingTierProfile(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   input: PricingTierProfileInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .insert({
       vendor_id: null,
@@ -211,7 +211,7 @@ export async function createAdminPricingTierProfile(
     };
   }
 
-  const tiersError = await replaceProfileRows(supabase, (data as { id: string }).id, input.tiers);
+  const tiersError = await replaceProfileRows(dataClient, (data as { id: string }).id, input.tiers);
   if (tiersError) {
     return {
       data: null as PricingTierProfileRow | null,
@@ -219,15 +219,15 @@ export async function createAdminPricingTierProfile(
     };
   }
 
-  return fetchProfileById(supabase, (data as { id: string }).id);
+  return fetchProfileById(dataClient, (data as { id: string }).id);
 }
 
 export async function createPricingTierProfileForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   vendorId: string,
   input: PricingTierProfileInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("pricing_tier_profiles")
     .insert({
       vendor_id: vendorId,
@@ -245,7 +245,7 @@ export async function createPricingTierProfileForVendor(
     };
   }
 
-  const tiersError = await replaceProfileRows(supabase, (data as { id: string }).id, input.tiers);
+  const tiersError = await replaceProfileRows(dataClient, (data as { id: string }).id, input.tiers);
   if (tiersError) {
     return {
       data: null as PricingTierProfileRow | null,
@@ -253,15 +253,15 @@ export async function createPricingTierProfileForVendor(
     };
   }
 
-  return fetchProfileById(supabase, (data as { id: string }).id);
+  return fetchProfileById(dataClient, (data as { id: string }).id);
 }
 
 export async function updateAdminPricingTierProfile(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: PricingTierProfileInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("pricing_tier_profiles")
     .update({
       name: input.name.trim(),
@@ -277,7 +277,7 @@ export async function updateAdminPricingTierProfile(
     };
   }
 
-  const tiersError = await replaceProfileRows(supabase, id, input.tiers);
+  const tiersError = await replaceProfileRows(dataClient, id, input.tiers);
   if (tiersError) {
     return {
       data: null as PricingTierProfileRow | null,
@@ -285,16 +285,16 @@ export async function updateAdminPricingTierProfile(
     };
   }
 
-  return fetchProfileById(supabase, id);
+  return fetchProfileById(dataClient, id);
 }
 
 export async function updatePricingTierProfileForVendor(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   vendorId: string,
   input: PricingTierProfileInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("pricing_tier_profiles")
     .update({
       name: input.name.trim(),
@@ -311,7 +311,7 @@ export async function updatePricingTierProfileForVendor(
     };
   }
 
-  const tiersError = await replaceProfileRows(supabase, id, input.tiers);
+  const tiersError = await replaceProfileRows(dataClient, id, input.tiers);
   if (tiersError) {
     return {
       data: null as PricingTierProfileRow | null,
@@ -319,5 +319,5 @@ export async function updatePricingTierProfileForVendor(
     };
   }
 
-  return fetchProfileById(supabase, id);
+  return fetchProfileById(dataClient, id);
 }

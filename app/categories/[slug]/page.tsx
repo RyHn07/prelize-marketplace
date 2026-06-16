@@ -117,7 +117,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
 
         {error ? (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            We could not load some category data from Supabase. Showing currently available results only.
+            We could not load some category data from DataClient. Showing currently available results only.
           </div>
         ) : null}
 

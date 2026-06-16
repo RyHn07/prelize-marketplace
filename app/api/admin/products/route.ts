@@ -6,7 +6,7 @@ import {
   getAdminProductVendorOptions,
 } from "@/lib/admin/vps-data";
 import { createProductEditorRecordWithClient, type ProductEditorSavePayload } from "@/lib/products/actions";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);
@@ -46,8 +46,8 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as ProductEditorSavePayload;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await createProductEditorRecordWithClient(supabase, body);
+    const dataClient = getDatabaseServiceClient();
+    const result = await createProductEditorRecordWithClient(dataClient, body);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });

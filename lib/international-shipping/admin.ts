@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import { normalizeInternationalShippingMethod } from "@/lib/international-shipping/queries";
 import type { InternationalShippingMethodRow, InternationalShippingTierRow } from "@/types/product-db";
@@ -124,8 +124,8 @@ export function validateInternationalShippingMethodInput(input: InternationalShi
   return null;
 }
 
-async function fetchMethodById(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase
+async function fetchMethodById(dataClient: PgDataClient, id: string) {
+  const { data, error } = await dataClient
     .from("international_shipping_methods")
     .select(
       "id, name, slug, description, delivery_min_days, delivery_max_days, minimum_weight_kg, is_active, sort_order, created_at, international_shipping_tiers(id, method_id, min_weight_kg, max_weight_kg, price_per_kg, sort_order, created_at)",
@@ -140,11 +140,11 @@ async function fetchMethodById(supabase: SupabaseClient, id: string) {
 }
 
 async function replaceMethodTiers(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   methodId: string,
   tiers: InternationalShippingMethodInput["tiers"],
 ) {
-  const { error: deleteError } = await supabase.from("international_shipping_tiers").delete().eq("method_id", methodId);
+  const { error: deleteError } = await dataClient.from("international_shipping_tiers").delete().eq("method_id", methodId);
 
   if (deleteError) {
     return deleteError;
@@ -164,15 +164,15 @@ async function replaceMethodTiers(
     Pick<InternationalShippingTierRow, "method_id" | "min_weight_kg" | "max_weight_kg" | "price_per_kg" | "sort_order">
   >;
 
-  const { error: insertError } = await supabase.from("international_shipping_tiers").insert(rows as never);
+  const { error: insertError } = await dataClient.from("international_shipping_tiers").insert(rows as never);
   return insertError;
 }
 
 export async function createInternationalShippingMethod(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   input: InternationalShippingMethodInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("international_shipping_methods")
     .insert({
       name: input.name.trim(),
@@ -194,7 +194,7 @@ export async function createInternationalShippingMethod(
     };
   }
 
-  const tiersError = await replaceMethodTiers(supabase, (data as { id: string }).id, input.tiers);
+  const tiersError = await replaceMethodTiers(dataClient, (data as { id: string }).id, input.tiers);
 
   if (tiersError) {
     return {
@@ -203,15 +203,15 @@ export async function createInternationalShippingMethod(
     };
   }
 
-  return fetchMethodById(supabase, (data as { id: string }).id);
+  return fetchMethodById(dataClient, (data as { id: string }).id);
 }
 
 export async function updateInternationalShippingMethod(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: InternationalShippingMethodInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("international_shipping_methods")
     .update({
       name: input.name.trim(),
@@ -232,7 +232,7 @@ export async function updateInternationalShippingMethod(
     };
   }
 
-  const tiersError = await replaceMethodTiers(supabase, id, input.tiers);
+  const tiersError = await replaceMethodTiers(dataClient, id, input.tiers);
 
   if (tiersError) {
     return {
@@ -241,5 +241,5 @@ export async function updateInternationalShippingMethod(
     };
   }
 
-  return fetchMethodById(supabase, id);
+  return fetchMethodById(dataClient, id);
 }

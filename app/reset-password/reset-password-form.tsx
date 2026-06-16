@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 
 import { PASSWORD_RECOVERY_STORAGE_KEY } from "@/components/auth/password-recovery-redirect";
-import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getPgDataClient, hasPgDataClientEnv } from "@/lib/browser-app-client";
 
 type RecoveryState = "checking" | "ready" | "invalid" | "complete";
 
@@ -41,7 +41,7 @@ export default function ResetPasswordForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!hasSupabaseClientEnv()) {
+    if (!hasPgDataClientEnv()) {
       setErrorMessage("Password reset links are being migrated to the VPS auth system.");
       setRecoveryState("invalid");
       return;
@@ -54,11 +54,11 @@ export default function ResetPasswordForm() {
       sessionStorage.setItem(PASSWORD_RECOVERY_STORAGE_KEY, "1");
     }
 
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = dataClient.auth.onAuthStateChange((event, session) => {
       if (!isMounted) {
         return;
       }
@@ -83,7 +83,7 @@ export default function ResetPasswordForm() {
       const {
         data: { session },
         error,
-      } = await supabase.auth.getSession();
+      } = await dataClient.auth.getSession();
 
       if (!isMounted) {
         return;
@@ -118,15 +118,15 @@ export default function ResetPasswordForm() {
     setIsSubmitting(true);
 
     try {
-      const supabase = getSupabaseClient();
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      const dataClient = getPgDataClient();
+      const { error } = await dataClient.auth.updateUser({ password: newPassword });
 
       if (error) {
         setErrorMessage(error.message);
         return;
       }
 
-      await supabase.auth.signOut();
+      await dataClient.auth.signOut();
       sessionStorage.removeItem(PASSWORD_RECOVERY_STORAGE_KEY);
       setNewPassword("");
       setConfirmPassword("");

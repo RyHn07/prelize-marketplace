@@ -6,7 +6,7 @@ import {
   updateCndsProfileForVendor,
 } from "@/lib/cnds/admin";
 import type { CndsShippingPricingType, CndsShippingProfileRow } from "@/types/product-db";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 export type CndsProfileEditorPayload = {
   name: string;
@@ -22,8 +22,8 @@ export type CndsProfileEditorPayload = {
 };
 
 async function getAccessToken() {
-  const supabase = getSupabaseClient();
-  const { data } = await supabase.auth.getSession();
+  const dataClient = getPgDataClient();
+  const { data } = await dataClient.auth.getSession();
   return data.session?.access_token ?? null;
 }
 
@@ -69,8 +69,8 @@ export async function updateAdminCndsProfileRequest(id: string, payload: CndsPro
 }
 
 export async function fetchVendorCndsProfiles(vendorId: string, options?: { includeInactive?: boolean }) {
-  const supabase = getSupabaseClient();
-  const result = await listCndsProfilesForVendor(supabase, vendorId, options);
+  const dataClient = getPgDataClient();
+  const result = await listCndsProfilesForVendor(dataClient, vendorId, options);
 
   if (result.error) {
     throw new Error(result.error.message);
@@ -82,8 +82,8 @@ export async function fetchVendorCndsProfiles(vendorId: string, options?: { incl
 }
 
 export async function createVendorCndsProfileRequest(vendorId: string, payload: CndsProfileEditorPayload) {
-  const supabase = getSupabaseClient();
-  const result = await createCndsProfileForVendor(supabase, vendorId, payload);
+  const dataClient = getPgDataClient();
+  const result = await createCndsProfileForVendor(dataClient, vendorId, payload);
 
   if (result.error || !result.data) {
     throw new Error(result.error?.message ?? "Unable to create the CNDS profile.");
@@ -99,8 +99,8 @@ export async function updateVendorCndsProfileRequest(
   id: string,
   payload: CndsProfileEditorPayload,
 ) {
-  const supabase = getSupabaseClient();
-  const result = await updateCndsProfileForVendor(supabase, id, vendorId, payload);
+  const dataClient = getPgDataClient();
+  const result = await updateCndsProfileForVendor(dataClient, id, vendorId, payload);
 
   if (result.error || !result.data) {
     throw new Error(result.error?.message ?? "Unable to update the CNDS profile.");

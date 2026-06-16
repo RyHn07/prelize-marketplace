@@ -551,7 +551,7 @@ export default function AdminSettingsPage() {
             </p>
             <h2 className="mt-1 text-xl font-semibold text-slate-900">Update platform settings</h2>
             <p className="mt-3 text-sm text-slate-500">
-              These values are saved in Supabase and now drive storefront branding, metadata, and
+              These values are saved in DataClient and now drive storefront branding, metadata, and
               future support workflows.
             </p>
 

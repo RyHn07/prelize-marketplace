@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import type {
   HomepageBannerRow,
@@ -389,16 +389,16 @@ export function validateHomepageProductSectionInput(input: HomepageProductSectio
   return null;
 }
 
-async function fetchThemeById(supabase: SupabaseClient, id: string) {
-  const { data, error } = await supabase.from("homepage_themes").select("*").eq("id", id).maybeSingle();
+async function fetchThemeById(dataClient: PgDataClient, id: string) {
+  const { data, error } = await dataClient.from("homepage_themes").select("*").eq("id", id).maybeSingle();
   return {
     data: data ? normalizeThemeRow(data as RawHomepageThemeRow) : null,
     error,
   };
 }
 
-async function fetchThemeSections(supabase: SupabaseClient, themeId: string) {
-  const { data, error } = await supabase
+async function fetchThemeSections(dataClient: PgDataClient, themeId: string) {
+  const { data, error } = await dataClient
     .from("homepage_theme_sections")
     .select("*")
     .eq("theme_id", themeId)
@@ -411,8 +411,8 @@ async function fetchThemeSections(supabase: SupabaseClient, themeId: string) {
   };
 }
 
-async function syncThemeSections(supabase: SupabaseClient, themeId: string, sections: HomepageThemeSectionInput[]) {
-  const { error: deleteError } = await supabase.from("homepage_theme_sections").delete().eq("theme_id", themeId);
+async function syncThemeSections(dataClient: PgDataClient, themeId: string, sections: HomepageThemeSectionInput[]) {
+  const { error: deleteError } = await dataClient.from("homepage_theme_sections").delete().eq("theme_id", themeId);
 
   if (deleteError) {
     return deleteError;
@@ -432,12 +432,12 @@ async function syncThemeSections(supabase: SupabaseClient, themeId: string, sect
     layout_settings: section.layout_settings,
   }));
 
-  const { error } = await supabase.from("homepage_theme_sections").insert(rows as never);
+  const { error } = await dataClient.from("homepage_theme_sections").insert(rows as never);
   return error;
 }
 
-export async function listHomepageThemes(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listHomepageThemes(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("homepage_themes")
     .select("*")
     .order("updated_at", { ascending: false });
@@ -448,10 +448,10 @@ export async function listHomepageThemes(supabase: SupabaseClient) {
   };
 }
 
-export async function getHomepageThemeEditorRecord(supabase: SupabaseClient, id: string) {
+export async function getHomepageThemeEditorRecord(dataClient: PgDataClient, id: string) {
   const [themeResult, sectionResult] = await Promise.all([
-    fetchThemeById(supabase, id),
-    fetchThemeSections(supabase, id),
+    fetchThemeById(dataClient, id),
+    fetchThemeSections(dataClient, id),
   ]);
 
   return {
@@ -466,8 +466,8 @@ export async function getHomepageThemeEditorRecord(supabase: SupabaseClient, id:
   };
 }
 
-export async function createHomepageTheme(supabase: SupabaseClient, input: HomepageThemeInput) {
-  const { data, error } = await supabase
+export async function createHomepageTheme(dataClient: PgDataClient, input: HomepageThemeInput) {
+  const { data, error } = await dataClient
     .from("homepage_themes")
     .insert({
       name: input.name.trim(),
@@ -489,10 +489,10 @@ export async function createHomepageTheme(supabase: SupabaseClient, input: Homep
   }
 
   if (input.is_active) {
-    await supabase.from("homepage_themes").update({ is_active: false } as never).neq("id", (data as { id: string }).id);
+    await dataClient.from("homepage_themes").update({ is_active: false } as never).neq("id", (data as { id: string }).id);
   }
 
-  const sectionError = await syncThemeSections(supabase, (data as { id: string }).id, input.sections);
+  const sectionError = await syncThemeSections(dataClient, (data as { id: string }).id, input.sections);
 
   if (sectionError) {
     return {
@@ -501,15 +501,15 @@ export async function createHomepageTheme(supabase: SupabaseClient, input: Homep
     };
   }
 
-  return getHomepageThemeEditorRecord(supabase, (data as { id: string }).id);
+  return getHomepageThemeEditorRecord(dataClient, (data as { id: string }).id);
 }
 
 export async function updateHomepageTheme(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: HomepageThemeInput,
 ) {
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("homepage_themes")
     .update({
       name: input.name.trim(),
@@ -531,11 +531,11 @@ export async function updateHomepageTheme(
   }
 
   if (input.is_active) {
-    await supabase.from("homepage_themes").update({ is_active: false } as never).neq("id", id);
-    await supabase.from("homepage_themes").update({ is_active: true, status: "active" } as never).eq("id", id);
+    await dataClient.from("homepage_themes").update({ is_active: false } as never).neq("id", id);
+    await dataClient.from("homepage_themes").update({ is_active: true, status: "active" } as never).eq("id", id);
   }
 
-  const sectionError = await syncThemeSections(supabase, id, input.sections);
+  const sectionError = await syncThemeSections(dataClient, id, input.sections);
 
   if (sectionError) {
     return {
@@ -544,11 +544,11 @@ export async function updateHomepageTheme(
     };
   }
 
-  return getHomepageThemeEditorRecord(supabase, id);
+  return getHomepageThemeEditorRecord(dataClient, id);
 }
 
-export async function activateHomepageTheme(supabase: SupabaseClient, id: string) {
-  const { error: resetError } = await supabase
+export async function activateHomepageTheme(dataClient: PgDataClient, id: string) {
+  const { error: resetError } = await dataClient
     .from("homepage_themes")
     .update({ is_active: false } as never)
     .neq("id", "");
@@ -557,7 +557,7 @@ export async function activateHomepageTheme(supabase: SupabaseClient, id: string
     return resetError;
   }
 
-  const { error } = await supabase
+  const { error } = await dataClient
     .from("homepage_themes")
     .update({ is_active: true, status: "active", updated_at: new Date().toISOString() } as never)
     .eq("id", id);
@@ -565,8 +565,8 @@ export async function activateHomepageTheme(supabase: SupabaseClient, id: string
   return error;
 }
 
-export async function archiveHomepageTheme(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase
+export async function archiveHomepageTheme(dataClient: PgDataClient, id: string) {
+  const { error } = await dataClient
     .from("homepage_themes")
     .update({ status: "archived", is_active: false, updated_at: new Date().toISOString() } as never)
     .eq("id", id);
@@ -574,8 +574,8 @@ export async function archiveHomepageTheme(supabase: SupabaseClient, id: string)
   return error;
 }
 
-export async function duplicateHomepageTheme(supabase: SupabaseClient, id: string) {
-  const editorResult = await getHomepageThemeEditorRecord(supabase, id);
+export async function duplicateHomepageTheme(dataClient: PgDataClient, id: string) {
+  const editorResult = await getHomepageThemeEditorRecord(dataClient, id);
 
   if (editorResult.error || !editorResult.data) {
     return {
@@ -602,16 +602,16 @@ export async function duplicateHomepageTheme(supabase: SupabaseClient, id: strin
     })),
   };
 
-  return createHomepageTheme(supabase, duplicateInput);
+  return createHomepageTheme(dataClient, duplicateInput);
 }
 
-export async function deleteHomepageTheme(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from("homepage_themes").delete().eq("id", id);
+export async function deleteHomepageTheme(dataClient: PgDataClient, id: string) {
+  const { error } = await dataClient.from("homepage_themes").delete().eq("id", id);
   return error;
 }
 
-export async function listHomepageContentBlocks(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listHomepageContentBlocks(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("homepage_content_blocks")
     .select("*")
     .order("content_key", { ascending: true });
@@ -623,10 +623,10 @@ export async function listHomepageContentBlocks(supabase: SupabaseClient) {
 }
 
 export async function upsertHomepageContentBlock(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   input: HomepageContentBlockInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_content_blocks")
     .upsert(
       {
@@ -652,8 +652,8 @@ export async function upsertHomepageContentBlock(
   };
 }
 
-export async function listHomepageBanners(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listHomepageBanners(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("homepage_banners")
     .select("*")
     .order("sort_order", { ascending: true })
@@ -665,8 +665,8 @@ export async function listHomepageBanners(supabase: SupabaseClient) {
   };
 }
 
-export async function createHomepageBanner(supabase: SupabaseClient, input: HomepageBannerInput) {
-  const { data, error } = await supabase
+export async function createHomepageBanner(dataClient: PgDataClient, input: HomepageBannerInput) {
+  const { data, error } = await dataClient
     .from("homepage_banners")
     .insert(input as never)
     .select("*")
@@ -679,11 +679,11 @@ export async function createHomepageBanner(supabase: SupabaseClient, input: Home
 }
 
 export async function updateHomepageBanner(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: HomepageBannerInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_banners")
     .update(input as never)
     .eq("id", id)
@@ -696,13 +696,13 @@ export async function updateHomepageBanner(
   };
 }
 
-export async function deleteHomepageBanner(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from("homepage_banners").delete().eq("id", id);
+export async function deleteHomepageBanner(dataClient: PgDataClient, id: string) {
+  const { error } = await dataClient.from("homepage_banners").delete().eq("id", id);
   return error;
 }
 
-export async function listHomepageProductSections(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+export async function listHomepageProductSections(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("homepage_product_sections")
     .select("*")
     .order("sort_order", { ascending: true })
@@ -715,10 +715,10 @@ export async function listHomepageProductSections(supabase: SupabaseClient) {
 }
 
 export async function createHomepageProductSection(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   input: HomepageProductSectionInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_product_sections")
     .insert(input as never)
     .select("*")
@@ -731,11 +731,11 @@ export async function createHomepageProductSection(
 }
 
 export async function updateHomepageProductSection(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   input: HomepageProductSectionInput,
 ) {
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_product_sections")
     .update(input as never)
     .eq("id", id)
@@ -748,7 +748,7 @@ export async function updateHomepageProductSection(
   };
 }
 
-export async function deleteHomepageProductSection(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from("homepage_product_sections").delete().eq("id", id);
+export async function deleteHomepageProductSection(dataClient: PgDataClient, id: string) {
+  const { error } = await dataClient.from("homepage_product_sections").delete().eq("id", id);
   return error;
 }

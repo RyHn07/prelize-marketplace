@@ -1,7 +1,7 @@
 import AdminPageHeader from "@/components/admin/admin-page-header";
 import ThemeRenderer from "@/components/homepage/theme-renderer";
 import { getHomepageRenderData } from "@/lib/homepage/queries";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient } from "@/lib/auth/request";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -9,10 +9,10 @@ type PageProps = {
 
 export default async function HomepageThemePreviewPage({ params }: PageProps) {
   const { id } = await params;
-  const supabase = getSupabaseServiceRoleClient();
+  const dataClient = getDatabaseServiceClient();
   const { data } = await getHomepageRenderData({
     previewThemeId: id,
-    client: supabase,
+    client: dataClient,
   });
 
   return (

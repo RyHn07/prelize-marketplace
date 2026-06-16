@@ -11,7 +11,7 @@ import {
   type CndsProfileEditorPayload,
 } from "@/lib/cnds/actions";
 import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { getVendors } from "@/lib/vendors/queries";
 import type { CndsShippingPricingType, CndsShippingProfileRow, VendorRow } from "@/types/product-db";
 
@@ -144,10 +144,10 @@ export default function CndsContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

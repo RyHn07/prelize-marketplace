@@ -16,7 +16,7 @@ import {
   safeOrderStatus,
 } from "@/lib/orders/utils";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { OrderItemRow, VendorOrderRow, VendorOrderStatus } from "@/types/product-db";
 
 type ParentOrderRow = {
@@ -87,10 +87,10 @@ export default function VendorOrdersPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadVendorOrders = async () => {
-      const access = await getVendorWorkspaceAccessState(supabase);
+      const access = await getVendorWorkspaceAccessState(dataClient);
 
       if (!isMounted) {
         return;
@@ -105,7 +105,7 @@ export default function VendorOrdersPage() {
         return;
       }
 
-      const { data: fetchedVendorOrders, error: vendorOrdersError } = await supabase
+      const { data: fetchedVendorOrders, error: vendorOrdersError } = await dataClient
         .from("vendor_orders")
         .select("*")
         .eq("vendor_id", access.activeVendorId)
@@ -150,8 +150,8 @@ export default function VendorOrdersPage() {
       const vendorOrderIds = vendorOrderRows.map((vendorOrder) => vendorOrder.id);
 
       const [{ data: parentOrders }, { data: fetchedItems }] = await Promise.all([
-        supabase.from("orders").select("id, order_number, user_email, created_at").in("id", orderIds),
-        supabase.from("order_items").select("*").in("vendor_order_id", vendorOrderIds),
+        dataClient.from("orders").select("id, order_number, user_email, created_at").in("id", orderIds),
+        dataClient.from("order_items").select("*").in("vendor_order_id", vendorOrderIds),
       ]);
 
       if (!isMounted) {
@@ -235,11 +235,11 @@ export default function VendorOrdersPage() {
       return;
     }
 
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
     setUpdatingVendorOrderId(vendorOrder.id);
     setErrorMessage("");
 
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("vendor_orders")
       .update({ status: nextStatus } as never)
       .eq("id", vendorOrder.id)
@@ -251,7 +251,7 @@ export default function VendorOrdersPage() {
       return;
     }
 
-    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await supabase
+    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await dataClient
       .from("vendor_orders")
       .select("status")
       .eq("order_id", vendorOrder.order_id);
@@ -261,7 +261,7 @@ export default function VendorOrdersPage() {
         ((siblingVendorOrders ?? []) as Array<{ status: VendorOrderStatus }>).map((row) => safeOrderStatus(row.status)),
       );
 
-      await supabase.from("orders").update({ status: derivedParentStatus } as never).eq("id", vendorOrder.order_id);
+      await dataClient.from("orders").update({ status: derivedParentStatus } as never).eq("id", vendorOrder.order_id);
     }
 
     setVendorOrders((currentVendorOrders) =>

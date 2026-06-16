@@ -7,7 +7,7 @@ import { useRouter, useParams } from "next/navigation";
 
 import VendorForm, { toVendorFormValues, toVendorPayload } from "@/components/vendor/vendor-form";
 import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { updateVendor } from "@/lib/vendors/actions";
 import { getVendorById } from "@/lib/vendors/queries";
 import type { VendorRow } from "@/types/product-db";
@@ -27,10 +27,10 @@ export default function AdminEditVendorPage() {
 
   React.useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadVendor = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

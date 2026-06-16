@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getAdminOrders } from "@/lib/admin/vps-data";
 import { query } from "@/lib/db";
 import { ORDER_STATUSES } from "@/lib/orders/utils";
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 import type { VendorOrderStatus } from "@/types/product-db";
 
 type StatusBody = {

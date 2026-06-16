@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { AdminBrandRow } from "@/lib/brands/queries";
 
 export type BrandUpsertPayload = {
@@ -35,13 +35,13 @@ function isSlugConstraintError(message: string) {
 }
 
 async function resolveUniqueBrandSlug(
-  supabase: ReturnType<typeof getSupabaseClient>,
+  dataClient: ReturnType<typeof getPgDataClient>,
   rawSlug: string,
   excludeId?: string,
 ) {
   const baseSlug = normalizeBrandSlug(rawSlug);
   const slugPattern = `${baseSlug}-%`;
-  let query = supabase
+  let query = dataClient
     .from("brands")
     .select("id, slug")
     .or(`slug.eq.${baseSlug},slug.like.${slugPattern}`);
@@ -93,8 +93,8 @@ function buildSchemaErrorMessage(message: string) {
 }
 
 export async function createBrand(payload: BrandUpsertPayload) {
-  const supabase = getSupabaseClient();
-  const slugResult = await resolveUniqueBrandSlug(supabase, payload.slug || payload.name);
+  const dataClient = getPgDataClient();
+  const slugResult = await resolveUniqueBrandSlug(dataClient, payload.slug || payload.name);
 
   if (slugResult.error) {
     return {
@@ -103,7 +103,7 @@ export async function createBrand(payload: BrandUpsertPayload) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("brands")
     .insert({
       name: payload.name.trim(),
@@ -133,8 +133,8 @@ export async function createBrand(payload: BrandUpsertPayload) {
 }
 
 export async function updateBrand(id: string, payload: BrandUpsertPayload) {
-  const supabase = getSupabaseClient();
-  const slugResult = await resolveUniqueBrandSlug(supabase, payload.slug || payload.name, id);
+  const dataClient = getPgDataClient();
+  const slugResult = await resolveUniqueBrandSlug(dataClient, payload.slug || payload.name, id);
 
   if (slugResult.error) {
     return {
@@ -143,7 +143,7 @@ export async function updateBrand(id: string, payload: BrandUpsertPayload) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("brands")
     .update({
       name: payload.name.trim(),
@@ -174,8 +174,8 @@ export async function updateBrand(id: string, payload: BrandUpsertPayload) {
 }
 
 export async function deleteBrand(id: string) {
-  const supabase = getSupabaseClient();
-  const { count, error: linkedProductsError } = await supabase
+  const dataClient = getPgDataClient();
+  const { count, error: linkedProductsError } = await dataClient
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("brand_id", id);
@@ -197,7 +197,7 @@ export async function deleteBrand(id: string) {
     };
   }
 
-  const { error } = await supabase.from("brands").delete().eq("id", id);
+  const { error } = await dataClient.from("brands").delete().eq("id", id);
 
   if (error) {
     return {

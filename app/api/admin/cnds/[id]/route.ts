@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 import { query } from "@/lib/db";
 
 type CndsPayload = {

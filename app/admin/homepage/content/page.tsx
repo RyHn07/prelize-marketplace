@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { fetchHomepageContentBlocks, saveHomepageContentBlocks } from "@/lib/homepage/actions";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { HomepageContentBlockRow, JsonValue } from "@/types/product-db";
 
 type EditableBlock = HomepageContentBlockRow & {
@@ -110,10 +110,10 @@ export default function HomepageContentPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

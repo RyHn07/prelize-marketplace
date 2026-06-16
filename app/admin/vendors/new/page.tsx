@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { getAdminAccessState } from "@/lib/admin-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import {
   fetchAdminVendorUsers,
   inviteVendorUser,
@@ -88,10 +88,10 @@ export default function AdminNewVendorPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;
@@ -121,7 +121,7 @@ export default function AdminNewVendorPage() {
         setUserListError(
           error instanceof Error
             ? error.message
-            : "Unable to load registered users. Confirm SUPABASE_SERVICE_ROLE_KEY is configured for admin invite pages.",
+            : "Unable to load registered users. Confirm DATABASE_URL is configured for admin invite pages.",
         );
       } finally {
         if (isMounted) {
@@ -257,7 +257,7 @@ export default function AdminNewVendorPage() {
           <div className="border-b border-amber-100 bg-amber-50 px-5 py-4 text-sm text-amber-700 sm:px-6">
             {userListError}
             <span className="mt-2 block">
-              This page requires `SUPABASE_SERVICE_ROLE_KEY` so admin can read registered auth users.
+              This page requires `DATABASE_URL` so admin can read registered auth users.
             </span>
           </div>
         ) : registeredUsers.length === 0 ? (

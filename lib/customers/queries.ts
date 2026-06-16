@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 type OrderSummary = {
   payNow?: number | string | null;
@@ -61,8 +61,8 @@ function getCustomerKey(order: CustomerOrderRow) {
 }
 
 export async function getAdminCustomers() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("orders")
     .select("id, order_number, user_id, user_email, created_at, summary, buyer")
     .order("created_at", { ascending: false });

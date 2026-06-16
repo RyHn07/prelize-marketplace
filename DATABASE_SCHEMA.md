@@ -16,7 +16,7 @@ This is a working implementation guide, not a final migration history.
 
 The active runtime database is VPS PostgreSQL. The app connects with `pg` through `lib/db.ts` and reads the connection string from `process.env.DATABASE_URL`.
 
-Supabase is no longer the runtime backend. Old `supabase/migrations` files remain useful as schema history, but new application code should target PostgreSQL route handlers and server utilities.
+The app runtime uses PostgreSQL on the VPS. Historical migration files are schema history only; new application code should target PostgreSQL route handlers and server utilities.
 
 Image files are not stored in the Next.js repo. Public image URLs should point at:
 

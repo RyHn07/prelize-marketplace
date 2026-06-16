@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { query } from "@/lib/db";
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdminRequest(request);

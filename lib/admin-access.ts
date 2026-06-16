@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 import { getMarketplaceAccessState } from "@/lib/marketplace-access";
-import { hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { hasPgDataClientEnv } from "@/lib/browser-app-client";
 
 export const LEGACY_ADMIN_EMAILS = ["reaz1006@gmail.com"];
 export const PLATFORM_ADMIN_ROLE = "platform_admin";
@@ -12,9 +12,9 @@ export type AdminAccessState = {
 };
 
 export async function getAdminAccessState(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
 ): Promise<AdminAccessState> {
-  if (!hasSupabaseClientEnv() && typeof window !== "undefined") {
+  if (!hasPgDataClientEnv() && typeof window !== "undefined") {
     const response = await fetch("/api/auth/me", { cache: "no-store" });
     const data = (await response.json().catch(() => null)) as {
       user?: { email?: string | null; role?: string | null } | null;
@@ -44,7 +44,7 @@ export async function getAdminAccessState(
     };
   }
 
-  const accessState = await getMarketplaceAccessState(supabase);
+  const accessState = await getMarketplaceAccessState(dataClient);
   const email = accessState.userEmail;
 
   if (!email || !accessState.userId) {

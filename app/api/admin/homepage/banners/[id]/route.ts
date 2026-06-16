@@ -5,7 +5,7 @@ import {
   parseHomepageBannerInput,
   updateHomepageBanner,
 } from "@/lib/homepage/admin";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -20,8 +20,8 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { id } = await context.params;
   const payload = parseHomepageBannerInput(await request.json());
-  const supabase = getSupabaseServiceRoleClient();
-  const result = await updateHomepageBanner(supabase, id, payload);
+  const dataClient = getDatabaseServiceClient();
+  const result = await updateHomepageBanner(dataClient, id, payload);
 
   if (result.error) {
     return NextResponse.json({ error: result.error.message }, { status: 500 });
@@ -38,8 +38,8 @@ export async function DELETE(request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const supabase = getSupabaseServiceRoleClient();
-  const error = await deleteHomepageBanner(supabase, id);
+  const dataClient = getDatabaseServiceClient();
+  const error = await deleteHomepageBanner(dataClient, id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

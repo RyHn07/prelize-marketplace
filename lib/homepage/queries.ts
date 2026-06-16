@@ -1,7 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import { query } from "@/lib/db";
-import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getDatabaseServiceClient } from "@/lib/postgres-data-client";
 import {
   getProductCategoryOptions,
   getProductImageMapByProductIds,
@@ -77,12 +77,12 @@ function createEmptyHomepageRenderData(): HomepageRenderData {
   };
 }
 
-function resolveSupabaseClient(client?: SupabaseClient) {
+function resolvePgDataClient(client?: PgDataClient) {
   if (client) {
     return client;
   }
 
-  return hasSupabaseClientEnv() ? getSupabaseClient() : null;
+  return getDatabaseServiceClient();
 }
 
 function normalizeText(value: unknown) {
@@ -554,10 +554,10 @@ async function resolveHomepageProductSectionProducts(
   return mapProductsToStorefront(limitedProducts, imageMap, reviewSummaryMap, categoryOptions, vendorOptions);
 }
 
-export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageThemeBySlug(slug: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageThemeRow>(
       "select * from public.homepage_themes where slug = $1 limit 1",
@@ -570,7 +570,7 @@ export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClie
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_themes")
     .select("*")
     .eq("slug", slug)
@@ -582,10 +582,10 @@ export async function getHomepageThemeBySlug(slug: string, client?: SupabaseClie
   };
 }
 
-export async function getHomepageThemeById(id: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageThemeById(id: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageThemeRow>(
       "select * from public.homepage_themes where id = $1 limit 1",
@@ -598,7 +598,7 @@ export async function getHomepageThemeById(id: string, client?: SupabaseClient) 
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_themes")
     .select("*")
     .eq("id", id)
@@ -610,10 +610,10 @@ export async function getHomepageThemeById(id: string, client?: SupabaseClient) 
   };
 }
 
-export async function getActiveHomepageTheme(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getActiveHomepageTheme(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageThemeRow>(
       `
@@ -631,7 +631,7 @@ export async function getActiveHomepageTheme(client?: SupabaseClient) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_themes")
     .select("*")
     .eq("is_active", true)
@@ -645,10 +645,10 @@ export async function getActiveHomepageTheme(client?: SupabaseClient) {
   };
 }
 
-export async function getHomepageSections(themeId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageSections(themeId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageThemeSectionRow>(
       `
@@ -666,7 +666,7 @@ export async function getHomepageSections(themeId: string, client?: SupabaseClie
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_theme_sections")
     .select("*")
     .eq("theme_id", themeId)
@@ -680,10 +680,10 @@ export async function getHomepageSections(themeId: string, client?: SupabaseClie
   };
 }
 
-export async function getHomepageContentBlocks(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageContentBlocks(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageContentBlockRow>(
       `
@@ -700,7 +700,7 @@ export async function getHomepageContentBlocks(client?: SupabaseClient) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_content_blocks")
     .select("*")
     .eq("is_active", true)
@@ -712,10 +712,10 @@ export async function getHomepageContentBlocks(client?: SupabaseClient) {
   };
 }
 
-export async function getHomepageBanners(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageBanners(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageBannerRow>(
       `
@@ -732,7 +732,7 @@ export async function getHomepageBanners(client?: SupabaseClient) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_banners")
     .select("*")
     .eq("is_active", true)
@@ -745,10 +745,10 @@ export async function getHomepageBanners(client?: SupabaseClient) {
   };
 }
 
-export async function getHomepageProductSections(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+export async function getHomepageProductSections(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
 
-  if (!supabase) {
+  if (!dataClient) {
     const { query } = await import("@/lib/db");
     const result = await query<RawHomepageProductSectionRow>(
       `
@@ -765,7 +765,7 @@ export async function getHomepageProductSections(client?: SupabaseClient) {
     };
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("homepage_product_sections")
     .select("*")
     .eq("is_active", true)
@@ -781,9 +781,9 @@ export async function getHomepageProductSections(client?: SupabaseClient) {
 export async function getHomepageRenderData(options?: {
   previewThemeId?: string;
   previewThemeSlug?: string;
-  client?: SupabaseClient;
+  client?: PgDataClient;
 }) {
-  if (!options?.client && !hasSupabaseClientEnv()) {
+  if (!options?.client) {
     try {
       return await getLocalHomepageRenderData(options);
     } catch (error) {

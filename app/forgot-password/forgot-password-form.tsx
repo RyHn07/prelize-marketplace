@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 
-import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getPgDataClient, hasPgDataClientEnv } from "@/lib/browser-app-client";
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState("");
@@ -16,7 +16,7 @@ export default function ForgotPasswordForm() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    if (!hasSupabaseClientEnv()) {
+    if (!hasPgDataClientEnv()) {
       setErrorMessage("Password reset email is being migrated to the VPS auth system.");
       return;
     }
@@ -25,7 +25,7 @@ export default function ForgotPasswordForm() {
 
     try {
       const redirectTo = `${window.location.origin}/reset-password`;
-      const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email.trim(), {
+      const { error } = await getPgDataClient().auth.resetPasswordForEmail(email.trim(), {
         redirectTo,
       });
 

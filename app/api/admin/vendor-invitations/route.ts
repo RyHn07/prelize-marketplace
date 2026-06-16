@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 import type { VendorInvitationStatus } from "@/types/product-db";
 
 type InviteBody = {
@@ -22,8 +22,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User ID is required." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const { data: existingMembership } = await supabase
+    const dataClient = getDatabaseServiceClient();
+    const { data: existingMembership } = await dataClient
       .from("vendor_members")
       .select("id")
       .eq("user_id", userId)
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This user already has a vendor membership." }, { status: 400 });
     }
 
-    const { error } = await supabase
+    const { error } = await dataClient
       .from("vendor_invitations")
       .upsert(
         {

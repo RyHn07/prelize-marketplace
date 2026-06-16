@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 
 function GoogleIcon() {
   return (
@@ -36,7 +36,7 @@ export default function GoogleAuthButton() {
     setIsSubmitting(true);
 
     try {
-      const { error } = await getSupabaseClient().auth.signInWithOAuth({
+      const { error } = await getPgDataClient().auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/`,

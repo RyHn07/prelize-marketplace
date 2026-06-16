@@ -80,7 +80,7 @@ For a detailed roadmap, see [PROJECT_PLAN.md](./PROJECT_PLAN.md).
 - `components/`: shared UI like header, product cards, product forms, and quote helpers
 - `lib/`: PostgreSQL access, product queries/actions, vendor logic, media helpers, and shared marketplace access checks
 - `types/`: shared TypeScript models for product, vendor, and order-related data
-- `supabase/migrations/`: legacy schema history from the previous Supabase phase
+- `postgres/migrations/`: schema history for database changes
 - `db/`: PostgreSQL schema/reference archive for the non-Supabase runtime
 
 ## What Is Working Today

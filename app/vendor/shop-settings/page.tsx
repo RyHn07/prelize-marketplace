@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { getProductsForVendors } from "@/lib/products/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { fetchVendorOnboardingStatus } from "@/lib/vendor-onboarding";
 import type {
   CndsShippingProfileRow,
@@ -126,7 +126,7 @@ export default function VendorShopSettingsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadSettings = async () => {
       try {
@@ -144,9 +144,9 @@ export default function VendorShopSettingsPage() {
 
         const vendorId = onboardingStatus.vendorId;
         const [{ data: vendor }, productResult, { data: cndsProfiles }] = await Promise.all([
-          supabase.from("vendors").select("*").eq("id", vendorId).maybeSingle(),
-          getProductsForVendors([vendorId], supabase),
-          supabase.from("cnds_shipping_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
+          dataClient.from("vendors").select("*").eq("id", vendorId).maybeSingle(),
+          getProductsForVendors([vendorId], dataClient),
+          dataClient.from("cnds_shipping_profiles").select("*").eq("vendor_id", vendorId).order("created_at", { ascending: false }),
         ]);
 
         if (!isMounted) {

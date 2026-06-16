@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { query } from "@/lib/db";
 import { ORDER_STATUSES } from "@/lib/orders/utils";
-import { requireAdminRequest } from "@/lib/supabase-admin";
+import { requireAdminRequest } from "@/lib/auth/request";
 import type { OrderItemRow, VendorOrderRow, VendorOrderStatus, VendorRow } from "@/types/product-db";
 
 type OrderPatchBody = {

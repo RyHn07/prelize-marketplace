@@ -1,11 +1,11 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import {
   calculateProductProfitPricing,
   DEFAULT_CNY_TO_BDT_RATE,
   normalizeExchangeRate,
 } from "@/lib/product-pricing";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   ProductImageRow,
   ProductDbRow,
@@ -132,7 +132,7 @@ function buildSchemaErrorMessage(message: string) {
   if (
     (normalizedMessage.includes("products") && normalizedMessage.includes("schema cache"))
   ) {
-    return `Supabase schema cache still reports a products table editor column mismatch. If you just ran the migration, wait a few seconds and try again. Original error: ${message}`;
+    return `DataClient schema cache still reports a products table editor column mismatch. If you just ran the migration, wait a few seconds and try again. Original error: ${message}`;
   }
 
   if (normalizedMessage.includes("product_variants")) {
@@ -261,13 +261,13 @@ function mapToLegacyPricingSource(value: unknown) {
 }
 
 async function resolveUniqueProductSlug(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   rawSlug: string,
   excludeId?: string,
 ) {
   const baseSlug = normalizeProductSlug(rawSlug);
   const slugPattern = `${baseSlug}-%`;
-  let query = supabase
+  let query = dataClient
     .from("products")
     .select("id, slug")
     .or(`slug.eq.${baseSlug},slug.like.${slugPattern}`);
@@ -310,8 +310,8 @@ async function resolveUniqueProductSlug(
   };
 }
 
-async function getCurrentCnyToBdtRate(supabase: SupabaseClient) {
-  const { data, error } = await supabase
+async function getCurrentCnyToBdtRate(dataClient: PgDataClient) {
+  const { data, error } = await dataClient
     .from("platform_settings")
     .select("cny_to_bdt_rate")
     .eq("singleton_key", "default")
@@ -368,7 +368,7 @@ function applyProfitPricingToVariant(
 }
 
 async function insertProductWithFallback(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   payload: ProductUpsertPayload & {
     price: number;
     moq: number;
@@ -380,7 +380,7 @@ async function insertProductWithFallback(
   let nextPayload: Record<string, unknown> = payload;
 
   while (true) {
-    const result = await supabase.from("products").insert(nextPayload as never).select("*").single();
+    const result = await dataClient.from("products").insert(nextPayload as never).select("*").single();
 
     if (!result.error && result.data) {
       return result;
@@ -429,7 +429,7 @@ async function insertProductWithFallback(
 }
 
 async function updateProductWithFallback(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   payload: ProductUpsertPayload & {
     price: number;
@@ -442,7 +442,7 @@ async function updateProductWithFallback(
   let nextPayload: Record<string, unknown> = payload;
 
   while (true) {
-    const result = await supabase.from("products").update(nextPayload as never).eq("id", id).select("*").single();
+    const result = await dataClient.from("products").update(nextPayload as never).eq("id", id).select("*").single();
 
     if (!result.error && result.data) {
       return result;
@@ -530,7 +530,7 @@ function getBaseProductMetrics(
 }
 
 async function syncProductRelationTables(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   productId: string,
   payload: ProductUpsertPayload,
 ) {
@@ -549,25 +549,25 @@ async function syncProductRelationTables(
       sort_order: index,
     })) satisfies Array<Pick<ProductSpecRow, "product_id" | "label" | "value" | "sort_order">>;
 
-  const { error: deleteImagesError } = await supabase.from("product_images").delete().eq("product_id", productId);
+  const { error: deleteImagesError } = await dataClient.from("product_images").delete().eq("product_id", productId);
   if (deleteImagesError && !isMissingRelationError(deleteImagesError.message)) {
     return deleteImagesError;
   }
 
-  const { error: deleteSpecsError } = await supabase.from("product_specs").delete().eq("product_id", productId);
+  const { error: deleteSpecsError } = await dataClient.from("product_specs").delete().eq("product_id", productId);
   if (deleteSpecsError && !isMissingRelationError(deleteSpecsError.message)) {
     return deleteSpecsError;
   }
 
   if (imageRows.length > 0) {
-    const { error: insertImagesError } = await supabase.from("product_images").insert(imageRows as never);
+    const { error: insertImagesError } = await dataClient.from("product_images").insert(imageRows as never);
     if (insertImagesError && !isMissingRelationError(insertImagesError.message)) {
       return insertImagesError;
     }
   }
 
   if (specRows.length > 0) {
-    const { error: insertSpecsError } = await supabase.from("product_specs").insert(specRows as never);
+    const { error: insertSpecsError } = await dataClient.from("product_specs").insert(specRows as never);
     if (insertSpecsError && !isMissingRelationError(insertSpecsError.message)) {
       return insertSpecsError;
     }
@@ -577,13 +577,13 @@ async function syncProductRelationTables(
 }
 
 async function syncProductPricingTiers(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   productId: string,
   tiers: ProductPricingTierUpsertPayload[],
   profitPercent: number,
   exchangeRateCnyToBdt: number,
 ) {
-  const { error: deleteTiersError } = await supabase.from("product_pricing_tiers").delete().eq("product_id", productId);
+  const { error: deleteTiersError } = await dataClient.from("product_pricing_tiers").delete().eq("product_id", productId);
 
   if (deleteTiersError && !isMissingRelationError(deleteTiersError.message)) {
     return deleteTiersError;
@@ -613,7 +613,7 @@ async function syncProductPricingTiers(
     return null;
   }
 
-  const { error: insertTiersError } = await supabase.from("product_pricing_tiers").insert(tierRows as never);
+  const { error: insertTiersError } = await dataClient.from("product_pricing_tiers").insert(tierRows as never);
 
   if (insertTiersError && !isMissingRelationError(insertTiersError.message)) {
     return insertTiersError;
@@ -623,13 +623,13 @@ async function syncProductPricingTiers(
 }
 
 async function syncProductPricingTierSets(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   productId: string,
   tierSets: ProductPricingTierSetUpsertPayload[],
   profitPercent: number,
   exchangeRateCnyToBdt: number,
 ) {
-  const { data: existingSets, error: existingSetsError } = await supabase
+  const { data: existingSets, error: existingSetsError } = await dataClient
     .from("product_pricing_tier_sets")
     .select("id")
     .eq("product_id", productId);
@@ -644,7 +644,7 @@ async function syncProductPricingTierSets(
   const existingSetIds = ((existingSets ?? []) as Array<{ id: string }>).map((row) => row.id);
 
   if (existingSetIds.length > 0) {
-    const { error: deleteRowsError } = await supabase
+    const { error: deleteRowsError } = await dataClient
       .from("product_pricing_tier_set_rows")
       .delete()
       .in("tier_set_id", existingSetIds);
@@ -657,7 +657,7 @@ async function syncProductPricingTierSets(
     }
   }
 
-  const { error: deleteSetsError } = await supabase.from("product_pricing_tier_sets").delete().eq("product_id", productId);
+  const { error: deleteSetsError } = await dataClient.from("product_pricing_tier_sets").delete().eq("product_id", productId);
 
   if (deleteSetsError && !isMissingRelationError(deleteSetsError.message)) {
     return {
@@ -692,7 +692,7 @@ async function syncProductPricingTierSets(
     };
   });
 
-  const { data: insertedSets, error: insertSetsError } = await supabase
+  const { data: insertedSets, error: insertSetsError } = await dataClient
     .from("product_pricing_tier_sets")
     .insert(insertPayload as never)
     .select("id, sort_order");
@@ -748,7 +748,7 @@ async function syncProductPricingTierSets(
   });
 
   if (rowPayload.length > 0) {
-    const { error: insertRowsError } = await supabase.from("product_pricing_tier_set_rows").insert(rowPayload as never);
+    const { error: insertRowsError } = await dataClient.from("product_pricing_tier_set_rows").insert(rowPayload as never);
 
     if (insertRowsError && !isMissingRelationError(insertRowsError.message)) {
       return {
@@ -765,13 +765,13 @@ async function syncProductPricingTierSets(
 }
 
 async function insertProductVariantsWithFallback(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   variantsPayload: Array<Record<string, unknown>>,
 ) {
   let nextPayload = variantsPayload;
 
   while (true) {
-    const result = await supabase.from("product_variants").insert(nextPayload as never);
+    const result = await dataClient.from("product_variants").insert(nextPayload as never);
 
     if (!result.error) {
       return result;
@@ -793,10 +793,10 @@ async function insertProductVariantsWithFallback(
 }
 
 export async function createProductEditorRecordWithClient(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   payload: ProductEditorSavePayload,
 ) {
-  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(supabase);
+  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(dataClient);
   const pricedProduct = applyProfitPricingToProduct(payload.product, exchangeRateCnyToBdt);
   const pricedVariants = payload.variants.map((variant) =>
     applyProfitPricingToVariant(variant, pricedProduct.profit_percent, exchangeRateCnyToBdt),
@@ -807,7 +807,7 @@ export async function createProductEditorRecordWithClient(
     pricedVariants,
     payload.pricing_tier_sets ?? [],
   );
-  const slugResult = await resolveUniqueProductSlug(supabase, pricedProduct.slug);
+  const slugResult = await resolveUniqueProductSlug(dataClient, pricedProduct.slug);
 
   if (slugResult.error) {
     return {
@@ -826,7 +826,7 @@ export async function createProductEditorRecordWithClient(
     is_active: pricedProduct.status === "active",
   };
 
-  const { data, error } = await insertProductWithFallback(supabase, productPayload);
+  const { data, error } = await insertProductWithFallback(dataClient, productPayload);
 
   if (error || !data) {
     if (error && isSlugConstraintError(error.message)) {
@@ -852,7 +852,7 @@ export async function createProductEditorRecordWithClient(
 
   if (pricedProduct.product_type === "variable" && payload.pricing_tier_sets) {
     const tierSetResult = await syncProductPricingTierSets(
-      supabase,
+      dataClient,
       (data as ProductDbRow).id,
       payload.pricing_tier_sets,
       pricedProduct.profit_percent,
@@ -860,7 +860,7 @@ export async function createProductEditorRecordWithClient(
     );
 
     if (tierSetResult.error) {
-      await supabase.from("products").delete().eq("id", (data as ProductDbRow).id);
+      await dataClient.from("products").delete().eq("id", (data as ProductDbRow).id);
 
       return {
         data: null as ProductDbRow | null,
@@ -881,10 +881,10 @@ export async function createProductEditorRecordWithClient(
       pricing_tier_set_id: variant.pricing_tier_set_id ? pricingTierSetIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
-    const { error: variantsError } = await insertProductVariantsWithFallback(supabase, variantsPayload);
+    const { error: variantsError } = await insertProductVariantsWithFallback(dataClient, variantsPayload);
 
     if (variantsError) {
-      await supabase.from("products").delete().eq("id", (data as ProductDbRow).id);
+      await dataClient.from("products").delete().eq("id", (data as ProductDbRow).id);
 
       return {
         data: null as ProductDbRow | null,
@@ -896,7 +896,7 @@ export async function createProductEditorRecordWithClient(
     }
   }
 
-  const relationError = await syncProductRelationTables(supabase, (data as ProductDbRow).id, pricedProduct);
+  const relationError = await syncProductRelationTables(dataClient, (data as ProductDbRow).id, pricedProduct);
   if (relationError) {
     return {
       data: null as ProductDbRow | null,
@@ -905,7 +905,7 @@ export async function createProductEditorRecordWithClient(
   }
 
   const pricingTierError = await syncProductPricingTiers(
-    supabase,
+    dataClient,
     (data as ProductDbRow).id,
     pricedProduct.product_type === "single" ? payload.pricing_tiers ?? [] : [],
     pricedProduct.profit_percent,
@@ -928,8 +928,8 @@ export async function createProductEditorRecordWithClient(
 }
 
 export async function createProductEditorRecord(payload: ProductEditorSavePayload) {
-  const supabase = getSupabaseClient();
-  return createProductEditorRecordWithClient(supabase, payload);
+  const dataClient = getPgDataClient();
+  return createProductEditorRecordWithClient(dataClient, payload);
 }
 
 function buildDeleteProductErrorMessage(message: string) {
@@ -947,10 +947,10 @@ function buildDeleteProductErrorMessage(message: string) {
 }
 
 export async function deleteProductRecordWithClient(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
 ) {
-  const { data, error } = await supabase.from("products").delete().eq("id", id).select("*").maybeSingle();
+  const { data, error } = await dataClient.from("products").delete().eq("id", id).select("*").maybeSingle();
 
   if (error) {
     return {
@@ -978,11 +978,11 @@ export async function deleteProductRecordWithClient(
 }
 
 export async function updateProductEditorRecordWithClient(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   id: string,
   payload: ProductEditorSavePayload,
 ) {
-  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(supabase);
+  const exchangeRateCnyToBdt = await getCurrentCnyToBdtRate(dataClient);
   const pricedProduct = applyProfitPricingToProduct(payload.product, exchangeRateCnyToBdt);
   const pricedVariants = payload.variants.map((variant) =>
     applyProfitPricingToVariant(variant, pricedProduct.profit_percent, exchangeRateCnyToBdt),
@@ -993,7 +993,7 @@ export async function updateProductEditorRecordWithClient(
     pricedVariants,
     payload.pricing_tier_sets ?? [],
   );
-  const slugResult = await resolveUniqueProductSlug(supabase, pricedProduct.slug, id);
+  const slugResult = await resolveUniqueProductSlug(dataClient, pricedProduct.slug, id);
 
   if (slugResult.error) {
     return {
@@ -1012,7 +1012,7 @@ export async function updateProductEditorRecordWithClient(
     is_active: pricedProduct.status === "active",
   };
 
-  const { data, error } = await updateProductWithFallback(supabase, id, productPayload);
+  const { data, error } = await updateProductWithFallback(dataClient, id, productPayload);
 
   if (error || !data) {
     if (error && isSlugConstraintError(error.message)) {
@@ -1034,7 +1034,7 @@ export async function updateProductEditorRecordWithClient(
     };
   }
 
-  const { error: cleanupError } = await supabase.from("product_variants").delete().eq("product_id", id);
+  const { error: cleanupError } = await dataClient.from("product_variants").delete().eq("product_id", id);
 
   if (cleanupError && !cleanupError.message.toLowerCase().includes("product_variants")) {
     return {
@@ -1047,7 +1047,7 @@ export async function updateProductEditorRecordWithClient(
   }
 
   const tierSetResult = await syncProductPricingTierSets(
-    supabase,
+    dataClient,
     id,
     pricedProduct.product_type === "variable" ? payload.pricing_tier_sets ?? [] : [],
     pricedProduct.profit_percent,
@@ -1071,7 +1071,7 @@ export async function updateProductEditorRecordWithClient(
       pricing_tier_set_id: variant.pricing_tier_set_id ? tierSetResult.setIdMap.get(variant.pricing_tier_set_id) ?? null : null,
     }));
 
-    const { error: variantsError } = await insertProductVariantsWithFallback(supabase, variantsPayload);
+    const { error: variantsError } = await insertProductVariantsWithFallback(dataClient, variantsPayload);
 
     if (variantsError) {
       return {
@@ -1084,7 +1084,7 @@ export async function updateProductEditorRecordWithClient(
     }
   }
 
-  const relationError = await syncProductRelationTables(supabase, id, pricedProduct);
+  const relationError = await syncProductRelationTables(dataClient, id, pricedProduct);
   if (relationError) {
     return {
       data: null as ProductDbRow | null,
@@ -1094,7 +1094,7 @@ export async function updateProductEditorRecordWithClient(
 
   const pricingTierError = payload.pricing_tiers
     ? await syncProductPricingTiers(
-        supabase,
+        dataClient,
         id,
         pricedProduct.product_type === "single" ? payload.pricing_tiers : [],
         pricedProduct.profit_percent,
@@ -1121,6 +1121,6 @@ export async function updateProductEditorRecord(
   id: string,
   payload: ProductEditorSavePayload,
 ) {
-  const supabase = getSupabaseClient();
-  return updateProductEditorRecordWithClient(supabase, id, payload);
+  const dataClient = getPgDataClient();
+  return updateProductEditorRecordWithClient(dataClient, id, payload);
 }

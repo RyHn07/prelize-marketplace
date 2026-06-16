@@ -1,6 +1,6 @@
 import ThemeEditorForm from "@/components/admin/homepage/theme-editor-form";
 import { getHomepageThemeEditorRecord, listHomepageContentBlocks } from "@/lib/homepage/admin";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient } from "@/lib/auth/request";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -8,10 +8,10 @@ type PageProps = {
 
 export default async function EditHomepageThemePage({ params }: PageProps) {
   const { id } = await params;
-  const supabase = getSupabaseServiceRoleClient();
+  const dataClient = getDatabaseServiceClient();
   const [{ data }, { data: contentBlocks }] = await Promise.all([
-    getHomepageThemeEditorRecord(supabase, id),
-    listHomepageContentBlocks(supabase),
+    getHomepageThemeEditorRecord(dataClient, id),
+    listHomepageContentBlocks(dataClient),
   ]);
   const heroContent = contentBlocks.find((block) => block.content_key === "hero") ?? null;
 

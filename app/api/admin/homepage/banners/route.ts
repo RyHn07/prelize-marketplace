@@ -5,7 +5,7 @@ import {
   listHomepageBanners,
   parseHomepageBannerInput,
 } from "@/lib/homepage/admin";
-import { getSupabaseServiceRoleClient, requireAdminRequest } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient, requireAdminRequest } from "@/lib/auth/request";
 
 export async function GET(request: Request) {
   const auth = await requireAdminRequest(request);
@@ -14,8 +14,8 @@ export async function GET(request: Request) {
     return auth.errorResponse;
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const result = await listHomepageBanners(supabase);
+  const dataClient = getDatabaseServiceClient();
+  const result = await listHomepageBanners(dataClient);
 
   if (result.error) {
     return NextResponse.json({ error: result.error.message }, { status: 500 });
@@ -32,8 +32,8 @@ export async function POST(request: Request) {
   }
 
   const payload = parseHomepageBannerInput(await request.json());
-  const supabase = getSupabaseServiceRoleClient();
-  const result = await createHomepageBanner(supabase, payload);
+  const dataClient = getDatabaseServiceClient();
+  const result = await createHomepageBanner(dataClient, payload);
 
   if (result.error) {
     return NextResponse.json({ error: result.error.message }, { status: 500 });

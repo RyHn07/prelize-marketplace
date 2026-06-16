@@ -6,7 +6,7 @@ import {
   DEFAULT_PLATFORM_SETTINGS,
   PLATFORM_SETTINGS_SINGLETON_KEY,
 } from "@/lib/platform-settings";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { PlatformSettingsRow } from "@/types/platform-settings";
 
 export type AdminBrandState = {
@@ -36,8 +36,8 @@ export function useAdminBranding() {
 
     const loadBrand = async () => {
       try {
-        const supabase = getSupabaseClient();
-        const { data, error } = await supabase
+        const dataClient = getPgDataClient();
+        const { data, error } = await dataClient
           .from("platform_settings")
           .select("logo_url, site_short_title, marketplace_name")
           .eq("singleton_key", PLATFORM_SETTINGS_SINGLETON_KEY)

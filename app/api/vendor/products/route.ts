@@ -4,10 +4,10 @@ import { getCurrentUserFromCookie, type AuthUser } from "@/lib/auth/session";
 import { getAdminProductCategoryOptions, getAdminProductVendorOptions, getAdminProducts } from "@/lib/admin/vps-data";
 import { query } from "@/lib/db";
 import { createProductEditorRecordWithClient, type ProductEditorSavePayload } from "@/lib/products/actions";
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 
 async function getActiveVendorMembership(userId: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
     const result = await query<{ vendor_id: string; status: string }>(
       `
         select vendor_id, status
@@ -25,8 +25,8 @@ async function getActiveVendorMembership(userId: string) {
     };
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const { data, error } = await supabase
+  const dataClient = getDatabaseServiceClient();
+  const { data, error } = await dataClient
     .from("vendor_members")
     .select("vendor_id, status")
     .eq("user_id", userId)
@@ -116,8 +116,8 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as ProductEditorSavePayload;
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await createProductEditorRecordWithClient(supabase, {
+    const dataClient = getDatabaseServiceClient();
+    const result = await createProductEditorRecordWithClient(dataClient, {
       ...body,
       product: {
         ...body.product,

@@ -7,10 +7,10 @@ import {
   listVendorReviewRows,
   markVendorReviewNotificationsRead,
 } from "@/lib/reviews";
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 
 async function getActiveVendorMembership(userId: string) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
     const result = await query<{ vendor_id: string; status: string }>(
       `
         select vendor_id, status
@@ -28,8 +28,8 @@ async function getActiveVendorMembership(userId: string) {
     };
   }
 
-  const supabase = getSupabaseServiceRoleClient();
-  const { data, error } = await supabase
+  const dataClient = getDatabaseServiceClient();
+  const { data, error } = await dataClient
     .from("vendor_members")
     .select("vendor_id, status")
     .eq("user_id", userId)
@@ -147,14 +147,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No vendor account found." }, { status: 403 });
     }
 
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
       return NextResponse.json(await listVendorReviewsFromVps(user.id, membershipResult.data.vendor_id));
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const dataClient = getDatabaseServiceClient();
     const [reviewResult, stateResult] = await Promise.all([
-      listVendorReviewRows(membershipResult.data.vendor_id, supabase),
-      getVendorReviewNotificationState(user.id, membershipResult.data.vendor_id, supabase),
+      listVendorReviewRows(membershipResult.data.vendor_id, dataClient),
+      getVendorReviewNotificationState(user.id, membershipResult.data.vendor_id, dataClient),
     ]);
 
     if (reviewResult.error) {
@@ -205,12 +205,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unsupported review action." }, { status: 400 });
     }
 
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (!process.env.DATABASE_URL || !process.env.DATABASE_URL) {
       return NextResponse.json(await markVendorReviewsReadInVps(user.id, membershipResult.data.vendor_id));
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await markVendorReviewNotificationsRead(user.id, membershipResult.data.vendor_id, supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await markVendorReviewNotificationsRead(user.id, membershipResult.data.vendor_id, dataClient);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 400 });

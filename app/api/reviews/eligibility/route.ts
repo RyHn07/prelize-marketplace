@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { listOrderReviewEligibility } from "@/lib/reviews";
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 
 export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUserFromRequest(request);
@@ -18,8 +18,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "orderId is required." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await listOrderReviewEligibility(auth.user.id, auth.user.email ?? null, orderId, supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await listOrderReviewEligibility(auth.user.id, auth.user.email ?? null, orderId, dataClient);
 
     if (result.error) {
       return NextResponse.json(

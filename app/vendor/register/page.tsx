@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 import VendorForm, { DEFAULT_VENDOR_FORM_VALUES } from "@/components/vendor/vendor-form";
 import { fetchVendorOnboardingStatus, registerVendorProfile } from "@/lib/vendor-onboarding";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { VendorFormValues } from "@/types/product-db";
 
 function toRegistrationPayload(values: VendorFormValues) {
@@ -35,12 +35,12 @@ export default function VendorRegisterPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadStatus = async () => {
       try {
         const [{ data: authData }, onboardingStatus] = await Promise.all([
-          supabase.auth.getUser(),
+          dataClient.auth.getUser(),
           fetchVendorOnboardingStatus(),
         ]);
 

@@ -11,7 +11,7 @@ import {
   duplicateHomepageThemeRequest,
   fetchHomepageThemes,
 } from "@/lib/homepage/actions";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { HomepageThemeRow } from "@/types/product-db";
 
 function formatDate(value: string) {
@@ -46,10 +46,10 @@ export default function ThemesContent() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

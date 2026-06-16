@@ -1,7 +1,7 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import { DEFAULT_CNY_TO_BDT_RATE, roundCurrency } from "@/lib/product-pricing";
-import { getSupabaseClient, hasSupabaseClientEnv } from "@/lib/supabase-client";
+import { getPgDataClient, hasPgDataClientEnv } from "@/lib/browser-app-client";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import type {
   ProductBrandOption,
@@ -240,8 +240,8 @@ function normalizeProductPricingTierSetRow(row: ProductPricingTierSetTierRow): P
   };
 }
 
-function resolveSupabaseClient(client?: SupabaseClient) {
-  return client ?? getSupabaseClient();
+function resolvePgDataClient(client?: PgDataClient) {
+  return client ?? getPgDataClient();
 }
 
 function parseBrowseNumber(value: string | number | null | undefined) {
@@ -283,9 +283,9 @@ function clampBrowseLimit(value: string | number | null | undefined) {
   return Math.min(48, Math.max(1, Math.floor(parsed)));
 }
 
-export async function getProducts(client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+export async function getProducts(client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient.from("products").select("*").order("created_at", { ascending: false });
 
   return {
     data: ((data ?? []) as ProductDbRow[]).map(normalizeProduct),
@@ -293,7 +293,7 @@ export async function getProducts(client?: SupabaseClient) {
   };
 }
 
-export async function getProductsForVendors(vendorIds: string[], client?: SupabaseClient) {
+export async function getProductsForVendors(vendorIds: string[], client?: PgDataClient) {
   const scopedVendorIds = Array.from(new Set(vendorIds.filter(Boolean)));
 
   if (scopedVendorIds.length === 0) {
@@ -303,8 +303,8 @@ export async function getProductsForVendors(vendorIds: string[], client?: Supaba
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("products")
     .select("*")
     .in("vendor_id", scopedVendorIds)
@@ -321,7 +321,7 @@ function isPublicProduct(row: ProductDbRow) {
   return row.is_active && status === "active";
 }
 
-export async function getPublicProducts(client?: SupabaseClient) {
+export async function getPublicProducts(client?: PgDataClient) {
   const { data, error } = await getProducts(client);
 
   return {
@@ -341,7 +341,7 @@ export async function getPublicProductsByVendorId(vendorId: string) {
 
 export async function getPublicProductsByBrowseParams(
   params: PublicProductBrowseParams = {},
-  client?: SupabaseClient,
+  client?: PgDataClient,
 ) {
   const [{ data: publicProducts, error }, { data: categoryOptions }] = await Promise.all([
     getPublicProducts(client),
@@ -433,9 +433,9 @@ export async function getPublicProductsByBrowseParams(
   };
 }
 
-export async function getProductById(id: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase.from("products").select("*").eq("id", id).single();
+export async function getProductById(id: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient.from("products").select("*").eq("id", id).single();
 
   return {
     data: data ? normalizeProduct(data as ProductDbRow) : null,
@@ -443,7 +443,7 @@ export async function getProductById(id: string, client?: SupabaseClient) {
   };
 }
 
-export async function getProductByIdForVendors(id: string, vendorIds: string[], client?: SupabaseClient) {
+export async function getProductByIdForVendors(id: string, vendorIds: string[], client?: PgDataClient) {
   const productResult = await getProductById(id, client);
 
   if (productResult.error || !productResult.data) {
@@ -461,7 +461,7 @@ export async function getProductByIdForVendors(id: string, vendorIds: string[], 
   };
 }
 
-export async function getProductsByIds(ids: string[], client?: SupabaseClient) {
+export async function getProductsByIds(ids: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -471,8 +471,8 @@ export async function getProductsByIds(ids: string[], client?: SupabaseClient) {
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase.from("products").select("*").in("id", uniqueIds);
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient.from("products").select("*").in("id", uniqueIds);
 
   return {
     data: ((data ?? []) as ProductDbRow[]).map(normalizeProduct),
@@ -480,7 +480,7 @@ export async function getProductsByIds(ids: string[], client?: SupabaseClient) {
   };
 }
 
-export async function getProductVariantMapByProductIds(productIds: string[], client?: SupabaseClient) {
+export async function getProductVariantMapByProductIds(productIds: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -490,8 +490,8 @@ export async function getProductVariantMapByProductIds(productIds: string[], cli
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_variants")
     .select("*")
     .in("product_id", uniqueIds)
@@ -526,9 +526,9 @@ export async function getProductVariantMapByProductIds(productIds: string[], cli
   };
 }
 
-export async function getPublicProductBySlug(slug: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase.from("products").select("*").eq("slug", slug).maybeSingle();
+export async function getPublicProductBySlug(slug: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient.from("products").select("*").eq("slug", slug).maybeSingle();
 
   const normalizedProduct = data ? normalizeProduct(data as ProductDbRow) : null;
 
@@ -538,9 +538,9 @@ export async function getPublicProductBySlug(slug: string, client?: SupabaseClie
   };
 }
 
-export async function getPublicProductSoldCount(productId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase.rpc("get_public_product_sold_count", {
+export async function getPublicProductSoldCount(productId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient.rpc("get_public_product_sold_count", {
     check_product_id: productId,
   });
   const soldCount = Number(data);
@@ -613,9 +613,9 @@ function isMissingRelationError(message: string) {
   );
 }
 
-export async function getProductPricingTiersByProductId(productId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+export async function getProductPricingTiersByProductId(productId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_pricing_tiers")
     .select("*")
     .eq("product_id", productId)
@@ -635,7 +635,7 @@ export async function getProductPricingTiersByProductId(productId: string, clien
   };
 }
 
-export async function getProductPricingTierMapByProductIds(productIds: string[], client?: SupabaseClient) {
+export async function getProductPricingTierMapByProductIds(productIds: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -645,8 +645,8 @@ export async function getProductPricingTierMapByProductIds(productIds: string[],
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data, error } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data, error } = await dataClient
     .from("product_pricing_tiers")
     .select("*")
     .in("product_id", uniqueIds)
@@ -682,7 +682,7 @@ export async function getProductPricingTierMapByProductIds(productIds: string[],
   };
 }
 
-export async function getProductPricingTierSetsByProductIds(productIds: string[], client?: SupabaseClient) {
+export async function getProductPricingTierSetsByProductIds(productIds: string[], client?: PgDataClient) {
   const uniqueIds = Array.from(new Set(productIds.filter(Boolean)));
 
   if (uniqueIds.length === 0) {
@@ -692,15 +692,15 @@ export async function getProductPricingTierSetsByProductIds(productIds: string[]
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
+  const dataClient = resolvePgDataClient(client);
   const [{ data: sets, error: setsError }, { data: rows, error: rowsError }] = await Promise.all([
-    supabase
+    dataClient
       .from("product_pricing_tier_sets")
       .select("*")
       .in("product_id", uniqueIds)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
-    supabase
+    dataClient
       .from("product_pricing_tier_set_rows")
       .select("*")
       .order("sort_order", { ascending: true })
@@ -763,7 +763,7 @@ function mapTierSetRowToResolvedTier(row: ProductPricingTierSetTierRow): Resolve
   };
 }
 
-export async function getResolvedProductPricingMapByProducts(products: ProductDbRow[], client?: SupabaseClient) {
+export async function getResolvedProductPricingMapByProducts(products: ProductDbRow[], client?: PgDataClient) {
   if (products.length === 0) {
     return {
       data: new Map<string, ResolvedProductPricingConfig>(),
@@ -773,8 +773,8 @@ export async function getResolvedProductPricingMapByProducts(products: ProductDb
 
   const legacyTierResult = await getProductPricingTierMapByProductIds(products.map((product) => product.id), client);
   const tierSetResult = await getProductPricingTierSetsByProductIds(products.map((product) => product.id), client);
-  const supabase = resolveSupabaseClient(client);
-  const { data: variantRows, error: variantRowsError } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data: variantRows, error: variantRowsError } = await dataClient
     .from("product_variants")
     .select("id, product_id, pricing_tier_set_id")
     .in("product_id", products.map((product) => product.id));
@@ -848,16 +848,16 @@ export async function getResolvedProductPricingMapByProducts(products: ProductDb
   };
 }
 
-async function loadProductRelationRecords(productId: string, client?: SupabaseClient) {
-  const supabase = resolveSupabaseClient(client);
+async function loadProductRelationRecords(productId: string, client?: PgDataClient) {
+  const dataClient = resolvePgDataClient(client);
   const [{ data: imageRows, error: imageError }, { data: specRows, error: specError }] = await Promise.all([
-    supabase
+    dataClient
       .from("product_images")
       .select("id, product_id, image_url, sort_order, created_at")
       .eq("product_id", productId)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
-    supabase
+    dataClient
       .from("product_specs")
       .select("id, product_id, label, value, sort_order, created_at")
       .eq("product_id", productId)
@@ -903,7 +903,7 @@ function mergeProductRelations(
   };
 }
 
-export async function getPublicProductDetailBySlug(slug: string, client?: SupabaseClient) {
+export async function getPublicProductDetailBySlug(slug: string, client?: PgDataClient) {
   const productResult = await getPublicProductBySlug(slug, client);
 
   if (productResult.error || !productResult.data) {
@@ -925,8 +925,8 @@ export async function getPublicProductDetailBySlug(slug: string, client?: Supaba
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
-  const { data: variants, error: variantsError } = await supabase
+  const dataClient = resolvePgDataClient(client);
+  const { data: variants, error: variantsError } = await dataClient
     .from("product_variants")
     .select("*")
     .eq("product_id", productResult.data.id)
@@ -956,7 +956,7 @@ export async function getPublicProductDetailBySlug(slug: string, client?: Supaba
   };
 }
 
-export async function getProductEditorRecord(id: string, client?: SupabaseClient) {
+export async function getProductEditorRecord(id: string, client?: PgDataClient) {
   const productResult = await getProductById(id, client);
 
   if (productResult.error || !productResult.data) {
@@ -966,9 +966,9 @@ export async function getProductEditorRecord(id: string, client?: SupabaseClient
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
+  const dataClient = resolvePgDataClient(client);
   const [{ data: variants, error: variantsError }, pricingTiersResult, pricingTierSetsResult] = await Promise.all([
-    supabase.from("product_variants").select("*").eq("product_id", id).order("created_at", { ascending: true }),
+    dataClient.from("product_variants").select("*").eq("product_id", id).order("created_at", { ascending: true }),
     getProductPricingTiersByProductId(id, client),
     getProductPricingTierSetsByProductIds([id], client),
   ]);
@@ -1004,7 +1004,7 @@ export async function getProductEditorRecord(id: string, client?: SupabaseClient
   };
 }
 
-export async function getProductEditorRecordForVendors(id: string, vendorIds: string[], client?: SupabaseClient) {
+export async function getProductEditorRecordForVendors(id: string, vendorIds: string[], client?: PgDataClient) {
   const productResult = await getProductByIdForVendors(id, vendorIds, client);
 
   if (productResult.error || !productResult.data) {
@@ -1014,9 +1014,9 @@ export async function getProductEditorRecordForVendors(id: string, vendorIds: st
     };
   }
 
-  const supabase = resolveSupabaseClient(client);
+  const dataClient = resolvePgDataClient(client);
   const [{ data: variants, error: variantsError }, pricingTiersResult, pricingTierSetsResult] = await Promise.all([
-    supabase.from("product_variants").select("*").eq("product_id", id).order("created_at", { ascending: true }),
+    dataClient.from("product_variants").select("*").eq("product_id", id).order("created_at", { ascending: true }),
     getProductPricingTiersByProductId(id, client),
     getProductPricingTierSetsByProductIds([id], client),
   ]);
@@ -1053,15 +1053,15 @@ export async function getProductEditorRecordForVendors(id: string, vendorIds: st
 }
 
 export async function getProductCategoryOptions() {
-  if (!hasSupabaseClientEnv()) {
+  if (!hasPgDataClientEnv()) {
     return {
       data: [] as ProductCategoryOption[],
       error: null,
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from("categories").select("id, name, slug, parent_id, image_url").order("name", { ascending: true });
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient.from("categories").select("id, name, slug, parent_id, image_url").order("name", { ascending: true });
 
   if (error) {
     return {
@@ -1077,8 +1077,8 @@ export async function getProductCategoryOptions() {
 }
 
 export async function getProductBrandOptions() {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("brands")
     .select("id, name, slug, image_url")
     .order("name", { ascending: true });
@@ -1113,8 +1113,8 @@ export async function getProductVendorOptions() {
 }
 
 export async function getProductImagesByProductId(productId: string) {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("product_images")
     .select("id, product_id, image_url, sort_order, created_at")
     .eq("product_id", productId)
@@ -1135,8 +1135,8 @@ export async function getProductImagesByProductId(productId: string) {
 }
 
 export async function getProductSpecsByProductId(productId: string) {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("product_specs")
     .select("id, product_id, label, value, sort_order, created_at")
     .eq("product_id", productId)
@@ -1166,8 +1166,8 @@ export async function getProductImageMapByProductIds(productIds: string[]) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("product_images")
     .select("product_id, image_url, sort_order, created_at")
     .in("product_id", uniqueIds)

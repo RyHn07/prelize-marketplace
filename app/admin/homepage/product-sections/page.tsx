@@ -11,7 +11,7 @@ import {
   updateHomepageProductSectionRequest,
 } from "@/lib/homepage/actions";
 import { getProductCategoryOptions, getProducts } from "@/lib/products/queries";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   HomepageProductSectionRow,
   HomepageProductSectionSourceType,
@@ -69,10 +69,10 @@ export default function HomepageProductSectionsPage() {
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
-      const access = await getAdminAccessState(supabase);
+      const access = await getAdminAccessState(dataClient);
 
       if (!isMounted) {
         return;

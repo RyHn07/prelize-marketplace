@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type { VendorRow, VendorUpsertPayload } from "@/types/product-db";
 
 function normalizeVendorSlug(value: string) {
@@ -22,10 +22,10 @@ async function resolveUniqueVendorSlug(
   rawSlug: string,
   excludeId?: string,
 ) {
-  const supabase = getSupabaseClient();
+  const dataClient = getPgDataClient();
   const baseSlug = normalizeVendorSlug(rawSlug);
   const slugPattern = `${baseSlug}-%`;
-  let query = supabase
+  let query = dataClient
     .from("vendors")
     .select("id, slug")
     .or(`slug.eq.${baseSlug},slug.like.${slugPattern}`);
@@ -94,8 +94,8 @@ export async function createVendor(payload: VendorUpsertPayload) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("vendors")
     .insert({
       ...payload,
@@ -132,8 +132,8 @@ export async function updateVendor(id: string, payload: VendorUpsertPayload) {
     };
   }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
+  const dataClient = getPgDataClient();
+  const { data, error } = await dataClient
     .from("vendors")
     .update({
       ...payload,

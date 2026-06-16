@@ -14,7 +14,7 @@ import {
 } from "@/lib/pricing-tiers/actions";
 import { getAdminAccessState } from "@/lib/admin-access";
 import { getCurrentVendorMembership, getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import { getVendors } from "@/lib/vendors/queries";
 import type { PricingTierProfileRow, ProductPricingType, VendorRow } from "@/types/product-db";
 
@@ -108,13 +108,13 @@ export default function PricingTierProfileManager({ mode }: { mode: "admin" | "v
 
   useEffect(() => {
     let isMounted = true;
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
 
     const loadPage = async () => {
       try {
         if (mode === "admin") {
           const [access, profileResult, vendorResult] = await Promise.all([
-            getAdminAccessState(supabase),
+            getAdminAccessState(dataClient),
             fetchAdminPricingTierProfiles(),
             getVendors(),
           ]);
@@ -136,8 +136,8 @@ export default function PricingTierProfileManager({ mode }: { mode: "admin" | "v
         }
 
         const [access, membership] = await Promise.all([
-          getVendorWorkspaceAccessState(supabase),
-          getCurrentVendorMembership(supabase),
+          getVendorWorkspaceAccessState(dataClient),
+          getCurrentVendorMembership(dataClient),
         ]);
 
         if (!isMounted) {

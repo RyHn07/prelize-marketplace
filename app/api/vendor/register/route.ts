@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 
 type RegisterBody = {
   vendor_name?: string;
@@ -30,12 +30,12 @@ function normalizeOptionalText(value: string | undefined) {
 }
 
 async function resolveUniqueVendorSlug(
-  supabase: ReturnType<typeof getSupabaseServiceRoleClient>,
+  dataClient: ReturnType<typeof getDatabaseServiceClient>,
   rawSlug: string,
 ) {
   const baseSlug = normalizeVendorSlug(rawSlug);
   const slugPattern = `${baseSlug}-%`;
-  const { data, error } = await supabase
+  const { data, error } = await dataClient
     .from("vendors")
     .select("slug")
     .or(`slug.eq.${baseSlug},slug.like.${slugPattern}`);
@@ -87,14 +87,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Vendor name is required." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const dataClient = getDatabaseServiceClient();
     const [{ data: invitation }, { data: existingMembership }] = await Promise.all([
-      supabase
+      dataClient
         .from("vendor_invitations")
         .select("id, status")
         .eq("user_id", authResult.user.id)
         .maybeSingle(),
-      supabase
+      dataClient
         .from("vendor_members")
         .select("id")
         .eq("user_id", authResult.user.id)
@@ -110,13 +110,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This user already has a vendor membership." }, { status: 400 });
     }
 
-    const slugResult = await resolveUniqueVendorSlug(supabase, body.slug?.trim() || vendorName);
+    const slugResult = await resolveUniqueVendorSlug(dataClient, body.slug?.trim() || vendorName);
 
     if (slugResult.error) {
       return NextResponse.json({ error: slugResult.error.message }, { status: 500 });
     }
 
-    const { data: createdVendor, error: vendorError } = await supabase
+    const { data: createdVendor, error: vendorError } = await dataClient
       .from("vendors")
       .insert({
         name: vendorName,
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: vendorError?.message ?? "Unable to create vendor record." }, { status: 500 });
     }
 
-    const { error: membershipError } = await supabase.from("vendor_members").insert({
+    const { error: membershipError } = await dataClient.from("vendor_members").insert({
       vendor_id: (createdVendor as { id: string }).id,
       user_id: authResult.user.id,
       role: "owner",
@@ -144,11 +144,11 @@ export async function POST(request: Request) {
     } as never);
 
     if (membershipError) {
-      await supabase.from("vendors").delete().eq("id", (createdVendor as { id: string }).id);
+      await dataClient.from("vendors").delete().eq("id", (createdVendor as { id: string }).id);
       return NextResponse.json({ error: membershipError.message }, { status: 500 });
     }
 
-    const { error: invitationError } = await supabase
+    const { error: invitationError } = await dataClient
       .from("vendor_invitations")
       .update({ status: "accepted" } as never)
       .eq("id", invitation.id);

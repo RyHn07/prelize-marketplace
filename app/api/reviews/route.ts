@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAuthenticatedUserFromRequest, getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getAuthenticatedUserFromRequest, getDatabaseServiceClient } from "@/lib/auth/request";
 import { createProductReview, ensureCustomerRole, listOrderReviewEligibility } from "@/lib/reviews";
 
 type CreateReviewRequest = {
@@ -42,12 +42,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Review comment must be at least 8 characters long." }, { status: 400 });
     }
 
-    const supabase = getSupabaseServiceRoleClient();
+    const dataClient = getDatabaseServiceClient();
     const eligibilityResult = await listOrderReviewEligibility(
       auth.user.id,
       auth.user.email ?? null,
       orderId,
-      supabase,
+      dataClient,
     );
 
     if (eligibilityResult.error) {
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "You have already reviewed this product for this order." }, { status: 400 });
     }
 
-    const roleResult = await ensureCustomerRole(auth.user.id, supabase);
+    const roleResult = await ensureCustomerRole(auth.user.id, dataClient);
 
     if (roleResult.error) {
       return NextResponse.json({ error: roleResult.error.message }, { status: 400 });
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
         title,
         comment,
       },
-      supabase,
+      dataClient,
     );
 
     if (reviewResult.error) {

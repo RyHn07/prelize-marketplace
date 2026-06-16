@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PgDataClient } from "@/lib/postgres-data-client";
 
 import type { InternationalShippingMethodRow, InternationalShippingTierRow } from "@/types/product-db";
 
@@ -74,10 +74,10 @@ export function normalizeInternationalShippingMethod(row: RawMethodRow): Interna
 }
 
 async function listMethods(
-  supabase: SupabaseClient,
+  dataClient: PgDataClient,
   options?: { activeOnly?: boolean },
 ) {
-  let query = supabase
+  let query = dataClient
     .from("international_shipping_methods")
     .select(
       "id, name, slug, description, delivery_min_days, delivery_max_days, minimum_weight_kg, is_active, sort_order, created_at, international_shipping_tiers(id, method_id, min_weight_kg, max_weight_kg, price_per_kg, sort_order, created_at)",
@@ -97,10 +97,10 @@ async function listMethods(
   };
 }
 
-export async function getActiveInternationalShippingMethods(supabase: SupabaseClient) {
-  return listMethods(supabase, { activeOnly: true });
+export async function getActiveInternationalShippingMethods(dataClient: PgDataClient) {
+  return listMethods(dataClient, { activeOnly: true });
 }
 
-export async function getAdminInternationalShippingMethods(supabase: SupabaseClient) {
-  return listMethods(supabase);
+export async function getAdminInternationalShippingMethods(dataClient: PgDataClient) {
+  return listMethods(dataClient);
 }

@@ -25,7 +25,7 @@ import { createVendorOrderSummary } from "@/lib/orders/utils";
 import { fetchResolvedProductPricingMap } from "@/lib/products/public-actions";
 import { getProductVariantMapByProductIds, getProductsByIds } from "@/lib/products/queries";
 import { calculateCartTotals, calculateImmediateChargeBreakdown, type CartItem } from "@/lib/shipping-utils";
-import { getSupabaseClient } from "@/lib/supabase-client";
+import { getPgDataClient } from "@/lib/browser-app-client";
 import type {
   CndsShippingProfileRow,
   InternationalShippingMethodRow,
@@ -422,9 +422,9 @@ export default function CheckoutPage() {
     let unsubscribe = () => undefined;
 
     try {
-      const supabase = getSupabaseClient();
+      const dataClient = getPgDataClient();
 
-      supabase.auth
+      dataClient.auth
         .getUser()
         .then(({ data }) => {
           if (!isMounted) {
@@ -445,7 +445,7 @@ export default function CheckoutPage() {
 
       const {
         data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
+      } = dataClient.auth.onAuthStateChange((_event, session) => {
         if (!isMounted) {
           return;
         }
@@ -682,11 +682,11 @@ export default function CheckoutPage() {
       return;
     }
 
-    const supabase = getSupabaseClient();
+    const dataClient = getPgDataClient();
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser();
+    } = await dataClient.auth.getUser();
 
     if (userError || !user?.id || !user.email) {
       router.push("/login");
@@ -731,7 +731,7 @@ export default function CheckoutPage() {
       const internationalShippingStatus: InternationalShippingStatus =
         internationalShippingSummary.total === null ? "pending_review" : "calculated";
 
-      const { data: insertedOrder, error: orderInsertError } = await supabase
+      const { data: insertedOrder, error: orderInsertError } = await dataClient
         .from("orders")
         .insert({
           order_number: orderNumber,
@@ -848,7 +848,7 @@ export default function CheckoutPage() {
           };
         });
 
-        const { error: vendorOrdersError } = await supabase
+        const { error: vendorOrdersError } = await dataClient
           .from("vendor_orders")
           .insert(vendorOrdersPayload as never);
 
@@ -912,7 +912,7 @@ export default function CheckoutPage() {
         };
       });
 
-      const { error: orderItemsError } = await supabase
+      const { error: orderItemsError } = await dataClient
         .from("order_items")
         .insert(orderItemsPayload as never);
 

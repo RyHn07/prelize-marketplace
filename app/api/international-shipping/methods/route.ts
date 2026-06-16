@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { getActiveInternationalShippingMethods } from "@/lib/international-shipping/queries";
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient } from "@/lib/auth/request";
 
 export async function GET() {
   try {
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await getActiveInternationalShippingMethods(supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await getActiveInternationalShippingMethods(dataClient);
 
     if (result.error) {
       return NextResponse.json({ error: result.error.message }, { status: 500 });

@@ -1,10 +1,10 @@
-import { getSupabaseServiceRoleClient } from "@/lib/supabase-admin";
+import { getDatabaseServiceClient } from "@/lib/auth/request";
 import { getActiveInternationalShippingMethods } from "@/lib/international-shipping/queries";
 
 export async function getActiveInternationalShippingMethodsForServer() {
   try {
-    const supabase = getSupabaseServiceRoleClient();
-    const result = await getActiveInternationalShippingMethods(supabase);
+    const dataClient = getDatabaseServiceClient();
+    const result = await getActiveInternationalShippingMethods(dataClient);
 
     if (result.error) {
       return {
