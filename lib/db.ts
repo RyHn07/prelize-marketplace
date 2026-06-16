@@ -4,10 +4,6 @@ import { Pool, type PoolClient, type QueryConfig, type QueryResult, type QueryRe
 
 const connectionString = process.env.DATABASE_URL;
 
-if (!connectionString) {
-  throw new Error("DATABASE_URL is required. Example: postgresql://prelize_user:<password>@203.18.158.140:5432/prelize");
-}
-
 const globalForPg = globalThis as typeof globalThis & {
   pgPool?: Pool;
 };
@@ -21,18 +17,26 @@ const connectionTimeoutMillis = readPositiveIntegerEnv("DATABASE_CONNECTION_TIME
 const queryRetryCount = readPositiveIntegerEnv("DATABASE_QUERY_RETRIES", 2);
 const queryRetryDelayMillis = readPositiveIntegerEnv("DATABASE_QUERY_RETRY_DELAY_MS", 250);
 
-export const pool =
-  globalForPg.pgPool ??
-  new Pool({
+function createPool() {
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required. Example: postgresql://prelize_user:<password>@203.18.158.140:5432/prelize");
+  }
+
+  return new Pool({
     connectionString,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis,
     keepAlive: true,
   });
+}
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPg.pgPool = pool;
+function getPool() {
+  if (!globalForPg.pgPool) {
+    globalForPg.pgPool = createPool();
+  }
+
+  return globalForPg.pgPool;
 }
 
 function isConnectionTimeoutError(error: unknown) {
@@ -58,7 +62,7 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
 ): Promise<QueryResult<T>> {
   for (let attempt = 0; attempt <= queryRetryCount; attempt += 1) {
     try {
-      return await pool.query<T>(text, values);
+      return await getPool().query<T>(text, values);
     } catch (error) {
       if (!isConnectionTimeoutError(error) || attempt === queryRetryCount) {
         throw error;
@@ -74,7 +78,7 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
 export async function connect(): Promise<PoolClient> {
   for (let attempt = 0; attempt <= queryRetryCount; attempt += 1) {
     try {
-      return await pool.connect();
+      return await getPool().connect();
     } catch (error) {
       if (!isConnectionTimeoutError(error) || attempt === queryRetryCount) {
         throw error;
