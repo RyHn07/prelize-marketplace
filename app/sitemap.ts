@@ -36,24 +36,30 @@ const staticRoutes: MetadataRoute.Sitemap = [
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [productsResult, categoriesResult, { data: vendors }] = await Promise.all([
-    query<SitemapProductRow>(
-      `
-        select slug, coalesce(image_url, image) as image_url, gallery_images, created_at
-        from public.products
-        where coalesce(is_active, true) = true and coalesce(status, 'active') = 'active'
-        order by created_at desc
-      `,
-    ),
-    query<SitemapCategoryRow>(
-      `
-        select slug, parent_id, coalesce(image_url, image) as image_url
-        from public.categories
-        order by created_at desc
-      `,
-    ),
-    getServerVendors(),
-  ]);
+  const sitemapData = await Promise.all([
+      query<SitemapProductRow>(
+        `
+          select slug, coalesce(image_url, image) as image_url, gallery_images, created_at
+          from public.products
+          where coalesce(is_active, true) = true and coalesce(status, 'active') = 'active'
+          order by created_at desc
+        `,
+      ),
+      query<SitemapCategoryRow>(
+        `
+          select slug, parent_id, coalesce(image_url, image) as image_url
+          from public.categories
+          order by created_at desc
+        `,
+      ),
+      getServerVendors(),
+    ]).catch(() => null);
+
+  if (!sitemapData) {
+    return staticRoutes;
+  }
+
+  const [productsResult, categoriesResult, { data: vendors }] = sitemapData;
   const products = productsResult.rows;
   const categories = categoriesResult.rows;
 
