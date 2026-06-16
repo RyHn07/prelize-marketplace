@@ -754,6 +754,7 @@ export default function CheckoutPage() {
     setIsPlacingOrder(true);
 
     try {
+      const orderId = crypto.randomUUID();
       const orderNumber = `PLZ-${Date.now()}`;
       const buyer = {
         fullName: buyerForm.fullName.trim(),
@@ -765,44 +766,6 @@ export default function CheckoutPage() {
       };
       const internationalShippingStatus: InternationalShippingStatus =
         internationalShippingSummary.total === null ? "pending_review" : "calculated";
-
-      const { data: insertedOrder, error: orderInsertError } = await dataClient
-        .from("orders")
-        .insert({
-          order_number: orderNumber,
-          user_id: user.id,
-          user_email: user.email,
-          status: "Order Placed",
-          payment_method: PAYMENT_METHOD,
-          payment_status: DEFAULT_PAYMENT_STATUS,
-          buyer,
-          cnds_cost_total: totals.cddCharge,
-          international_shipping_method_id: selectedInternationalShippingMethod?.id ?? null,
-          international_shipping_method_name: selectedInternationalShippingMethod?.name ?? null,
-          international_shipping_total: internationalShippingSummary.total ?? 0,
-          international_shipping_status: internationalShippingStatus,
-          summary,
-          shipping_methods: shippingMethods,
-        } as never)
-        .select("id, order_number")
-        .single();
-
-      const createdOrder = insertedOrder as { id: string; order_number: string } | null;
-
-      if (orderInsertError || !createdOrder) {
-        const insertMessage = orderInsertError?.message ?? "Unable to save your order.";
-
-        if (
-          insertMessage.toLowerCase().includes("payment_method") ||
-          insertMessage.toLowerCase().includes("payment_status")
-        ) {
-          throw new Error(
-            "Payment columns are missing. Run: alter table orders add column payment_method text default 'Bank Transfer'; alter table orders add column payment_status text default 'Pending';",
-          );
-        }
-
-        throw new Error(insertMessage);
-      }
 
       const shippingMethodByProductId = new Map(
         shippingMethods.map((shippingMethod) => [shippingMethod.productId, shippingMethod]),
@@ -851,6 +814,7 @@ export default function CheckoutPage() {
       });
 
       const vendorOrderIdByVendorId = new Map<string, string>();
+      const vendorOrders: Record<string, unknown>[] = [];
 
       if (vendorOrderGroups.size > 0) {
         const vendorOrdersPayload = Array.from(vendorOrderGroups.values()).map((group) => {
@@ -860,7 +824,7 @@ export default function CheckoutPage() {
 
           return {
             id: vendorOrderId,
-            order_id: createdOrder.id,
+            order_id: orderId,
             vendor_id: group.vendorId,
             status: "Order Placed",
             summary: createVendorOrderSummary(
@@ -882,20 +846,7 @@ export default function CheckoutPage() {
             admin_note: null,
           };
         });
-
-        const { error: vendorOrdersError } = await dataClient
-          .from("vendor_orders")
-          .insert(vendorOrdersPayload as never);
-
-        if (vendorOrdersError) {
-          const normalizedMessage = vendorOrdersError.message.toLowerCase();
-
-          throw new Error(
-            normalizedMessage.includes("vendor_orders") && normalizedMessage.includes("does not exist")
-              ? "Vendor order tables are missing. Run the multivendor migration before placing vendor-owned orders."
-              : `Unable to create vendor order records: ${vendorOrdersError.message}`,
-          );
-        }
+        vendorOrdersPayload.forEach((vendorOrder) => vendorOrders.push(vendorOrder));
       }
 
       const productItemCostIndex = new Map<string, number>();
@@ -918,7 +869,7 @@ export default function CheckoutPage() {
         productItemCostIndex.set(item.productId, itemIndex + 1);
 
         return {
-          order_id: createdOrder.id,
+          order_id: orderId,
           product_id: item.productId,
           variant_id: item.variantId ?? null,
           product_name: item.name,
@@ -947,17 +898,41 @@ export default function CheckoutPage() {
         };
       });
 
-      const { error: orderItemsError } = await dataClient
-        .from("order_items")
-        .insert(orderItemsPayload as never);
+      const orderPayload = {
+        id: orderId,
+        order_number: orderNumber,
+        user_id: user.id,
+        user_email: user.email,
+        status: "Order Placed",
+        payment_method: PAYMENT_METHOD,
+        payment_status: DEFAULT_PAYMENT_STATUS,
+        buyer,
+        cnds_cost_total: totals.cddCharge,
+        international_shipping_method_id: selectedInternationalShippingMethod?.id ?? null,
+        international_shipping_method_name: selectedInternationalShippingMethod?.name ?? null,
+        international_shipping_total: internationalShippingSummary.total ?? 0,
+        international_shipping_status: internationalShippingStatus,
+        summary,
+        shipping_methods: shippingMethods,
+      };
 
-      if (orderItemsError) {
-        throw new Error(
-          orderItemsError.message.toLowerCase().includes("vendor_order_id") ||
-          orderItemsError.message.toLowerCase().includes("vendor_id")
-            ? "Order item vendor columns are missing. Run the latest multivendor migration before placing vendor-owned orders."
-            : orderItemsError.message,
-        );
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          order: orderPayload,
+          vendorOrders,
+          orderItems: orderItemsPayload,
+        }),
+      });
+      const responseBody = (await response.json().catch(() => null)) as
+        | { order?: { id: string; order_number: string }; error?: string }
+        | null;
+
+      if (!response.ok || !responseBody?.order) {
+        throw new Error(responseBody?.error ?? "Unable to save your order.");
       }
 
       selectedCartItems.forEach((item) => {
@@ -965,7 +940,7 @@ export default function CheckoutPage() {
       });
 
       window.localStorage.removeItem(CHECKOUT_DRAFT_STORAGE_KEY);
-      router.push(`/orders/${createdOrder.id}`);
+      router.push(`/orders/${responseBody.order.id}`);
     } catch (error) {
       setOrderError(
         error instanceof Error ? error.message : "Unable to place order right now. Please try again.",
