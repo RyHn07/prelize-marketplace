@@ -1,5 +1,3 @@
-"use client";
-
 type BrowserUser = {
   id?: string;
   email?: string | null;
@@ -65,7 +63,7 @@ function unsupportedDataClient(): any {
 }
 
 export function hasBrowserAppClient() {
-  return true;
+  return typeof window !== "undefined";
 }
 
 export const hasPgDataClientEnv = hasBrowserAppClient;
