@@ -25,6 +25,8 @@ type OrderRow = {
   order_number: string;
   user_email: string;
   status: OrderStatus;
+  payment_method?: string | null;
+  payment_status?: string | null;
   buyer: BuyerInfo | null;
   admin_note: string | null;
   cnds_cost_total?: number | null;
@@ -82,6 +84,26 @@ function DetailField({
       <p className="mt-1 text-sm font-medium text-slate-700">{value}</p>
     </div>
   );
+}
+
+function readBuyerString(buyer: BuyerInfo | null | undefined, keys: string[]) {
+  if (!buyer) {
+    return "";
+  }
+
+  for (const key of keys) {
+    const value = buyer[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+
+  return "";
 }
 
 function ProductImage({ src, alt }: { src?: string | null; alt: string }) {
@@ -147,6 +169,7 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
   const [vendorOrders, setVendorOrders] = useState<VendorOrderWithContext[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
   const [adminNote, setAdminNote] = useState("");
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteMessage, setNoteMessage] = useState("");
@@ -301,12 +324,52 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
     setIsSavingNote(false);
   };
 
+  const handlePaymentStatusChange = async (paymentStatus: "Pending" | "Paid" | "Rejected") => {
+    if (!order) {
+      return;
+    }
+
+    setIsUpdatingPayment(true);
+    setErrorMessage("");
+
+    const response = await fetch(`/api/admin/orders/${order.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentStatus }),
+    });
+    const payload = (await response.json().catch(() => null)) as {
+      error?: string;
+      status?: OrderStatus;
+      paymentStatus?: string;
+    } | null;
+
+    if (!response.ok) {
+      setErrorMessage(payload?.error ?? "Unable to update payment status right now.");
+      setIsUpdatingPayment(false);
+      return;
+    }
+
+    setOrder({
+      ...order,
+      payment_status: payload?.paymentStatus ?? paymentStatus,
+      status: payload?.status ? safeOrderStatus(payload.status) : order.status,
+    });
+    setIsUpdatingPayment(false);
+  };
+
   const customerNote =
     typeof order?.buyer?.customer_note === "string"
       ? order.buyer.customer_note
       : typeof order?.buyer?.note === "string"
         ? order.buyer.note
         : null;
+  const paymentChoice = readBuyerString(order?.buyer, ["payment_choice"]);
+  const paymentProofName = readBuyerString(order?.buyer, ["payment_proof_name"]);
+  const paymentProofType = readBuyerString(order?.buyer, ["payment_proof_type"]);
+  const paymentProofDataUrl = readBuyerString(order?.buyer, ["payment_proof_data_url"]);
+  const paymentProofUploadedAt = readBuyerString(order?.buyer, ["payment_proof_uploaded_at"]);
+  const paymentWhatsapp = readBuyerString(order?.buyer, ["payment_contact_whatsapp"]) || "+8619138477680";
+  const paymentStatus = order?.payment_status?.trim() || "Pending";
 
   if (loading) {
     return (
@@ -556,6 +619,94 @@ export default function AdminOrderDetailsPage({ params }: { params: Promise<{ id
         </div>
 
         <aside className="space-y-5 lg:sticky lg:top-6">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Payment</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">{order.payment_method ?? "Bank Transfer"}</h2>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  paymentStatus.toLowerCase() === "paid"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : paymentStatus.toLowerCase() === "rejected"
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {paymentStatus}
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <p>
+                Customer choice:{" "}
+                <span className="font-semibold text-slate-900">
+                  {paymentChoice === "upload_now"
+                    ? "Paid and uploaded proof"
+                    : "Will contact before payment"}
+                </span>
+              </p>
+              <a
+                href={`https://wa.me/${paymentWhatsapp.replace(/[^0-9]/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-full items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                WhatsApp {paymentWhatsapp}
+              </a>
+            </div>
+
+            {paymentProofDataUrl ? (
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Payment proof</p>
+                <p className="mt-1 break-all text-xs text-slate-500">
+                  {paymentProofName || "Uploaded proof"}
+                </p>
+                {paymentProofUploadedAt ? (
+                  <p className="mt-1 text-xs text-slate-500">Uploaded {formatOrderDate(paymentProofUploadedAt)}</p>
+                ) : null}
+                {paymentProofType.startsWith("image/") ? (
+                  <img
+                    src={paymentProofDataUrl}
+                    alt="Payment proof"
+                    className="mt-3 max-h-52 w-full rounded-lg border border-slate-200 object-contain"
+                  />
+                ) : null}
+                <a
+                  href={paymentProofDataUrl}
+                  download={paymentProofName || "payment-proof"}
+                  className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  Download Proof
+                </a>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                No payment proof uploaded yet.
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => void handlePaymentStatusChange("Paid")}
+                disabled={isUpdatingPayment || paymentStatus.toLowerCase() === "paid"}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePaymentStatusChange("Rejected")}
+                disabled={isUpdatingPayment || paymentStatus.toLowerCase() === "rejected"}
+                className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-0 rounded-2xl border border-slate-200 bg-white px-5">
             <SummaryRow label="Quantity" value={String(order.summary.quantity ?? order.summary.totalQuantity ?? 0)} />
             <SummaryRow label="Product Price" value={formatBDT(order.summary.productPrice ?? 0)} />

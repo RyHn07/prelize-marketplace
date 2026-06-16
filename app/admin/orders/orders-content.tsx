@@ -20,6 +20,8 @@ type AdminOrder = {
   order_number: string;
   user_email: string;
   status: OrderStatus;
+  payment_method?: string | null;
+  payment_status?: string | null;
   created_at: string;
   summary: OrderSummary;
 };

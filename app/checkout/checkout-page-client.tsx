@@ -39,6 +39,9 @@ const CHECKOUT_DRAFT_STORAGE_KEY = "prelize_checkout_draft";
 const PAYMENT_METHOD = "Bank Transfer";
 const DEFAULT_PAYMENT_STATUS = "Pending";
 const PAY_ON_DELIVERY_PLACEHOLDER = "Pending review";
+const PAYMENT_CONTACT_WHATSAPP = "+8619138477680";
+const PAYMENT_CONTACT_WHATSAPP_URL = "https://wa.me/8619138477680";
+const MAX_PAYMENT_PROOF_BYTES = 2 * 1024 * 1024;
 
 const shippingProfiles = [
   {
@@ -89,6 +92,13 @@ type BuyerForm = {
 };
 
 type BuyerFormErrors = Partial<Record<keyof BuyerForm, string>>;
+type PaymentChoice = "upload_now" | "contact_later";
+type PaymentProofDraft = {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+};
 
 type SelectedProductGroup = {
   productId: string;
@@ -251,6 +261,9 @@ export default function CheckoutPage() {
   const [hasLoadedProductRecords, setHasLoadedProductRecords] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState("");
+  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>("contact_later");
+  const [paymentProof, setPaymentProof] = useState<PaymentProofDraft | null>(null);
+  const [paymentProofError, setPaymentProofError] = useState("");
   const [buyerForm, setBuyerForm] = useState<BuyerForm>({
     fullName: "",
     phone: "",
@@ -260,6 +273,43 @@ export default function CheckoutPage() {
     note: "",
   });
   const [buyerErrors, setBuyerErrors] = useState<BuyerFormErrors>({});
+
+  const handlePaymentProofChange = (file: File | null) => {
+    setPaymentProof(null);
+    setPaymentProofError("");
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      setPaymentProofError("Upload an image or PDF payment proof.");
+      return;
+    }
+
+    if (file.size > MAX_PAYMENT_PROOF_BYTES) {
+      setPaymentProofError("Payment proof must be 2MB or smaller.");
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        setPaymentProofError("Unable to read the selected file.");
+        return;
+      }
+
+      setPaymentProof({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: reader.result,
+      });
+    };
+    reader.onerror = () => setPaymentProofError("Unable to read the selected file.");
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -717,6 +767,12 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (paymentChoice === "upload_now" && !paymentProof) {
+      setPaymentProofError("Upload payment proof or choose to contact us before paying.");
+      setOrderError("Please complete the payment step.");
+      return;
+    }
+
     const dataClient = getPgDataClient();
     const {
       data: { user },
@@ -763,6 +819,14 @@ export default function CheckoutPage() {
         city: buyerForm.city.trim(),
         address: buyerForm.address.trim(),
         note: buyerForm.note.trim(),
+        payment_choice: paymentChoice,
+        payment_contact_whatsapp: PAYMENT_CONTACT_WHATSAPP,
+        payment_proof_status: paymentProof ? "submitted" : "not_submitted",
+        payment_proof_name: paymentProof?.name ?? null,
+        payment_proof_type: paymentProof?.type ?? null,
+        payment_proof_size: paymentProof?.size ?? null,
+        payment_proof_data_url: paymentProof?.dataUrl ?? null,
+        payment_proof_uploaded_at: paymentProof ? new Date().toISOString() : null,
       };
       const internationalShippingStatus: InternationalShippingStatus =
         internationalShippingSummary.total === null ? "pending_review" : "calculated";
@@ -1251,9 +1315,79 @@ export default function CheckoutPage() {
                 <h2 className="text-lg font-semibold text-slate-900">Payment Method</h2>
                 <p className="text-base font-semibold text-[#615FFF]">{PAYMENT_METHOD}</p>
               </div>
-              <p className="mt-3 text-sm leading-6 text-slate-500">
-                After placing your order, our team will contact you with bank transfer details.
-              </p>
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">Bank transfer details</p>
+                <p className="mt-2">Account name: Prelize / Raihan Reaz</p>
+                <p>Payment reference: Your order number after checkout</p>
+                <p className="mt-2 text-slate-500">
+                  Confirm exact bank account details on WhatsApp before sending payment.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <input
+                    type="radio"
+                    name="paymentChoice"
+                    checked={paymentChoice === "upload_now"}
+                    onChange={() => setPaymentChoice("upload_now")}
+                    className="mt-1 h-4 w-4 text-[#615FFF] focus:ring-[#615FFF]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">I paid by bank transfer</span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Upload payment proof now. Admin will approve it before processing.
+                    </span>
+                  </span>
+                </label>
+
+                {paymentChoice === "upload_now" ? (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4">
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      onChange={(event) => handlePaymentProofChange(event.target.files?.[0] ?? null)}
+                      className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-[#615FFF] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                    />
+                    <p className="mt-2 text-xs text-slate-500">Accepted: image or PDF, max 2MB.</p>
+                    {paymentProof ? (
+                      <p className="mt-2 text-xs font-semibold text-emerald-600">
+                        Selected: {paymentProof.name}
+                      </p>
+                    ) : null}
+                    {paymentProofError ? (
+                      <p className="mt-2 text-xs font-semibold text-rose-500">{paymentProofError}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <input
+                    type="radio"
+                    name="paymentChoice"
+                    checked={paymentChoice === "contact_later"}
+                    onChange={() => setPaymentChoice("contact_later")}
+                    className="mt-1 h-4 w-4 text-[#615FFF] focus:ring-[#615FFF]"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">
+                      I will talk to Prelize before payment
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      Place the order now and pay after confirming with us.
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <a
+                href={PAYMENT_CONTACT_WHATSAPP_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+              >
+                Contact on WhatsApp {PAYMENT_CONTACT_WHATSAPP}
+              </a>
             </div>
 
             <div className="rounded-lg border border-dashed border-[#615FFF]/50 bg-white p-4">

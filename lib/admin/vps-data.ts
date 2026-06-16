@@ -140,7 +140,7 @@ export async function getAdminProducts() {
 export async function getAdminOrders() {
   return query<AdminOrderRow>(
     `
-      select id, order_number, user_id, user_email, status, created_at, summary, buyer
+      select id, order_number, user_id, user_email, status, payment_method, payment_status, created_at, summary, buyer
       from public.orders
       order by created_at desc
     `,

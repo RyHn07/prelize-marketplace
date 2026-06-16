@@ -8,6 +8,7 @@ import type { OrderItemRow, VendorOrderRow, VendorOrderStatus, VendorRow } from 
 type OrderPatchBody = {
   status?: VendorOrderStatus;
   adminNote?: string | null;
+  paymentStatus?: "Pending" | "Paid" | "Rejected";
 };
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -72,6 +73,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       await query("update public.orders set status = $1 where id = $2", [body.status, id]);
       return NextResponse.json({ success: true, status: body.status });
+    }
+
+    if (body.paymentStatus) {
+      const nextPaymentStatus = body.paymentStatus;
+      const nextOrderStatus = nextPaymentStatus === "Paid" ? "Payment Verified" : null;
+
+      if (nextOrderStatus) {
+        await query("update public.orders set payment_status = $1, status = $2 where id = $3", [
+          nextPaymentStatus,
+          nextOrderStatus,
+          id,
+        ]);
+        return NextResponse.json({ success: true, paymentStatus: nextPaymentStatus, status: nextOrderStatus });
+      }
+
+      await query("update public.orders set payment_status = $1 where id = $2", [nextPaymentStatus, id]);
+      return NextResponse.json({ success: true, paymentStatus: nextPaymentStatus });
     }
 
     if ("adminNote" in body) {
