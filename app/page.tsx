@@ -13,6 +13,8 @@ import {
   toJsonLdScriptContent,
 } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: {
     absolute: DEFAULT_SEO_TITLE,

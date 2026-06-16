@@ -13,6 +13,8 @@ import {
 } from "@/lib/products/queries";
 import { getVendorBySlug, getVendorOptions } from "@/lib/vendors/queries";
 
+export const dynamic = "force-dynamic";
+
 type VendorStorefrontPageProps = {
   params: Promise<{ slug: string }>;
 };

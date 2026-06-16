@@ -18,6 +18,8 @@ import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
 import { getServerVendorOptions } from "@/lib/vendors/server-queries";
 import { createPageMetadata } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 type CategoryPageProps = {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{

@@ -13,6 +13,8 @@ import { getProductReviewSummaryMap } from "@/lib/reviews";
 import { getVendorOptions } from "@/lib/vendors/queries";
 import { createPageMetadata } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = createPageMetadata({
   title: "Product List",
   description:

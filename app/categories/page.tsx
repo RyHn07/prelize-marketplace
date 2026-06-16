@@ -6,6 +6,8 @@ import Header from "@/components/Header";
 import { query } from "@/lib/db";
 import { createPageMetadata } from "@/lib/seo";
 
+export const dynamic = "force-dynamic";
+
 type CategoryOption = {
   id: string;
   name: string;

@@ -46,6 +46,8 @@ import type {
   ResolvedProductPricingTier,
 } from "@/types/product-db";
 
+export const dynamic = "force-dynamic";
+
 function isStorefrontSpecification(value: unknown): value is ProductSpecification {
   return (
     typeof value === "object" &&
