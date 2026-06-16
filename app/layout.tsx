@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import "./globals.css";
+import { DEFAULT_PLATFORM_SETTINGS } from "@/lib/platform-settings";
 import { getResolvedPlatformSettings } from "@/lib/platform-settings-server";
 import { createRootMetadata } from "@/lib/seo";
 
 export async function generateMetadata(): Promise<Metadata> {
   await connection();
-  const settings = await getResolvedPlatformSettings();
+  const settings = await getResolvedPlatformSettings().catch(() => DEFAULT_PLATFORM_SETTINGS);
   return createRootMetadata(settings);
 }
 
