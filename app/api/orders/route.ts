@@ -63,6 +63,8 @@ const orderItemColumns = [
   "vendor_order_id",
 ] as const;
 
+const jsonColumns = new Set(["buyer", "summary", "shipping_methods", "shipping_method"]);
+
 type OrderRequest = {
   order?: Record<string, unknown>;
   vendorOrders?: Record<string, unknown>[];
@@ -75,6 +77,18 @@ function quoteIdentifier(value: string) {
 
 function pickColumns<T extends readonly string[]>(row: Record<string, unknown>, columns: T) {
   return Object.fromEntries(columns.map((column) => [column, row[column]]));
+}
+
+function toDatabaseValue(column: string, value: unknown) {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (jsonColumns.has(column)) {
+    return JSON.stringify(value ?? null);
+  }
+
+  return value;
 }
 
 async function insertRows(
@@ -90,7 +104,7 @@ async function insertRows(
   const values: unknown[] = [];
   const placeholders = rows.map((row, rowIndex) => {
     const rowPlaceholders = columns.map((column, columnIndex) => {
-      values.push(row[column] ?? null);
+      values.push(toDatabaseValue(column, row[column]));
       return `$${rowIndex * columns.length + columnIndex + 1}`;
     });
 
