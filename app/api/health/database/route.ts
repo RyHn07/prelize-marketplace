@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { query } from "@/lib/db";
+import { getHomepageRenderData } from "@/lib/homepage/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -80,12 +81,28 @@ export async function GET() {
         from public.users
       `,
     );
+    const homepageResult = await getHomepageRenderData();
 
     return NextResponse.json({
       ok: true,
       databaseUrl,
       connection: connectionResult.rows[0] ?? null,
       counts: Object.fromEntries(countsResult.rows.map((row) => [row.key, Number(row.value)])),
+      homepage: {
+        loaded: Boolean(homepageResult.data.theme),
+        theme: homepageResult.data.theme
+          ? {
+              id: homepageResult.data.theme.id,
+              name: homepageResult.data.theme.name,
+              slug: homepageResult.data.theme.slug,
+            }
+          : null,
+        sections: homepageResult.data.sections.length,
+        banners: homepageResult.data.banners.length,
+        productSections: homepageResult.data.productSections.length,
+        categories: homepageResult.data.categories.length,
+        error: homepageResult.error instanceof Error ? homepageResult.error.message : homepageResult.error ?? null,
+      },
       durationMs: Date.now() - startedAt,
     });
   } catch (error) {
