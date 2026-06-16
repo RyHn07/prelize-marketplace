@@ -787,6 +787,7 @@ export async function getHomepageRenderData(options?: {
     try {
       return await getLocalHomepageRenderData(options);
     } catch (error) {
+      console.error("[homepage] Failed to load homepage render data", error);
       return {
         data: createEmptyHomepageRenderData(),
         error,

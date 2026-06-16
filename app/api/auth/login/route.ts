@@ -36,7 +36,10 @@ export async function POST(request: Request) {
       limit 1
     `,
     [email],
-  ).catch(() => null);
+  ).catch((error) => {
+    console.error("[auth/login] Database query failed", error);
+    return null;
+  });
 
   if (!result) {
     return NextResponse.json(
