@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import { safeOrderStatus } from "@/lib/orders/utils";
-import { getPgDataClient } from "@/lib/browser-app-client";
 import type { ProductReviewRow, ReviewEligibilityItem } from "@/types/product-db";
 
 type ReviewEligibilityResponse = {
@@ -36,24 +35,12 @@ function formatDateTime(value: string) {
   });
 }
 
-async function getAccessToken() {
-  const dataClient = getPgDataClient();
-  const { data } = await dataClient.auth.getSession();
-  return data.session?.access_token ?? null;
-}
-
 async function authorizedReviewFetch<T>(input: string, init?: RequestInit) {
-  const accessToken = await getAccessToken();
-
-  if (!accessToken) {
-    throw new Error("Please login first.");
-  }
-
   const response = await fetch(input, {
     ...init,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
       ...(init?.headers ?? {}),
     },
   });
