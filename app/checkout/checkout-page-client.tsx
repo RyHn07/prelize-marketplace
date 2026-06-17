@@ -1071,6 +1071,171 @@ export default function CheckoutPage() {
     );
   }
 
+  if (checkoutStep === "payment") {
+    return (
+      <section className="mx-auto max-w-xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-5 rounded-xl border border-slate-200 bg-white p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#615FFF]">
+            Checkout
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+            Complete Payment
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            Review your summary and choose how you want to handle bank transfer payment.
+          </p>
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Order Summary</h2>
+          </div>
+
+          <div className="space-y-0 rounded-xl border border-slate-200 bg-white px-5">
+            <SummaryRow label="Quantity" value={String(totals.totalQuantity)} />
+            <SummaryRow label="Product Price" value={formatBDT(totals.productPrice)} />
+            <SummaryRow label="CNDS Cost" value={formatBDT(totals.cddCharge)} />
+            <SummaryRow label="Pay Now" value={formatBDT(totals.payNow)} strong />
+            <SummaryRow
+              label="International Shipping"
+              value={
+                internationalShippingSummary.total === null
+                  ? PAY_ON_DELIVERY_PLACEHOLDER
+                  : formatBDT(internationalShippingSummary.total)
+              }
+            />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-5">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-slate-900">Payment Method</h2>
+              <p className="text-base font-semibold text-[#615FFF]">{PAYMENT_METHOD}</p>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Bank transfer details</p>
+              <p className="mt-2">Account name: Prelize / Raihan Reaz</p>
+              <p>Payment reference: Your order number after checkout</p>
+              <p className="mt-2 text-slate-500">
+                Confirm exact bank account details on WhatsApp before sending payment.
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <input
+                  type="radio"
+                  name="paymentChoice"
+                  checked={paymentChoice === "upload_now"}
+                  onChange={() => setPaymentChoice("upload_now")}
+                  className="mt-1 h-4 w-4 text-[#615FFF] focus:ring-[#615FFF]"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">I paid by bank transfer</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    Upload payment proof now. Admin will approve it before processing.
+                  </span>
+                </span>
+              </label>
+
+              {paymentChoice === "upload_now" ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4">
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(event) => handlePaymentProofChange(event.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-[#615FFF] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                  />
+                  <p className="mt-2 text-xs text-slate-500">Accepted: image or PDF, max 2MB.</p>
+                  {paymentProof ? (
+                    <p className="mt-2 text-xs font-semibold text-emerald-600">
+                      Selected: {paymentProof.name}
+                    </p>
+                  ) : null}
+                  {paymentProofError ? (
+                    <p className="mt-2 text-xs font-semibold text-rose-500">{paymentProofError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <label className="flex cursor-pointer gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <input
+                  type="radio"
+                  name="paymentChoice"
+                  checked={paymentChoice === "contact_later"}
+                  onChange={() => setPaymentChoice("contact_later")}
+                  className="mt-1 h-4 w-4 text-[#615FFF] focus:ring-[#615FFF]"
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-900">
+                    I will talk to Prelize before payment
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-500">
+                    Place the order now and pay after confirming with us.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            <a
+              href={PAYMENT_CONTACT_WHATSAPP_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex w-full items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+            >
+              Contact on WhatsApp {PAYMENT_CONTACT_WHATSAPP}
+            </a>
+          </div>
+
+          <div className="rounded-lg border border-dashed border-[#615FFF]/50 bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <p className="text-base font-semibold text-slate-900">Pay on Delivery</p>
+              </div>
+
+              <div className="text-right">
+                <p className="text-lg font-semibold text-slate-700">
+                  {internationalShippingSummary.total === null
+                    ? PAY_ON_DELIVERY_PLACEHOLDER
+                    : formatBDT(internationalShippingSummary.total)}
+                </p>
+                <p className="mt-2 whitespace-nowrap text-xs font-medium text-[#615FFF]">
+                  International shipping
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={selectedCartItems.length === 0 || isPlacingOrder || hasUnavailableSelectedItems}
+            onClick={handlePlaceOrder}
+            className="inline-flex w-full items-center justify-center rounded-full bg-[#615FFF] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#5552e6] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          >
+            {isPlacingOrder ? "Placing Order..." : "Place Order"}
+          </button>
+          <button
+            type="button"
+            disabled={isPlacingOrder}
+            onClick={() => setCheckoutStep("details")}
+            className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Back to Details
+          </button>
+          <Link
+            href="/cart"
+            className="inline-flex w-full items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
+          >
+            Back to Cart
+          </Link>
+
+          {orderError ? (
+            <p className="text-center text-sm font-medium text-rose-500">{orderError}</p>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
@@ -1078,12 +1243,10 @@ export default function CheckoutPage() {
             Checkout
           </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-            {checkoutStep === "payment" ? "Complete Payment" : "Complete Your Order"}
+            Complete Your Order
           </h1>
           <p className="mt-2 text-sm text-slate-500">
-            {checkoutStep === "payment"
-              ? "Choose how you want to handle bank transfer payment before placing the order."
-              : "Add your buyer details and review the final summary before continuing to payment."}
+            Add your buyer details and review the final summary before continuing to payment.
           </p>
         </div>
 
@@ -1337,7 +1500,7 @@ export default function CheckoutPage() {
               />
             </div>
 
-            {checkoutStep === "payment" ? (
+            {false ? (
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <div className="space-y-1">
                   <h2 className="text-lg font-semibold text-slate-900">Payment Method</h2>
@@ -1380,7 +1543,7 @@ export default function CheckoutPage() {
                       <p className="mt-2 text-xs text-slate-500">Accepted: image or PDF, max 2MB.</p>
                       {paymentProof ? (
                         <p className="mt-2 text-xs font-semibold text-emerald-600">
-                          Selected: {paymentProof.name}
+                          Selected: {paymentProof?.name}
                         </p>
                       ) : null}
                       {paymentProofError ? (
