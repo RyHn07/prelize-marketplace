@@ -24,7 +24,7 @@ export default function ProductShowcase({ sections }: { sections: HomepageResolv
           {section.products.length > 0 ? (
             <div className="grid grid-cols-2 gap-2 sm:gap-5 xl:grid-cols-4">
               {section.products.map((product) => (
-                <ProductCard key={`${section.id}-${product.id}`} product={product} showVendorName={false} />
+                <ProductCard key={`${section.id}-${product.id}`} product={product} />
               ))}
             </div>
           ) : (

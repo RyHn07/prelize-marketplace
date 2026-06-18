@@ -102,6 +102,31 @@ const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
   "exchange_rate_cny_to_bdt",
 ]);
 
+const PRODUCT_JSON_COLUMNS = new Set([
+  "gallery",
+  "gallery_images",
+  "attributes",
+  "specifications",
+  "reviews",
+  "cdd_tiers",
+]);
+
+const PRODUCT_VARIANT_JSON_COLUMNS = new Set([
+  "attribute_values",
+]);
+
+function serializeJsonColumnValues(payload: Record<string, unknown>, jsonColumns: Set<string>) {
+  return Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => {
+      if (value !== null && value !== undefined && jsonColumns.has(key) && typeof value !== "string") {
+        return [key, JSON.stringify(value)];
+      }
+
+      return [key, value];
+    }),
+  );
+}
+
 function buildSchemaErrorMessage(message: string) {
   const normalizedMessage = message.toLowerCase();
   const missingProductColumn = getMissingProductsColumn(message);
@@ -377,7 +402,7 @@ async function insertProductWithFallback(
     is_active: boolean;
   },
 ) {
-  let nextPayload: Record<string, unknown> = payload;
+  let nextPayload: Record<string, unknown> = serializeJsonColumnValues(payload, PRODUCT_JSON_COLUMNS);
 
   while (true) {
     const result = await dataClient.from("products").insert(nextPayload as never).select("*").single();
@@ -439,7 +464,7 @@ async function updateProductWithFallback(
     is_active: boolean;
   },
 ) {
-  let nextPayload: Record<string, unknown> = payload;
+  let nextPayload: Record<string, unknown> = serializeJsonColumnValues(payload, PRODUCT_JSON_COLUMNS);
 
   while (true) {
     const result = await dataClient.from("products").update(nextPayload as never).eq("id", id).select("*").single();
@@ -768,7 +793,9 @@ async function insertProductVariantsWithFallback(
   dataClient: PgDataClient,
   variantsPayload: Array<Record<string, unknown>>,
 ) {
-  let nextPayload = variantsPayload;
+  let nextPayload = variantsPayload.map((variant) =>
+    serializeJsonColumnValues(variant, PRODUCT_VARIANT_JSON_COLUMNS),
+  );
 
   while (true) {
     const result = await dataClient.from("product_variants").insert(nextPayload as never);

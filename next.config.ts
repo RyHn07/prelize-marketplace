@@ -4,7 +4,7 @@ import type { NextConfig } from "next";
 loadEnvConfig(process.cwd());
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["192.168.0.103"],
+  allowedDevOrigins: ["localhost", "127.0.0.1", "192.168.0.103"],
   images: {
     dangerouslyAllowLocalIP: process.env.NODE_ENV === "development",
     remotePatterns: [

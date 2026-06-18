@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 
 import TailadminAddProductPreview from "@/components/admin/products/tailadmin-add-product-preview";
@@ -9,6 +9,7 @@ import { createAdminProductRecord, getAdminProductEditorRecord, updateAdminProdu
 import type { ProductEditorRecord } from "@/types/product-db";
 
 export default function AdminEditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [hasProductManagementAccess, setHasProductManagementAccess] = useState(false);
@@ -21,7 +22,6 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
     let isMounted = true;
 
     const loadPage = async () => {
-      const resolvedParams = await params;
       const accessResponse = await fetch("/api/auth/me", { cache: "no-store" });
       const accessPayload = (await accessResponse.json().catch(() => null)) as {
         user?: { email?: string | null; role?: string | null } | null;
@@ -48,7 +48,7 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
         return;
       }
 
-      const { data, error } = await getAdminProductEditorRecord(resolvedParams.id);
+      const { data, error } = await getAdminProductEditorRecord(id);
 
       if (!isMounted) {
         return;
@@ -70,7 +70,7 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
     return () => {
       isMounted = false;
     };
-  }, [params]);
+  }, [id]);
 
   if (loading) {
     return (

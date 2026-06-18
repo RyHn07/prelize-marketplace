@@ -2,7 +2,7 @@ import "server-only";
 
 import { query } from "@/lib/db";
 import type { ProductBrowseSort } from "@/lib/products/queries";
-import type { ProductCategoryOption, ProductDbRow } from "@/types/product-db";
+import type { ProductCategoryOption, ProductDbRow, ProductVendorOption } from "@/types/product-db";
 
 type PublicProductBrowseParams = {
   search?: string | null;
@@ -81,6 +81,21 @@ export async function getServerProductCategoryBySlug(slug: string) {
 
   return {
     data: result.rows[0] ?? null,
+    error: null,
+  };
+}
+
+export async function getServerVendorOptions() {
+  const result = await query<ProductVendorOption>(
+    `
+      select id, name, slug, status
+      from public.vendors
+      order by name asc
+    `,
+  );
+
+  return {
+    data: result.rows,
     error: null,
   };
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import { AdminDropdown } from "@/components/admin/admin-dropdown";
@@ -99,6 +99,7 @@ function SearchIcon() {
 }
 
 export default function ProductsContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -487,17 +488,19 @@ export default function ProductsContent() {
                               className="right-full mr-2 w-44 p-2"
                             >
                               <AdminDropdownItem
-                                tag="a"
-                                href={`/admin/products/${product.id}/edit`}
-                                onItemClick={() => setOpenActionMenuId(null)}
+                                onClick={() => {
+                                  setOpenActionMenuId(null);
+                                  router.push(`/admin/products/${product.id}/edit`);
+                                }}
                                 className="flex rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                               >
                                 Edit Product
                               </AdminDropdownItem>
                               <AdminDropdownItem
-                                tag="a"
-                                href={`/products/${product.slug}`}
-                                onItemClick={() => setOpenActionMenuId(null)}
+                                onClick={() => {
+                                  setOpenActionMenuId(null);
+                                  router.push(`/products/${product.slug}`);
+                                }}
                                 className="flex rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                               >
                                 View Storefront

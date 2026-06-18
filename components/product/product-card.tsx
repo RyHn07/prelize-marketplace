@@ -14,7 +14,6 @@ import type { Product } from "@/types/product";
 interface ProductCardProps {
   product: Product;
   viewMode?: "grid" | "list";
-  showVendorName?: boolean;
 }
 
 function DeliveryIcon() {
@@ -93,7 +92,7 @@ function formatPriceLabel(price: string | number) {
   })}`;
 }
 
-export default function ProductCard({ product, viewMode = "grid", showVendorName = true }: ProductCardProps) {
+export default function ProductCard({ product, viewMode = "grid" }: ProductCardProps) {
   const averageRating = product.averageRating ?? 0;
   const reviewCount = product.reviewCount ?? 0;
   const roundedRating = Math.max(0, Math.min(5, Math.round(averageRating)));
@@ -167,11 +166,6 @@ export default function ProductCard({ product, viewMode = "grid", showVendorName
 
       <div className={`flex flex-1 flex-col gap-2 ${isListView ? "py-1 pr-1" : "p-2.5 sm:p-3"}`}>
         <div className="space-y-1">
-          {showVendorName && product.vendorName ? (
-            <p className="hidden text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 sm:block">
-              Vendor: {product.vendorName}
-            </p>
-          ) : null}
           <h3
             className={`font-semibold text-slate-900 ${
               isListView

@@ -3,14 +3,16 @@ import type { Metadata } from "next";
 import Header from "@/components/Header";
 import ProductCatalog from "@/components/product/product-catalog";
 import {
-  getProductCategoryOptions,
-  getProductImageMapByProductIds,
-  getPublicProductsByBrowseParams,
   type ProductBrowseSort,
 } from "@/lib/products/queries";
+import {
+  getServerProductCategoryOptions,
+  getServerProductImageMapByProductIds,
+  getServerProductReviewSummaryMap,
+  getServerPublicProductsByBrowseParams,
+  getServerVendorOptions,
+} from "@/lib/products/server-catalog";
 import { mapProductDbToStorefrontProduct } from "@/lib/products/storefront";
-import { getProductReviewSummaryMap } from "@/lib/reviews";
-import { getVendorOptions } from "@/lib/vendors/queries";
 import { createPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -53,14 +55,14 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     { data: vendorOptions },
   ] =
     await Promise.all([
-      getPublicProductsByBrowseParams(params),
-      getProductCategoryOptions(),
-      getVendorOptions(),
+      getServerPublicProductsByBrowseParams(params),
+      getServerProductCategoryOptions(),
+      getServerVendorOptions(),
     ]);
   const productIds = publicProducts.map((product) => product.id);
   const [{ data: imageMap }, { data: reviewSummaryMap }] = await Promise.all([
-    getProductImageMapByProductIds(productIds),
-    getProductReviewSummaryMap(productIds),
+    getServerProductImageMapByProductIds(productIds),
+    getServerProductReviewSummaryMap(productIds),
   ]);
 
   const storefrontProducts = publicProducts.map((product) =>
@@ -84,7 +86,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         {error ? (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            We could not load some catalog data from DataClient. Showing currently available results only.
+            We could not load some catalog data. Showing currently available results only.
           </div>
         ) : null}
 
