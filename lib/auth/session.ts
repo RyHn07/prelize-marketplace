@@ -76,10 +76,17 @@ export function verifySessionToken(token: string | undefined | null): SessionPay
 }
 
 export function getSessionCookieOptions() {
+  const cookieSecureOverride = process.env.AUTH_COOKIE_SECURE?.toLowerCase();
+
   return {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      cookieSecureOverride === "true"
+        ? true
+        : cookieSecureOverride === "false"
+          ? false
+          : process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_MAX_AGE_SECONDS,
   };

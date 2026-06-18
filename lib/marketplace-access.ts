@@ -52,7 +52,7 @@ function normalizeVendorMemberStatus(value: unknown): VendorMemberStatus {
 export async function getMarketplaceAccessState(
   dataClient: PgDataClient,
 ): Promise<MarketplaceAccessState> {
-  if (!hasPgDataClientEnv() && typeof window !== "undefined") {
+  if (typeof window !== "undefined") {
     const response = await fetch("/api/vendor/onboarding-status", { cache: "no-store" });
     const status = (await response.json().catch(() => null)) as {
       userId?: string | null;

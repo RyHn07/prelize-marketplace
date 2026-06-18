@@ -7,7 +7,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import AdminEmptyState from "@/components/admin/admin-empty-state";
 import {
   ORDER_STATUSES,
-  deriveParentOrderStatus,
   formatBDT,
   formatOrderDate,
   getAllowedVendorStatusTransitions,
@@ -17,7 +16,7 @@ import {
 } from "@/lib/orders/utils";
 import { getVendorWorkspaceAccessState } from "@/lib/marketplace-access";
 import { getPgDataClient } from "@/lib/browser-app-client";
-import type { OrderItemRow, VendorOrderRow, VendorOrderStatus } from "@/types/product-db";
+import type { VendorOrderRow, VendorOrderStatus } from "@/types/product-db";
 
 type ParentOrderRow = {
   id: string;
@@ -30,6 +29,12 @@ type VendorOrderListRow = VendorOrderRow & {
   parentOrder: ParentOrderRow | null;
   itemCount: number;
   totalQuantity: number;
+};
+
+type VendorOrdersResponse = {
+  vendorId?: string | null;
+  orders?: VendorOrderListRow[];
+  error?: string;
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -105,28 +110,21 @@ export default function VendorOrdersPage() {
         return;
       }
 
-      const { data: fetchedVendorOrders, error: vendorOrdersError } = await dataClient
-        .from("vendor_orders")
-        .select("*")
-        .eq("vendor_id", access.activeVendorId)
-        .order("created_at", { ascending: false });
+      const response = await fetch("/api/vendor/orders", { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as VendorOrdersResponse | null;
 
       if (!isMounted) {
         return;
       }
 
-      if (vendorOrdersError) {
-        setErrorMessage(
-          vendorOrdersError.message.toLowerCase().includes("vendor_orders")
-            ? "Vendor order tables are missing. Run the latest multivendor migration, then reload this page."
-            : "Unable to load vendor orders right now.",
-        );
+      if (!response.ok || !result) {
+        setErrorMessage(result?.error ?? "Unable to load vendor orders right now.");
         setVendorOrders([]);
         setLoading(false);
         return;
       }
 
-      const vendorOrderRows = ((fetchedVendorOrders ?? []) as VendorOrderRow[]).map((vendorOrder) => ({
+      const vendorOrderRows = (result.orders ?? []).map((vendorOrder) => ({
         ...vendorOrder,
         status: safeOrderStatus(vendorOrder.status),
         shipping_method: Array.isArray(vendorOrder.shipping_method) ? vendorOrder.shipping_method : [],
@@ -146,47 +144,7 @@ export default function VendorOrdersPage() {
         return;
       }
 
-      const orderIds = vendorOrderRows.map((vendorOrder) => vendorOrder.order_id);
-      const vendorOrderIds = vendorOrderRows.map((vendorOrder) => vendorOrder.id);
-
-      const [{ data: parentOrders }, { data: fetchedItems }] = await Promise.all([
-        dataClient.from("orders").select("id, order_number, user_email, created_at").in("id", orderIds),
-        dataClient.from("order_items").select("*").in("vendor_order_id", vendorOrderIds),
-      ]);
-
-      if (!isMounted) {
-        return;
-      }
-
-      const parentOrderById = new Map(
-        ((parentOrders ?? []) as ParentOrderRow[]).map((order) => [order.id, order]),
-      );
-      const itemsByVendorOrderId = new Map<string, OrderItemRow[]>();
-
-      ((fetchedItems ?? []) as OrderItemRow[]).forEach((item) => {
-        const vendorOrderId = item.vendor_order_id;
-
-        if (!vendorOrderId) {
-          return;
-        }
-
-        const currentItems = itemsByVendorOrderId.get(vendorOrderId) ?? [];
-        currentItems.push(item);
-        itemsByVendorOrderId.set(vendorOrderId, currentItems);
-      });
-
-      setVendorOrders(
-        vendorOrderRows.map((vendorOrder) => {
-          const items = itemsByVendorOrderId.get(vendorOrder.id) ?? [];
-
-          return {
-            ...vendorOrder,
-            parentOrder: parentOrderById.get(vendorOrder.order_id) ?? null,
-            itemCount: items.length,
-            totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
-          };
-        }),
-      );
+      setVendorOrders(vendorOrderRows);
       setLoading(false);
     };
 
@@ -235,33 +193,25 @@ export default function VendorOrdersPage() {
       return;
     }
 
-    const dataClient = getPgDataClient();
     setUpdatingVendorOrderId(vendorOrder.id);
     setErrorMessage("");
 
-    const { error } = await dataClient
-      .from("vendor_orders")
-      .update({ status: nextStatus } as never)
-      .eq("id", vendorOrder.id)
-      .eq("vendor_id", activeVendorId ?? "");
+    const response = await fetch("/api/vendor/orders", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        vendorOrderId: vendorOrder.id,
+        status: nextStatus,
+      }),
+    });
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
 
-    if (error) {
-      setErrorMessage("Unable to update vendor order status right now.");
+    if (!response.ok) {
+      setErrorMessage(result?.error ?? "Unable to update vendor order status right now.");
       setUpdatingVendorOrderId(null);
       return;
-    }
-
-    const { data: siblingVendorOrders, error: siblingVendorOrdersError } = await dataClient
-      .from("vendor_orders")
-      .select("status")
-      .eq("order_id", vendorOrder.order_id);
-
-    if (!siblingVendorOrdersError) {
-      const derivedParentStatus = deriveParentOrderStatus(
-        ((siblingVendorOrders ?? []) as Array<{ status: VendorOrderStatus }>).map((row) => safeOrderStatus(row.status)),
-      );
-
-      await dataClient.from("orders").update({ status: derivedParentStatus } as never).eq("id", vendorOrder.order_id);
     }
 
     setVendorOrders((currentVendorOrders) =>
