@@ -54,6 +54,13 @@ type ProductFormProps = {
   ) => Promise<{ data: unknown; error: { message: string } | null }>;
 };
 
+type ProductEditorOptionsResponse = {
+  brands?: ProductBrandOption[];
+  categories?: ProductCategoryOption[];
+  vendors?: ProductVendorOption[];
+  error?: string;
+};
+
 type PricingBridgeTier = {
   id: string;
   min_qty: string;
@@ -1055,6 +1062,34 @@ function MediaField({
   );
 }
 
+async function fetchProductEditorOptions(pathname: string) {
+  const endpoint = pathname.startsWith("/vendor/")
+    ? "/api/vendor/products/options"
+    : "/api/admin/products/options";
+  const response = await fetch(endpoint, { cache: "no-store" });
+  const payload = (await response.json().catch(() => null)) as ProductEditorOptionsResponse | null;
+
+  if (!response.ok || !payload) {
+    return {
+      data: {
+        brands: [] as ProductBrandOption[],
+        categories: [] as ProductCategoryOption[],
+        vendors: [] as ProductVendorOption[],
+      },
+      error: payload?.error ?? "Unable to load product options.",
+    };
+  }
+
+  return {
+    data: {
+      brands: payload.brands ?? [],
+      categories: payload.categories ?? [],
+      vendors: payload.vendors ?? [],
+    },
+    error: null,
+  };
+}
+
 function ProductForm({
   mode,
   record,
@@ -1087,24 +1122,38 @@ function ProductForm({
     let isMounted = true;
 
     const loadEditorOptions = async () => {
-      const [brandResult, categoryResult, vendorResult] = await Promise.all([
-        getProductBrandOptions(),
-        getProductCategoryOptions(),
-        getProductVendorOptions(),
-      ]);
+      const optionsResult =
+        typeof window !== "undefined"
+          ? await fetchProductEditorOptions(pathname)
+          : await Promise.all([
+              getProductBrandOptions(),
+              getProductCategoryOptions(),
+              getProductVendorOptions(),
+            ]).then(([brandResult, categoryResult, vendorResult]) => ({
+              data: {
+                brands: brandResult.data,
+                categories: categoryResult.data,
+                vendors: vendorResult.data,
+              },
+              error: brandResult.error?.message ?? categoryResult.error?.message ?? vendorResult.error?.message ?? null,
+            }));
 
       if (!isMounted) {
         return;
       }
 
-      const activeVendors = vendorResult.data.filter((vendor) => vendor.status !== "suspended");
+      if (optionsResult.error) {
+        setErrorMessage(optionsResult.error);
+      }
+
+      const activeVendors = optionsResult.data.vendors.filter((vendor) => vendor.status !== "suspended");
       const scopedVendors =
         allowedVendorIds.length > 0
           ? activeVendors.filter((vendor) => allowedVendorIds.includes(vendor.id))
           : activeVendors;
 
-      setBrands(brandResult.data);
-      setCategories(categoryResult.data);
+      setBrands(optionsResult.data.brands);
+      setCategories(optionsResult.data.categories);
       setVendors(scopedVendors);
       setBrandsLoading(false);
       setCategoriesLoading(false);
@@ -1116,7 +1165,7 @@ function ProductForm({
     return () => {
       isMounted = false;
     };
-  }, [allowedVendorIds]);
+  }, [allowedVendorIds, pathname]);
 
   useEffect(() => {
     let isMounted = true;
