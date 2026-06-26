@@ -26,13 +26,17 @@
 *.pem
 /storage-backup/
 /db/backups/
+/backups/
 /public/storage/
+/public/uploads/
 
 # debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+dev-server.*.log
+next-start.*.log
 
 # env files (can opt-in for committing if needed)
 .env*

@@ -164,7 +164,7 @@ export async function getAdminProductVendorOptions() {
 export async function getAdminProductCategoryOptions() {
   return query<ProductCategoryOption>(
     `
-      select id, name, slug, parent_id, coalesce(image_url, image) as image_url
+      select id, name, slug, parent_id, image_url
       from public.categories
       order by name asc
     `,

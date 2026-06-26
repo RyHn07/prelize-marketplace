@@ -20,6 +20,8 @@ type SpecificationPreviewRow = {
   value: string;
 };
 
+type AiField = "title" | "description" | "seo_title" | "seo_description" | "tags" | "all";
+
 type GalleryModalProps = {
   isOpen: boolean;
   target: "description" | "gallery" | "main-image" | `variation:${string}`;
@@ -41,6 +43,27 @@ function SectionCard({ title, children }: { title: string; children: React.React
 }
 
 const PRODUCT_MEDIA_TILE_SIZE = 196;
+
+function AiButton({
+  label = "AI",
+  isLoading,
+  onClick,
+}: {
+  label?: string;
+  isLoading: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isLoading}
+      className="inline-flex h-8 items-center justify-center rounded-lg border border-[#615FFF]/30 bg-white px-3 text-xs font-semibold text-[#615FFF] shadow-sm transition-colors hover:bg-[#615FFF]/5 disabled:cursor-wait disabled:opacity-60"
+    >
+      {isLoading ? "Writing..." : label}
+    </button>
+  );
+}
 
 function StyledSelect({
   id,
@@ -662,6 +685,9 @@ function GalleryLibraryModal({
 export default function TailadminAddProductPreview() {
   const [productName, setProductName] = useState("");
   const [descriptionHtml, setDescriptionHtml] = useState("");
+  const [seoTitle, setSeoTitle] = useState("");
+  const [seoDescription, setSeoDescription] = useState("");
+  const [tagsText, setTagsText] = useState("");
   const [vendorValue, setVendorValue] = useState("");
   const [brandValue, setBrandValue] = useState("");
   const [categoryValue, setCategoryValue] = useState("");
@@ -676,6 +702,8 @@ export default function TailadminAddProductPreview() {
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [pendingSubmitStatus, setPendingSubmitStatus] = useState<"active" | "draft" | null>(null);
   const [draggedGalleryIndex, setDraggedGalleryIndex] = useState<number | null>(null);
+  const [activeAiField, setActiveAiField] = useState<AiField | null>(null);
+  const [aiMessage, setAiMessage] = useState("");
 
   const submitRealProductForm = (status: "active" | "draft") => {
     if (typeof document === "undefined" || typeof window === "undefined" || isSubmittingProduct) {
@@ -710,6 +738,34 @@ export default function TailadminAddProductPreview() {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
+  const syncSeoToRealForm = (nextValues: {
+    seoTitle?: string;
+    seoDescription?: string;
+    tags?: string;
+  }) => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("prelize:set-product-seo", {
+          detail: nextValues,
+        }),
+      );
+    }
+
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    if (typeof nextValues.seoTitle === "string") {
+      syncFieldValue("product-seo-title", nextValues.seoTitle);
+    }
+    if (typeof nextValues.seoDescription === "string") {
+      syncFieldValue("product-seo-description", nextValues.seoDescription);
+    }
+    if (typeof nextValues.tags === "string") {
+      syncFieldValue("product-tags", nextValues.tags);
+    }
+  };
+
   const syncGalleryImageOrder = (nextImages: string[]) => {
     if (typeof window === "undefined") {
       return;
@@ -738,6 +794,113 @@ export default function TailadminAddProductPreview() {
     );
   };
 
+  const applyAiContent = (field: AiField, data: Record<string, unknown>) => {
+    const nextTitle = typeof data.title === "string" ? data.title.trim() : "";
+    const nextDescription = typeof data.full_description === "string" ? data.full_description.trim() : "";
+    const nextSeoTitle = typeof data.seo_title === "string" ? data.seo_title.trim() : "";
+    const nextSeoDescription = typeof data.seo_description === "string" ? data.seo_description.trim() : "";
+    const nextTags = Array.isArray(data.tags)
+      ? data.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean).join(", ")
+      : "";
+
+    if ((field === "title" || field === "all") && nextTitle) {
+      setProductName(nextTitle);
+      window.dispatchEvent(
+        new CustomEvent("prelize:set-product-name", {
+          detail: { name: nextTitle },
+        }),
+      );
+      syncFieldValue("product-name", nextTitle);
+    }
+
+    if ((field === "description" || field === "all") && nextDescription) {
+      setDescriptionHtml(nextDescription);
+      window.dispatchEvent(
+        new CustomEvent("prelize:set-product-description", {
+          detail: { description: nextDescription },
+        }),
+      );
+      const realInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
+      if (realInput) {
+        realInput.value = nextDescription;
+        realInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+
+    const nextSeoValues: { seoTitle?: string; seoDescription?: string; tags?: string } = {};
+
+    if ((field === "seo_title" || field === "all") && nextSeoTitle) {
+      setSeoTitle(nextSeoTitle);
+      nextSeoValues.seoTitle = nextSeoTitle;
+    }
+    if ((field === "seo_description" || field === "all") && nextSeoDescription) {
+      setSeoDescription(nextSeoDescription);
+      nextSeoValues.seoDescription = nextSeoDescription;
+    }
+    if ((field === "tags" || field === "all") && nextTags) {
+      setTagsText(nextTags);
+      nextSeoValues.tags = nextTags;
+    }
+
+    if (Object.keys(nextSeoValues).length > 0) {
+      syncSeoToRealForm(nextSeoValues);
+    }
+  };
+
+  const runAiWriter = async (field: AiField) => {
+    if (activeAiField) {
+      return;
+    }
+
+    setActiveAiField(field);
+    setAiMessage("");
+
+    try {
+      const response = await fetch("/api/admin/products/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: field === "description" ? "full_description" : field,
+          values: {
+            title: productName,
+            full_description: descriptionHtml,
+            seo_title: seoTitle,
+            seo_description: seoDescription,
+            tags: tagsText
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+            brand: brandOptions.find((option) => option.value === brandValue)?.label ?? "",
+            category: categoryOptions.find((option) => option.value === categoryValue)?.label ?? "",
+          },
+          source: {
+            specifications: specifications
+              .filter((row) => row.label.trim() || row.value.trim())
+              .map((row) => ({ label: row.label, value: row.value })),
+          },
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        data?: Record<string, unknown>;
+        error?: string;
+      } | null;
+
+      if (!response.ok || !payload?.data) {
+        throw new Error(payload?.error || "AI writing failed.");
+      }
+
+      applyAiContent(field, payload.data);
+      setAiMessage("AI content updated.");
+    } catch (error) {
+      setAiMessage(error instanceof Error ? error.message : "AI writing failed.");
+    } finally {
+      setActiveAiField(null);
+    }
+  };
+
   useEffect(() => {
     if (typeof document === "undefined") {
       return;
@@ -746,12 +909,18 @@ export default function TailadminAddProductPreview() {
     const syncFromRealForm = () => {
       const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
       const descriptionInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
+      const seoTitleInput = document.getElementById("product-seo-title") as HTMLInputElement | null;
+      const seoDescriptionInput = document.getElementById("product-seo-description") as HTMLInputElement | null;
+      const tagsInput = document.getElementById("product-tags") as HTMLInputElement | null;
       const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
       const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
       const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
       setProductName(productNameInput?.value ?? "");
       setDescriptionHtml(descriptionInput?.value ?? "");
+      setSeoTitle(seoTitleInput?.value ?? "");
+      setSeoDescription(seoDescriptionInput?.value ?? "");
+      setTagsText(tagsInput?.value ?? "");
       setVendorValue(vendorSelect?.value ?? "");
       setBrandValue(brandSelect?.value ?? "");
       setCategoryValue(categorySelect?.value ?? "");
@@ -785,18 +954,25 @@ export default function TailadminAddProductPreview() {
 
     const productNameInput = document.getElementById("product-name") as HTMLInputElement | null;
     const descriptionInput = document.getElementById("product-description") as HTMLTextAreaElement | null;
+    const seoTitleInput = document.getElementById("product-seo-title") as HTMLInputElement | null;
+    const seoDescriptionInput = document.getElementById("product-seo-description") as HTMLInputElement | null;
+    const tagsInput = document.getElementById("product-tags") as HTMLInputElement | null;
     const vendorSelect = document.getElementById("product-vendor") as HTMLSelectElement | null;
     const brandSelect = document.getElementById("product-brand") as HTMLSelectElement | null;
     const categorySelect = document.getElementById("product-category") as HTMLSelectElement | null;
 
     const handleNameInput = () => syncFromRealForm();
     const handleDescriptionInput = () => syncFromRealForm();
+    const handleSeoInput = () => syncFromRealForm();
     const handleVendorChange = () => syncFromRealForm();
     const handleBrandChange = () => syncFromRealForm();
     const handleCategoryChange = () => syncFromRealForm();
 
     productNameInput?.addEventListener("input", handleNameInput);
     descriptionInput?.addEventListener("input", handleDescriptionInput);
+    seoTitleInput?.addEventListener("input", handleSeoInput);
+    seoDescriptionInput?.addEventListener("input", handleSeoInput);
+    tagsInput?.addEventListener("input", handleSeoInput);
     vendorSelect?.addEventListener("change", handleVendorChange);
     brandSelect?.addEventListener("change", handleBrandChange);
     categorySelect?.addEventListener("change", handleCategoryChange);
@@ -851,6 +1027,9 @@ export default function TailadminAddProductPreview() {
       window.clearTimeout(timer);
       productNameInput?.removeEventListener("input", handleNameInput);
       descriptionInput?.removeEventListener("input", handleDescriptionInput);
+      seoTitleInput?.removeEventListener("input", handleSeoInput);
+      seoDescriptionInput?.removeEventListener("input", handleSeoInput);
+      tagsInput?.removeEventListener("input", handleSeoInput);
       vendorSelect?.removeEventListener("change", handleVendorChange);
       brandSelect?.removeEventListener("change", handleBrandChange);
       categorySelect?.removeEventListener("change", handleCategoryChange);
@@ -1097,10 +1276,28 @@ export default function TailadminAddProductPreview() {
       <div className="space-y-6">
         <SectionCard title="Products Description">
           <div className="space-y-6">
+            {aiMessage ? (
+              <div
+                className={`rounded-xl border px-4 py-3 text-sm ${
+                  aiMessage.includes("updated")
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                {aiMessage}
+              </div>
+            ) : null}
+
             <div>
-              <label htmlFor="preview-product-name" className="mb-1.5 block text-sm font-medium text-gray-700">
-                Product Name
-              </label>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="preview-product-name" className="block text-sm font-medium text-gray-700">
+                  Product Name
+                </label>
+                <AiButton
+                  isLoading={activeAiField === "title"}
+                  onClick={() => void runAiWriter("title")}
+                />
+              </div>
               <input
                 id="preview-product-name"
                 value={productName}
@@ -1187,9 +1384,15 @@ export default function TailadminAddProductPreview() {
             </div>
 
             <div>
-              <label htmlFor="preview-description" className="mb-1.5 block text-sm font-medium text-gray-700">
-                Description
-              </label>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="preview-description" className="block text-sm font-medium text-gray-700">
+                  Description
+                </label>
+                <AiButton
+                  isLoading={activeAiField === "description"}
+                  onClick={() => void runAiWriter("description")}
+                />
+              </div>
               <RichTextDescriptionEditor
                 value={descriptionHtml}
                 imageToInsert={descriptionImageToInsert}
@@ -1208,6 +1411,90 @@ export default function TailadminAddProductPreview() {
                     realInput.dispatchEvent(new Event("input", { bubbles: true }));
                   }
                 }}
+              />
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="SEO">
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <AiButton
+                label="AI Fill All"
+                isLoading={activeAiField === "all"}
+                onClick={() => void runAiWriter("all")}
+              />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label htmlFor="preview-seo-title" className="block text-sm font-medium text-gray-700">
+                    SEO Title
+                  </label>
+                  <AiButton
+                    isLoading={activeAiField === "seo_title"}
+                    onClick={() => void runAiWriter("seo_title")}
+                  />
+                </div>
+                <input
+                  id="preview-seo-title"
+                  value={seoTitle}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setSeoTitle(nextValue);
+                    syncSeoToRealForm({ seoTitle: nextValue });
+                  }}
+                  placeholder="SEO title"
+                  className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-[#615FFF]/40 focus:outline-none focus:ring-4 focus:ring-[#615FFF]/10"
+                />
+              </div>
+
+              <div>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <label htmlFor="preview-tags" className="block text-sm font-medium text-gray-700">
+                    Tags
+                  </label>
+                  <AiButton
+                    isLoading={activeAiField === "tags"}
+                    onClick={() => void runAiWriter("tags")}
+                  />
+                </div>
+                <input
+                  id="preview-tags"
+                  value={tagsText}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setTagsText(nextValue);
+                    syncSeoToRealForm({ tags: nextValue });
+                  }}
+                  placeholder="comma separated tags"
+                  className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-[#615FFF]/40 focus:outline-none focus:ring-4 focus:ring-[#615FFF]/10"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="preview-seo-description" className="block text-sm font-medium text-gray-700">
+                  SEO Description
+                </label>
+                <AiButton
+                  isLoading={activeAiField === "seo_description"}
+                  onClick={() => void runAiWriter("seo_description")}
+                />
+              </div>
+              <textarea
+                id="preview-seo-description"
+                value={seoDescription}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setSeoDescription(nextValue);
+                  syncSeoToRealForm({ seoDescription: nextValue });
+                }}
+                rows={4}
+                placeholder="SEO description"
+                className="w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 text-sm text-gray-800 shadow-sm placeholder:text-gray-400 focus:border-[#615FFF]/40 focus:outline-none focus:ring-4 focus:ring-[#615FFF]/10"
               />
             </div>
           </div>

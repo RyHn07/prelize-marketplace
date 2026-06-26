@@ -320,6 +320,15 @@ export type ProductDbRow = {
   profit_amount_cny?: number | null;
   selling_price_cny?: number | null;
   exchange_rate_cny_to_bdt?: number | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  tags?: string[] | JsonValue | null;
+  domestic_shipping_cost_cny?: number | null;
+  estimated_international_shipping_cost?: number | null;
+  shipping_note?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  source_offer_id?: string | null;
 };
 
 export type ProductUpsertPayload = {
@@ -352,6 +361,16 @@ export type ProductUpsertPayload = {
   profit_amount_cny: number;
   selling_price_cny: number;
   exchange_rate_cny_to_bdt: number;
+  short_description?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  tags?: string[];
+  domestic_shipping_cost_cny?: number | null;
+  estimated_international_shipping_cost?: number | null;
+  shipping_note?: string | null;
+  source?: string | null;
+  source_url?: string | null;
+  source_offer_id?: string | null;
 };
 
 export type ProductAttributeFormValue = {
@@ -469,6 +488,9 @@ export type ProductFormValues = {
   slug: string;
   sku: string;
   description: string;
+  seo_title: string;
+  seo_description: string;
+  tags: string;
   image_url: string;
   gallery_images: string[];
   weight: string;

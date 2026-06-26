@@ -16,6 +16,7 @@ import type {
 } from "@/types/product-db";
 
 export type ProductVariantUpsertPayload = {
+  sku?: string | null;
   name: string;
   value: string | null;
   regular_price: number | null;
@@ -72,6 +73,16 @@ const REMOVABLE_LEGACY_COLUMNS = new Set([
   "regular_price",
   "vendor_id",
   "weight",
+  "short_description",
+  "seo_title",
+  "seo_description",
+  "tags",
+  "domestic_shipping_cost_cny",
+  "estimated_international_shipping_cost",
+  "shipping_note",
+  "source",
+  "source_url",
+  "source_offer_id",
 ]);
 
 const REMOVABLE_VARIANT_COLUMNS = new Set([
@@ -100,6 +111,16 @@ const PRODUCT_EDITOR_SCHEMA_COLUMNS = new Set([
   "profit_amount_cny",
   "selling_price_cny",
   "exchange_rate_cny_to_bdt",
+  "short_description",
+  "seo_title",
+  "seo_description",
+  "tags",
+  "domestic_shipping_cost_cny",
+  "estimated_international_shipping_cost",
+  "shipping_note",
+  "source",
+  "source_url",
+  "source_offer_id",
 ]);
 
 const PRODUCT_JSON_COLUMNS = new Set([
@@ -109,6 +130,7 @@ const PRODUCT_JSON_COLUMNS = new Set([
   "specifications",
   "reviews",
   "cdd_tiers",
+  "tags",
 ]);
 
 const PRODUCT_VARIANT_JSON_COLUMNS = new Set([

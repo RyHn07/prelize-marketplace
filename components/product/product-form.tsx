@@ -115,6 +115,7 @@ type SpecificationBridgeSpecification = {
 
 const MAX_PRODUCT_PRICING_TIERS = 3;
 const MAX_PRODUCT_TIER_SETS = 5;
+const DEFAULT_OPEN_PRICING_TIER_MAX_QTY = 9999;
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -359,6 +360,9 @@ function getInitialValues(
     slug: product?.slug ?? "",
     sku: product?.sku ?? "",
     description: product?.description ?? "",
+    seo_title: product?.seo_title ?? "",
+    seo_description: product?.seo_description ?? "",
+    tags: Array.isArray(product?.tags) ? product.tags.filter((tag): tag is string => typeof tag === "string").join(", ") : "",
     image_url: product?.image_url ?? "",
     gallery_images: Array.isArray(product?.gallery_images) ? product.gallery_images : [],
     weight:
@@ -512,6 +516,12 @@ function buildProductPayload(values: ProductFormValues): ProductUpsertPayload {
     slug: fallbackSlug,
     sku: normalizeOptionalText(values.sku),
     description: normalizeOptionalText(sanitizeRichTextHtml(values.description)),
+    seo_title: normalizeOptionalText(values.seo_title),
+    seo_description: normalizeOptionalText(values.seo_description),
+    tags: values.tags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean),
     image_url: normalizeOptionalText(values.image_url),
     price: pricingPreview.displayPriceBdt,
     moq,
@@ -611,22 +621,31 @@ function buildVariantPayloads(values: ProductFormValues): ProductVariantUpsertPa
 }
 
 function buildPricingTierPayloads(values: ProductFormValues): ProductPricingTierUpsertPayload[] {
-  return values.pricing_tiers
+  const rows = values.pricing_tiers
     .filter((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim())
     .map((tier, index) => {
       const minQty = Math.max(1, Math.floor(parseNumber(tier.min_qty) ?? 1));
       const maxQtyValue = parseNumber(tier.max_qty);
-      const maxQty = maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null;
       const price = Math.max(0, parseNumber(tier.price) ?? 0);
 
       return {
         pricing_type: values.pricing_type,
         min_qty: minQty,
-        max_qty: maxQty,
+        max_qty: maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null,
         price,
         sort_order: index,
       };
     });
+
+  return rows.map((tier, index) => {
+    const nextMinQty = rows[index + 1]?.min_qty;
+    const autoMaxQty = nextMinQty ? Math.max(tier.min_qty, nextMinQty - 1) : DEFAULT_OPEN_PRICING_TIER_MAX_QTY;
+
+    return {
+      ...tier,
+      max_qty: tier.max_qty ?? autoMaxQty,
+    };
+  });
 }
 
 function buildPricingTierSetPayloads(values: ProductFormValues): ProductPricingTierSetUpsertPayload[] {
@@ -643,21 +662,32 @@ function buildPricingTierSetPayloads(values: ProductFormValues): ProductPricingT
       fallback_price: Math.max(0, parseNumber(tierSet.fallback_price) ?? 0),
       pricing_type: tierSet.pricing_type,
       sort_order: index,
-      rows: tierSet.tiers
+      rows: (() => {
+        const rows = tierSet.tiers
         .filter((tier) => tier.min_qty.trim() || tier.max_qty.trim() || tier.price.trim())
         .map((tier, tierIndex) => {
           const minQty = Math.max(1, Math.floor(parseNumber(tier.min_qty) ?? 1));
           const maxQtyValue = parseNumber(tier.max_qty);
-          const maxQty = maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null;
 
           return {
             pricing_type: tierSet.pricing_type,
             min_qty: minQty,
-            max_qty: maxQty,
+            max_qty: maxQtyValue !== null ? Math.max(minQty, Math.floor(maxQtyValue)) : null,
             price: Math.max(0, parseNumber(tier.price) ?? 0),
             sort_order: tierIndex,
           };
-        }),
+        });
+
+        return rows.map((row, rowIndex) => {
+          const nextMinQty = rows[rowIndex + 1]?.min_qty;
+          const autoMaxQty = nextMinQty ? Math.max(row.min_qty, nextMinQty - 1) : DEFAULT_OPEN_PRICING_TIER_MAX_QTY;
+
+          return {
+            ...row,
+            max_qty: row.max_qty ?? autoMaxQty,
+          };
+        });
+      })(),
     }));
 }
 
@@ -1553,6 +1583,25 @@ function ProductForm({
         setErrorMessage("");
       };
 
+      const handleSetProductSeoFromBridge = (event: Event) => {
+        const customEvent = event as CustomEvent<{
+          seoTitle?: string;
+          seoDescription?: string;
+          tags?: string;
+        }>;
+
+        setValues((current) => ({
+          ...current,
+          seo_title: typeof customEvent.detail?.seoTitle === "string" ? customEvent.detail.seoTitle : current.seo_title,
+          seo_description:
+            typeof customEvent.detail?.seoDescription === "string"
+              ? customEvent.detail.seoDescription
+              : current.seo_description,
+          tags: typeof customEvent.detail?.tags === "string" ? customEvent.detail.tags : current.tags,
+        }));
+        setErrorMessage("");
+      };
+
       const handleSetProductWeightFromBridge = (event: Event) => {
         const customEvent = event as CustomEvent<{
           weight?: string;
@@ -1690,6 +1739,7 @@ function ProductForm({
       window.addEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
       window.addEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
       window.addEventListener("prelize:set-product-description", handleSetProductDescriptionFromBridge as EventListener);
+      window.addEventListener("prelize:set-product-seo", handleSetProductSeoFromBridge as EventListener);
       window.addEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
       window.addEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
       window.addEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
@@ -1710,6 +1760,7 @@ function ProductForm({
         window.removeEventListener("prelize:set-product-status", handleSetStatusFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-name", handleSetProductNameFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-description", handleSetProductDescriptionFromBridge as EventListener);
+        window.removeEventListener("prelize:set-product-seo", handleSetProductSeoFromBridge as EventListener);
         window.removeEventListener("prelize:set-product-weight", handleSetProductWeightFromBridge as EventListener);
         window.removeEventListener("prelize:add-attribute", handleAddAttributeFromBridge as EventListener);
         window.removeEventListener("prelize:generate-variations", handleGenerateVariationsFromBridge as EventListener);
@@ -2976,6 +3027,24 @@ function ProductForm({
                   value={values.description}
                   onChange={(event) => updateField("description", event.target.value)}
                   className="hidden"
+                />
+                <input
+                  id="product-seo-title"
+                  type="hidden"
+                  value={values.seo_title}
+                  onChange={(event) => updateField("seo_title", event.target.value)}
+                />
+                <input
+                  id="product-seo-description"
+                  type="hidden"
+                  value={values.seo_description}
+                  onChange={(event) => updateField("seo_description", event.target.value)}
+                />
+                <input
+                  id="product-tags"
+                  type="hidden"
+                  value={values.tags}
+                  onChange={(event) => updateField("tags", event.target.value)}
                 />
 
                 <div>
